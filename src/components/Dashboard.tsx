@@ -1,11 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Plus, Search, User, Code, Clock, Users, ChevronDown } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface Project {
   id: string;
@@ -25,6 +27,8 @@ interface DashboardProps {
 const Dashboard = ({ onOpenProject }: DashboardProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'owned' | 'shared'>('all');
+  const { signOut, user } = useAuth();
+  const navigate = useNavigate();
   
   const supportedLanguages = [
     { name: 'Java', extension: 'java' },
@@ -128,6 +132,16 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
 
   const filteredProjects = getFilteredProjects();
 
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      navigate('/'); // Navigate to root path even if signout fails
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Header */}
@@ -141,9 +155,15 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="relative">
-                <User className="h-8 w-8 text-gray-400 bg-gray-100 rounded-full p-1" />
+              <div className="relative cursor-pointer" onClick={() => navigate('/profile')}>
+                <User className="h-8 w-8 text-gray-400 bg-gray-100 rounded-full p-1 hover:bg-gray-200 transition-colors duration-200" />
               </div>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-500"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>
@@ -153,7 +173,7 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome back, Student!</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome back, {user?.email?.split('@')[0]}!</h2>
           <p className="text-gray-600">Continue working on your collaborative projects or start something new.</p>
         </div>
 

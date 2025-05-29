@@ -32,7 +32,7 @@ const Index = () => {
   
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
       <main>
         {currentView === 'dashboard' ? (
           <Dashboard onOpenProject={openProject} />

@@ -25,9 +25,9 @@ const Landing = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white dark:bg-slate-900/95 dark:backdrop-blur-sm shadow-lg dark:shadow-indigo-900/20 border-b dark:border-slate-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
@@ -39,7 +39,7 @@ const Landing = () => {
                 <Button 
                   variant="outline" 
                   onClick={handleLogout}
-                  className="text-red-600 border-red-300 hover:bg-red-50"
+                  className="text-red-600 dark:text-red-500 border-red-300 dark:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/50"
                 >
                   Logout
                 </Button>
@@ -48,13 +48,13 @@ const Landing = () => {
                   <Button 
                     variant="outline" 
                     onClick={() => navigate('/signin')}
-                    className="text-gray-700 border-gray-300 hover:bg-gray-50"
+                    className="text-gray-600 dark:text-slate-300 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50"
                   >
                     Sign In
                   </Button>
                   <Button 
                     onClick={() => navigate('/register')}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    className="bg-blue-600 hover:bg-blue-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white"
                   >
                     Register
                   </Button>
@@ -87,7 +87,7 @@ const Landing = () => {
               variant="outline" 
               size="lg"
               onClick={() => navigate('/signin')}
-              className="text-gray-700 border-gray-300 hover:bg-gray-50 px-8 py-4 text-lg"
+              className="text-gray-600 dark:text-slate-300 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50"
             >
               Sign In
             </Button>
@@ -128,7 +128,7 @@ const Landing = () => {
 
         {/* CTA Section */}
         <div className="py-20 text-center">
-          <Card className="p-12 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl">
+          <Card className="p-12 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl">
             <Zap className="h-16 w-16 mx-auto mb-6" />
             <h2 className="text-3xl font-bold mb-4">Ready to Start Coding?</h2>
             <p className="text-xl mb-8 opacity-90">
@@ -137,7 +137,7 @@ const Landing = () => {
             <Button 
               size="lg"
               onClick={() => navigate('/register')}
-              className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold"
+              className="bg-white dark:bg-indigo-900/50 dark:backdrop-blur-sm text-blue-600 dark:text-indigo-400 hover:bg-gray-100 dark:hover:bg-indigo-950/50"
             >
               Create Free Account
             </Button>
@@ -146,13 +146,14 @@ const Landing = () => {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
+      <footer className="bg-slate-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="flex items-center justify-center space-x-2 mb-4">
             <Code className="h-6 w-6" />
             <span className="text-lg font-semibold">CodeCollab</span>
           </div>
-          <p className="text-gray-400">
+          <p className="text-slate-400">
+            2024 CodeCollab. Empowering collaborative development.
             © 2024 CodeCollab. Empowering collaborative development.
           </p>
         </div>

@@ -35,10 +35,13 @@ export class ProjectsApi extends ApiClient {
     pagination?: PaginationParams,
     sort?: SortParams
   ): Promise<PaginatedResponse<Project>> {
-    const query = this.client
+    console.log('listUserProjects called with userId:', userId);
+    
+    // For now, just get projects where user is owner
+    let query = this.client
       .from(this.table)
       .select('*', { count: 'exact' })
-      .or(`owner_id.eq.${userId},id.in.(select project_id from project_members where user_id = ${userId})`);
+      .eq('owner_id', userId);
 
     const { page = 1, perPage = 10 } = pagination || {};
     const start = (page - 1) * perPage;
@@ -47,7 +50,13 @@ export class ProjectsApi extends ApiClient {
       query.order(sort.field, { ascending: sort.direction === 'asc' });
     }
 
+    console.log('Executing query with range:', { start, end: start + perPage - 1 });
     const { data, error, count } = await query.range(start, start + perPage - 1);
+    console.log('Query result:', { data, error, count });
+
+    if (error) {
+      console.error('Error in listUserProjects:', error);
+    }
 
     return {
       data: {

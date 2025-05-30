@@ -1,13 +1,17 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Plus, Search, User, Code, Clock, Users, ChevronDown } from 'lucide-react';
+import { Plus, Search, User, Code, Clock, Users, ChevronDown, Loader2, LogOut, LogIn } from 'lucide-react';
+import { ProjectsApi } from '@/lib/api/projects';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import { format } from 'date-fns';
+import { supabase } from '@/lib/supabase';
 
-interface Project {
+interface DashboardProject {
   id: string;
   name: string;
   language: string;
@@ -19,24 +23,15 @@ interface Project {
 }
 
 interface DashboardProps {
-  onOpenProject: (project: Project) => void;
+  onOpenProject: (project: DashboardProject) => void;
 }
 
 const Dashboard = ({ onOpenProject }: DashboardProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'owned' | 'shared'>('all');
-  
-  const supportedLanguages = [
-    { name: 'Java', extension: 'java' },
-    { name: 'Python', extension: 'py' },
-    { name: 'JavaScript', extension: 'js' },
-    { name: 'C', extension: 'c' },
-    { name: 'C++', extension: 'cpp' },
-    { name: 'C#', extension: 'cs' }
-  ];
-
-  // Mock projects data with collaborator avatars
-  const [projects] = useState<Project[]>([
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [projects, setProjects] = useState<DashboardProject[]>([
     {
       id: '1',
       name: 'Data Structures Assignment',
@@ -87,11 +82,168 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
       ]
     }
   ]);
+  
+  const supportedLanguages = [
+    { name: 'Java', extension: 'java' },
+    { name: 'Python', extension: 'py' },
+    { name: 'JavaScript', extension: 'js' },
+    { name: 'C', extension: 'c' },
+    { name: 'C++', extension: 'cpp' },
+    { name: 'C#', extension: 'cs' }
+  ];
 
-  const createProject = (language: string) => {
-    console.log(`Creating new ${language} project`);
-    // This would typically create a new project and navigate to it
+  const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading } = useAuth();
+  const { toast } = useToast();
+
+  const detectLanguage = (projectName: string): string => {
+    const nameLower = projectName.toLowerCase();
+    for (const lang of supportedLanguages) {
+      if (nameLower.includes(lang.name.toLowerCase())) {
+        return lang.name;
+      }
+    }
+    return 'JavaScript'; // Default language
   };
+
+  const formatLastModified = (date: string): string => {
+    const now = new Date();
+    const modified = new Date(date);
+    const diffInHours = Math.floor((now.getTime() - modified.getTime()) / (1000 * 60 * 60));
+
+    if (diffInHours < 1) return 'Just now';
+    if (diffInHours < 24) return `${diffInHours} hours ago`;
+    if (diffInHours < 48) return 'Yesterday';
+    if (diffInHours < 168) return `${Math.floor(diffInHours / 24)} days ago`;
+    return '1+ week ago';
+  };
+
+  const createProject = async (language: string): Promise<void> => {
+    if (!user) {
+      toast({
+        title: 'Error',
+        description: 'You must be logged in to create a project',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const projectsApi = new ProjectsApi({ client: supabase });
+      const timestamp = format(new Date(), 'yyyy-MM-dd-HH-mm');
+      const projectName = `${language} Project - ${timestamp}`;
+
+      const { data: project, error } = await projectsApi.createProject({
+        name: projectName,
+        description: `A new ${language} project`,
+        owner_id: user.id,
+        is_public: false
+      });
+
+      if (error) {
+        toast({
+          title: 'Error creating project',
+          description: error.message,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (!project) {
+        toast({
+          title: 'Error',
+          description: 'No project data returned',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const newProject: DashboardProject = {
+        id: project.id,
+        name: project.name,
+        language,
+        lastModified: 'Just now',
+        collaborators: 1,
+        isOwner: true,
+        description: project.description,
+        collaboratorAvatars: []
+      };
+
+      setProjects(prev => [newProject, ...prev]);
+      toast({
+        title: 'Success',
+        description: 'Project created successfully'
+      });
+
+      onOpenProject(newProject);
+    } catch (err) {
+      console.error('Failed to create project:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to create project. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadProjects = async (): Promise<void> => {
+      setIsLoading(true);
+      try {
+        if (!user) {
+          setProjects([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const projectsApi = new ProjectsApi({ client: supabase });
+        const { data, error } = await projectsApi.listUserProjects(user.id);
+
+        if (error) {
+          console.error('API Error:', error);
+          // Keep the mock data if API fails
+          setIsLoading(false);
+          return;
+        }
+        
+        if (!data) {
+          console.warn('No data returned from API');
+          setIsLoading(false);
+          return;
+        }
+
+        const dashboardProjects: DashboardProject[] = data.items.map(p => ({
+          id: p.id,
+          name: p.name,
+          language: detectLanguage(p.name),
+          lastModified: formatLastModified(p.updatedAt),
+          collaborators: 1, // TODO: Implement actual collaborator count
+          isOwner: p.ownerId === user.id,
+          description: p.description,
+          collaboratorAvatars: [] // TODO: Implement actual collaborator avatars
+        }));
+
+        setProjects(dashboardProjects);
+      } catch (err) {
+        console.error('Failed to load projects:', err);
+        // Don't show toast error immediately, keep mock data for demo
+        // toast({
+        //   title: 'Error',
+        //   description: 'Failed to load projects. Please refresh the page.',
+        //   variant: 'destructive'
+        // });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Only load projects if we have a user and are not in the initial auth loading state
+    if (!isAuthLoading) {
+      loadProjects();
+    }
+  }, [isAuthLoading, user]);
 
   const getFilteredProjects = () => {
     let filtered = projects;
@@ -133,16 +285,50 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Code className="h-8 w-8 text-blue-600" />
-                <h1 className="text-2xl font-bold text-gray-900">CodeCollab</h1>
-              </div>
+          <div className="flex justify-between items-center py-4">
+            <div className="flex-1">
+              <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
             </div>
             <div className="flex items-center space-x-4">
+              {isAuthLoading ? (
+                <Button variant="ghost" disabled>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Loading...
+                </Button>
+              ) : user ? (
+                <Button variant="ghost" onClick={signOut} className="text-gray-600 hover:text-gray-900">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              ) : (
+                <Button variant="ghost" onClick={signInWithGoogle} className="text-gray-600 hover:text-gray-900">
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Sign In with Google
+                </Button>
+              )}
               <div className="relative">
-                <User className="h-8 w-8 text-gray-400 bg-gray-100 rounded-full p-1" />
+                {user ? (
+                  <img 
+                    src={user.user_metadata.avatar_url} 
+                    alt="Profile" 
+                    className="h-8 w-8 rounded-full"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                {!user || !user.user_metadata.avatar_url ? (
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-sm font-medium ${
+                    user ? 'bg-blue-500' : 'bg-gray-400'
+                  }`}>
+                    {user ? (user.user_metadata.name || user.email || 'U').charAt(0).toUpperCase() : <User className="h-5 w-5" />}
+                  </div>
+                ) : (
+                  <div className="h-8 w-8 rounded-full flex items-center justify-center bg-blue-500 text-white text-sm font-medium hidden">
+                    {(user.user_metadata.name || user.email || 'U').charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -153,7 +339,9 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome back, Student!</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            Welcome back, {dbUser?.display_name || 'Student'}!
+          </h2>
           <p className="text-gray-600">Continue working on your collaborative projects or start something new.</p>
         </div>
 
@@ -172,16 +360,19 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
                 <DropdownMenuItem
                   key={lang.name}
                   onClick={() => createProject(lang.name)}
-                  className="cursor-pointer"
+                  disabled={isCreating}
                 >
+                  {isCreating ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
                   {lang.name}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          
+
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <Input
               type="text"
               placeholder="Search projects..."
@@ -263,7 +454,11 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
 
         {/* Projects Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProjects.map((project) => (
+          {isLoading && !isAuthLoading ? (
+            <div className="col-span-full flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+            </div>
+          ) : filteredProjects.map((project) => (
             <Card 
               key={project.id} 
               className="p-6 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer border border-gray-200 hover:border-blue-300"
@@ -318,7 +513,7 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
           ))}
         </div>
 
-        {filteredProjects.length === 0 && (
+        {filteredProjects.length === 0 && !isLoading && (
           <div className="text-center py-12">
             <Code className="h-16 w-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No projects found</h3>

@@ -1,9 +1,13 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { User } from '@supabase/supabase-js'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
+import { AuthApi } from '@/lib/api/auth'
+import type { User as DbUser } from '@/lib/api/types'
+import { ApiConfig } from '@/lib/api/types'
 
 interface AuthContextType {
-  user: User | null
+  user: SupabaseUser | null
+  dbUser: DbUser | null
   isLoading: boolean
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
@@ -12,60 +16,131 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [dbUser, setDbUser] = useState<DbUser | null>(null)
   const [isLoading, setIsLoading] = useState(true) // Start with true for initial load
 
+  const authApi = new AuthApi({ client: supabase })
+
   useEffect(() => {
+    let mounted = true
+
     // Get initial session
     const getInitialSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
         if (error) {
           console.error('Error getting session:', error)
-        } else {
+          return
+        }
+        
+        if (mounted) {
           setUser(session?.user || null)
+          
+          // If we have a user, sync with our database
+          if (session?.user) {
+            const { data: dbUserData, error: dbError } = await authApi.syncOAuthUser({
+              id: session.user.id,
+              email: session.user.email!,
+              displayName: session.user.user_metadata.full_name,
+              avatarUrl: session.user.user_metadata.avatar_url,
+            })
+
+            if (dbError) {
+              console.error('Error syncing user:', dbError)
+            } else if (mounted) {
+              setDbUser(dbUserData)
+            }
+          }
         }
       } catch (error) {
         console.error('Error getting session:', error)
       } finally {
-        setIsLoading(false)
+        if (mounted) {
+          setIsLoading(false)
+        }
       }
     }
 
     getInitialSession()
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setUser(session?.user || null)
-        setIsLoading(false)
-      }
-    )
+    // Set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event)
+      
+      if (mounted) {
+        // Reset loading state for SIGNED_IN and SIGNED_OUT events
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+          setIsLoading(false)
+        }
 
-    return () => subscription.unsubscribe()
+        setUser(session?.user || null)
+
+        // If we have a user, sync with our database
+        if (session?.user) {
+          const { data: dbUserData, error: dbError } = await authApi.syncOAuthUser({
+            id: session.user.id,
+            email: session.user.email!,
+            displayName: session.user.user_metadata.full_name,
+            avatarUrl: session.user.user_metadata.avatar_url,
+          })
+
+          if (dbError) {
+            console.error('Error syncing user:', dbError)
+          } else if (mounted) {
+            setDbUser(dbUserData)
+          }
+        } else {
+          setDbUser(null)
+        }
+      }
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   const signInWithGoogle = async () => {
     try {
       console.log('Starting Google sign-in process')
       setIsLoading(true)
+      
+      // Ensure we have the correct redirect URL
+      const redirectUrl = new URL('/auth/callback', window.location.origin).toString()
+      console.log('Using redirect URL:', redirectUrl)
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
           scopes: 'email profile',
         },
       })
+
       if (error) {
         console.error('Error from Supabase:', error)
+        setIsLoading(false)
         throw error
       }
-      console.log('Supabase sign-in successful, redirecting...')
+
+      // If we have a URL, the OAuth flow is proceeding
+      if (data?.url) {
+        console.log('Redirecting to OAuth provider...')
+        window.location.href = data.url
+      } else {
+        console.error('No redirect URL received from Supabase')
+        setIsLoading(false)
+      }
     } catch (error) {
       console.error('Error signing in with Google:', error)
+      setIsLoading(false)
       throw error
-    } finally {
-      console.log('Sign-in process completed')
     }
   }
 
@@ -74,16 +149,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true)
       const { error } = await supabase.auth.signOut()
       if (error) throw error
+      
+      // Manually clear the user state
+      setUser(null)
+      setDbUser(null)
+      setIsLoading(false)
     } catch (error) {
       console.error('Error signing out:', error)
-      throw error
-    } finally {
       setIsLoading(false)
+      throw error
     }
   }
 
   const value = {
     user,
+    dbUser,
     isLoading,
     signInWithGoogle,
     signOut

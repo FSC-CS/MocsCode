@@ -20,8 +20,8 @@ export type Project = {
   id: string;
   name: string;
   description?: string;
-  ownerId: string;
-  isPublic: boolean;
+  owner_id: string;  // Match database column name
+  is_public: boolean;  // Match database column name
   templateId?: string;
   createdAt: string;
   updatedAt: string;

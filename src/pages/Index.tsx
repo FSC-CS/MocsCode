@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Dashboard from '../components/Dashboard';
@@ -28,8 +27,6 @@ const Index = () => {
     setCurrentView('dashboard');
     setCurrentProject(null);
   };
-
-  
 
   return (
     <div className="min-h-screen dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">

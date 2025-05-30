@@ -74,7 +74,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true)
       const { error } = await supabase.auth.signOut()
       if (error) throw error
-      
       // Reset theme to light mode
       localStorage.setItem('theme', 'light');
       document.documentElement.classList.remove('dark');

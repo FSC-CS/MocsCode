@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -134,10 +135,9 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
   const handleLogout = async () => {
     try {
       await signOut();
-      navigate('/');
+      navigate('/signin');
     } catch (error) {
-      console.error('Error signing out:', error);
-      navigate('/'); // Navigate to root path even if signout fails
+      console.error('Error logging out:', error);
     }
   };
 
@@ -152,12 +152,9 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">CodeCollab</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigate('/profile')}
-                className="relative cursor-pointer"
-              >
-                <User className="text-gray-400 bg-gray-100 rounded-full p-1 hover:bg-gray-200 dark:bg-slate-800/50 dark:hover:bg-slate-700/70 transition-colors duration-200" />
-              </button>
+              <div className="relative">
+                <User className="h-8 w-8 text-gray-400 bg-gray-100 rounded-full p-1 hover:bg-gray-200 dark:bg-slate-800/50 dark:hover:bg-slate-700/70 transition-colors duration-200" />
+              </div>
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-500 dark:text-red-500 dark:hover:text-red-400"
@@ -169,37 +166,38 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Welcome back, {user?.email?.split('@')[0]}!</h2>
-          <p className="text-gray-600 dark:text-white">Continue working on your collaborative projects or start something new.</p>
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Welcome back, {user?.email?.split('@')[0]}!</h2>
+            <p className="text-gray-600 dark:text-white">Continue working on your collaborative projects or start something new.</p>
+          </div>
         </div>
 
-        {/* Actions Bar */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg dark:bg-indigo-600 dark:hover:bg-indigo-500 flex items-center space-x-2">
-                <Plus className="h-5 w-5" />
-                <span>Create New Project</span>
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-48">
-              {supportedLanguages.map((lang) => (
-                <DropdownMenuItem
-                  key={lang.name}
-                  onClick={() => createProject(lang.name)}
-                  className="cursor-pointer"
-                >
-                  {lang.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
+          <div className="flex-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="justify-between">
+                  Create Project
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {supportedLanguages.map((lang) => (
+                  <DropdownMenuItem key={lang.name} onClick={() => createProject(lang.name)}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{lang.name}</span>
+                      <Badge variant="outline" className="text-xs">
+                        .{lang.extension}
+                      </Badge>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
             <Input
@@ -207,12 +205,16 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
               placeholder="Search projects..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="pl-10"
             />
           </div>
+
+          <Button variant="outline" onClick={handleLogout}>
+            <User className="h-4 w-4 mr-2" />
+            Sign Out
+          </Button>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
@@ -223,7 +225,7 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
               <Code className="h-12 w-12 text-blue-500" />
             </div>
           </Card>
-          
+
           <Card className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
@@ -233,7 +235,7 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
               <Users className="h-12 w-12 text-green-500" />
             </div>
           </Card>
-          
+
           <Card className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
@@ -245,7 +247,6 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
           </Card>
         </div>
 
-        {/* Project Tabs */}
         <div className="mb-6">
           <div className="flex space-x-6 border-b border-gray-200">
             <button
@@ -281,60 +282,41 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
           </div>
         </div>
 
-       {/* Projects Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProjects.map((project, index) => (
+          {filteredProjects.map((project) => (
             <Card 
-              key={index} 
-              className="bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-lg dark:shadow-indigo-900/10 dark:hover:shadow-indigo-900/30 transition-all duration-200 cursor-pointer border border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-indigo-500/50"
+              key={project.id}
+              className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700"
             >
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <h4 className="text-lg font-semibold text-gray-900 dark:text-white line-clamp-2">{project.name}</h4>
-                  {project.isOwner && (
-                    <Badge variant="secondary" className="text-xs">Owner</Badge>
-                  )}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{project.name}</h3>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{project.description || 'No description'}</p>
                 </div>
-                
-                {project.description && (
-                  <p className="text-sm text-gray-600 dark:text-slate-400 line-clamp-2 mb-4">{project.description}</p>
-                )}
-                
-                <div className="space-y-3">
-                  <Badge className={`${getLanguageColor(project.language)} text-xs font-medium`}>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
                     {project.language}
                   </Badge>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-1">
-                      <div className="flex -space-x-1">
-                        {project.collaboratorAvatars?.slice(0, 3).map((avatar, index) => (
-                          <div
-                            key={index}
-                            className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white border-2 border-white dark:border-slate-800"
-                            style={{ backgroundColor: avatar.color }}
-                          >
-                            {avatar.initials}
-                          </div>
-                        ))}
-                        {project.collaboratorAvatars?.length > 3 && (
-                          <div className="w-6 h-6 rounded-full bg-gray-300 dark:bg-slate-600 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-slate-300 border-2 border-white dark:border-slate-800">
-                            +{project.collaboratorAvatars.length - 3}
-                          </div>
-                        )}
-                      </div>
-                      <span className="text-sm text-gray-500 dark:text-slate-400 flex items-center">
-                        <Users className="h-3 w-3 mr-1" />
-                        {project.collaborators}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center space-x-1">
-                      <Clock className="h-4 w-4 text-gray-400 dark:text-slate-500" />
-                      <span className="text-sm text-gray-500 dark:text-slate-400">{project.lastModified}</span>
-                    </div>
-                  </div>
+                  <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                    {project.collaborators} collaborators
+                  </Badge>
                 </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Last modified {new Date(project.lastModified).toLocaleDateString()}
+                  </span>
+                </div>
+                <Button
+                  onClick={() => onOpenProject(project)}
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Code className="h-4 w-4" />
+                  Open
+                </Button>
               </div>
             </Card>
           ))}

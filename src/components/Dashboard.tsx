@@ -151,15 +151,32 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">CodeCollab</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="relative">
-                <User className="h-8 w-8 text-gray-400 bg-gray-100 rounded-full p-1 hover:bg-gray-200 dark:bg-slate-800/50 dark:hover:bg-slate-700/70 transition-colors duration-200" />
-              </div>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-500 dark:text-red-500 dark:hover:text-red-400"
-              >
-                Logout
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <User className="h-4 w-4 mr-2" />
+                    <span className="hidden md:inline">{user?.email?.split('@')[0] || 'Profile'}</span>
+                    <ChevronDown className="h-4 w-4 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => navigate('/profile')}>
+                    <User className="mr-2 h-4 w-4" />
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={async () => {
+                    try {
+                      await signOut();
+                      navigate('/');
+                    } catch (error) {
+                      console.error('Error signing out:', error);
+                    }
+                  }}>
+                    <User className="mr-2 h-4 w-4" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -208,10 +225,16 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
             />
           </div>
 
-          <Button variant="outline" onClick={handleLogout}>
-            <User className="h-4 w-4 mr-2" />
-            Sign Out
-          </Button>
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Search projects..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

@@ -153,6 +153,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Manually clear the user state
       setUser(null)
       setDbUser(null)
+      
+      // Reset theme to light mode
+      localStorage.setItem('theme', 'light');
+      document.documentElement.classList.remove('dark');
+      
       setIsLoading(false)
     } catch (error) {
       console.error('Error signing out:', error)

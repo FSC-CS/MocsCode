@@ -59,7 +59,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onOpen }) => {
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpen(project); }}
     >
       <div className="flex justify-between items-start mb-4">
-        <h4 className="text-lg font-semibold text-gray-900 line-clamp-2">{project.name}</h4>
+        <h4 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1 leading-tight line-clamp-2">{project.name}</h4>
         {project.is_owner && (
           <Badge variant="secondary" className="text-xs">Owner</Badge>
         )}

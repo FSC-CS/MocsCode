@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
+import ProjectCard from './ProjectCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -512,41 +513,11 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
           return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProjects.map((project) => (
-                <Card 
-                  key={project.id}
-                  className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{project.name}</h3>
-                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{project.description || 'No description'}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
-                        {project.language}
-                      </Badge>
-                      <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-                        {project.collaborators} collaborators
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-gray-400 dark:text-gray-500" />
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        Last modified {project.last_modified}
-                      </span>
-                    </div>
-                    <Button
-                      onClick={() => onOpenProject(project)}
-                      variant="outline"
-                      className="flex items-center gap-2"
-                    >
-                      <Code className="h-4 w-4" />
-                      Open
-                    </Button>
-                  </div>
-                </Card>
+                <ProjectCard 
+                  key={project.id} 
+                  project={project} 
+                  onOpen={onOpenProject}
+                />
               ))}
             </div>
           );

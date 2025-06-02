@@ -24,7 +24,6 @@ describe('UsersApi', () => {
       const result = await api.getUser('test-user-id');
       expect(result.data).toEqual(mockUser);
       expect(result.error).toBeNull();
-      console.log(result);
     });
 
     it('should handle errors', async () => {

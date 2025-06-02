@@ -20,7 +20,6 @@ export default function Callback() {
           throw new Error(errorDescription || errorParam)
         }
 
-        console.log('Callback page loaded, checking session...')
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (error) {
@@ -28,7 +27,6 @@ export default function Callback() {
         }
 
         if (session) {
-          console.log('Session found, redirecting to home...')
           // Use navigate instead of window.location for a smoother transition
           navigate('/', { replace: true })
         } else {

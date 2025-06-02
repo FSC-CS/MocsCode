@@ -38,7 +38,6 @@ const SourceControlPanel = () => {
   ]);
 
   const rollbackToCommit = (commitId: string) => {
-    console.log(`Rolling back to commit: ${commitId}`);
     // Implementation would handle the rollback
   };
 

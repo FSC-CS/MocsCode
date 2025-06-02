@@ -22,7 +22,6 @@ const SignIn = () => {
   const handleSignIn = (e: React.FormEvent) => {
     e.preventDefault();
     // TODO: Implement email/password authentication with Supabase
-    console.log('Sign in attempted with:', { email, password });
     // For now, redirect to dashboard
     navigate('/dashboard');
   };

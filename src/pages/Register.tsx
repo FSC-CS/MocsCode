@@ -37,7 +37,6 @@ const Register = () => {
       return;
     }
     // TODO: Implement actual registration with Supabase
-    console.log('Registration attempted with:', formData);
     // For now, redirect to sign in
     navigate('/sign-in');
   };

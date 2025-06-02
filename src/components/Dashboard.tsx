@@ -40,13 +40,16 @@ const listProjects = async (
 };
 
 const Dashboard = ({ onOpenProject }: DashboardProps) => {
+  // New: project-specific loading state
+  const [isProjectsLoading, setIsProjectsLoading] = useState(false);
+const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'owned' | 'shared'>('all');
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [projects, setProjects] = useState<DashboardProject[]>([]);
   
-  const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading, isSigningOut } = useAuth();
+  const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading, isSigningOut, isReady } = useAuth();
   const { projectsApi } = useApi();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -94,7 +97,6 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
 
     setIsCreating(true);
     try {
-      console.log('Creating project for user:', user.id);
       const timestamp = format(new Date(), 'yyyy-MM-dd-HH-mm');
       const projectName = `${language} Project - ${timestamp}`;
 
@@ -125,7 +127,6 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
         return;
       }
 
-      console.log('Project created successfully:', project);
 
       const newProject: DashboardProject = {
         id: project.id,
@@ -186,86 +187,76 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
   };
 
   useEffect(() => {
-    const loadProjects = async (): Promise<void> => {
-      // Clear projects immediately when user logs out
-      if (!user) {
-        console.log('No user found, clearing projects');
+  // Reset states when auth changes
+  if (!isReady) {
+    setIsLoading(true);
+    setIsProjectsLoading(false);
+    setHasAttemptedLoad(false);
+    return;
+  }
+
+  if (!user || !dbUser?.id) {
+    setIsLoading(false);
+    setProjects([]);
+    setIsProjectsLoading(false);
+    setHasAttemptedLoad(false);
+    return;
+  }
+
+  // Only start loading if we haven't attempted yet or need to refresh
+  if (hasAttemptedLoad) return;
+
+  const loadProjects = async () => {
+    setIsProjectsLoading(true);
+    setHasAttemptedLoad(true);
+    try {
+      const { data, error } = await projectsApi.listUserProjects(user.id);
+      // Check if user is still authenticated
+      if (!user || !dbUser) return;
+      if (error) {
+        console.error('API Error:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load projects. Please try again.',
+          variant: 'destructive'
+        });
         setProjects([]);
-        setIsLoading(false);
         return;
       }
-
-      console.log('Starting to load projects for user:', user.id);
-      setIsLoading(false);
-      
-      try {
-        console.log('ProjectsApi initialized, fetching projects...');
-        const { data, error } = await projectsApi.listUserProjects(user.id);
-
-        if (error) {
-          console.error('API Error:', error);
-          toast({
-            title: 'Error',
-            description: 'Failed to load projects. Please try again.',
-            variant: 'destructive'
-          });
-          setProjects([]);
-          return;
-        }
-        
-        // Check if user is still logged in before updating state
-        if (!user) {
-          console.log('User logged out during project load, aborting state update');
-          return;
-        }
-        
-        if (!data || !data.items || data.items.length === 0) {
-          console.log('No projects found for user');
-          setProjects([]);
-          return;
-        }
-
-        console.log('Projects loaded successfully:', data.items.length);
-        const dashboardProjects: DashboardProject[] = data.items.map(p => ({
-          id: p.id,
-          name: p.name,
-          description: p.description,
-          language: detectLanguage(p.name),
-          last_modified: p.updated_at ? formatLastModified(p.updated_at) : 'Unknown',
-          collaborators: 1,
-          is_owner: p.owner_id === user.id,
-          collaborator_avatars: [],
-          initials: p.name.substring(0, 2).toUpperCase(),
-          color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 80%)`
-        }));
-        
-        setProjects(dashboardProjects);
-      } catch (err) {
-        console.error('Failed to load projects:', err);
-        // Only show error if user is still logged in
-        if (user) {
-          toast({
-            title: 'Error',
-            description: 'Failed to load projects. Please try again.',
-            variant: 'destructive'
-          });
-        }
+      if (!data || !data.items || data.items.length === 0) {
         setProjects([]);
-      } finally {
-        // Only update loading state if user is still logged in
-        if (user) {
-          setIsLoading(false);
-        }
+        return;
       }
-    };
-
-    loadProjects();
-    
-    // Cleanup function to handle component unmount or user sign out
-    return () => {
+      const dashboardProjects: DashboardProject[] = data.items.map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        language: detectLanguage(p.name),
+        last_modified: p.updated_at ? formatLastModified(p.updated_at) : 'Unknown',
+        collaborators: 1,
+        is_owner: p.owner_id === user.id,
+        collaborator_avatars: [],
+        initials: p.name.substring(0, 2).toUpperCase(),
+        color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 80%)`
+      }));
+      setProjects(dashboardProjects);
+    } catch (err) {
+      console.error('Failed to load projects:', err);
+      if (user && dbUser) {
+        toast({
+          title: 'Error',
+          description: 'Failed to load projects. Please try again.',
+          variant: 'destructive'
+        });
+      }
+      setProjects([]);
+    } finally {
+      setIsProjectsLoading(false);
       setIsLoading(false);
-    };
-  }, [user, toast]);
+    }
+  };
+  loadProjects();
+}, [isReady, user, dbUser, hasAttemptedLoad, projectsApi, toast]);
 
   const getFilteredProjects = () => {
     let filtered = projects;
@@ -502,63 +493,137 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {isLoading && !isAuthLoading ? (
-            <div className="col-span-full flex justify-center items-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-            </div>
-          ) : filteredProjects.map((project) => (
-            <Card 
-              key={project.id}
-              className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{project.name}</h3>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{project.description || 'No description'}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
-                    {project.language}
-                  </Badge>
-                  <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-                    {project.collaborators} collaborators
-                  </Badge>
-                </div>
+        {(() => {
+          const isActuallyLoading = !isReady || isProjectsLoading || (isReady && !hasAttemptedLoad);
+          if (isActuallyLoading) {
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <ProjectsLoadingSkeleton />
               </div>
-              <div className="mt-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-gray-400 dark:text-gray-500" />
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Last modified {project.last_modified}
-                  </span>
-                </div>
-                <Button
-                  onClick={() => onOpenProject(project)}
-                  variant="outline"
-                  className="flex items-center gap-2"
+            );
+          }
+          if (filteredProjects.length === 0) {
+            return (
+              <div className="col-span-full">
+                <EmptyProjectsState activeTab={activeTab} />
+              </div>
+            );
+          }
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredProjects.map((project) => (
+                <Card 
+                  key={project.id}
+                  className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700"
                 >
-                  <Code className="h-4 w-4" />
-                  Open
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{project.name}</h3>
+                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{project.description || 'No description'}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                        {project.language}
+                      </Badge>
+                      <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                        {project.collaborators} collaborators
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        Last modified {project.last_modified}
+                      </span>
+                    </div>
+                    <Button
+                      onClick={() => onOpenProject(project)}
+                      variant="outline"
+                      className="flex items-center gap-2"
+                    >
+                      <Code className="h-4 w-4" />
+                      Open
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          );
+        })()}
 
-        {filteredProjects.length === 0 && !isLoading && (
-          <div className="text-center py-12">
-            <Code className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No projects found</h3>
-            <p className="text-gray-900 dark:text-white transition-colors duration-200">Try adjusting your search or create a new project.</p>
-          </div>
-        )}
       </main>
       {authError && (
         <div className="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded-md shadow-lg">
           {authError}
         </div>
       )}
+    </div>
+  );
+};
+
+// Skeleton loader for project cards
+const ProjectsLoadingSkeleton = () => (
+  <>
+    {[...Array(6)].map((_, index) => (
+      <Card key={index} className="p-6 animate-pulse bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+          </div>
+          <div className="space-x-2">
+            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-16 inline-block"></div>
+            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-20 inline-block"></div>
+          </div>
+        </div>
+        <div className="mt-4 flex items-center justify-between">
+          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+        </div>
+      </Card>
+    ))}
+  </>
+);
+
+// Contextual empty state
+const EmptyProjectsState = ({ activeTab }: { activeTab: string }) => {
+  const getEmptyMessage = () => {
+    switch (activeTab) {
+      case 'owned':
+        return {
+          title: "No projects created yet",
+          description: "Start by creating your first project using the Create Project button above.",
+          action: "Create your first project"
+        };
+      case 'shared':
+        return {
+          title: "No shared projects",
+          description: "You haven't been invited to any projects yet. Ask colleagues to share their projects with you.",
+          action: "Learn about collaboration"
+        };
+      default:
+        return {
+          title: "No projects found",
+          description: "Try adjusting your search or create a new project to get started.",
+          action: "Create a project"
+        };
+    }
+  };
+  const message = getEmptyMessage();
+  return (
+    <div className="text-center py-16">
+      <Code className="h-20 w-20 text-gray-300 mx-auto mb-6" />
+      <h3 className="text-xl font-medium text-gray-900 dark:text-white mb-3">
+        {message.title}
+      </h3>
+      <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+        {message.description}
+      </p>
+      <Button className="bg-blue-600 hover:bg-blue-700">
+        <Plus className="h-4 w-4 mr-2" />
+        {message.action}
+      </Button>
     </div>
   );
 };

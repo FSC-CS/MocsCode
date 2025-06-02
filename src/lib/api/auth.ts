@@ -1,6 +1,7 @@
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, User } from './types';
 import { UsersApi } from './users';
+import { toast } from '@/components/ui/use-toast';
 
 export interface OAuthUserData {
   id: string;
@@ -17,7 +18,8 @@ export class AuthApi extends ApiClient {
     this.usersApi = new UsersApi(config);
   }
 
-  async createUser(userData: OAuthUserData): Promise<ApiResponse<User>> {
+
+async createUser(userData: OAuthUserData): Promise<ApiResponse<User>> {
     const username = await this.generateUniqueUsername(userData.email.split('@')[0]);
     const now = new Date().toISOString();
 
@@ -31,11 +33,22 @@ export class AuthApi extends ApiClient {
       last_active_at: now,
     };
 
+    const payload = { ...user, id: userData.id };
     const { data, error } = await this.client
       .from(this.table)
-      .insert([{ ...user, id: userData.id }])
+      .insert([payload])
       .select()
       .single();
+
+    if (error) {
+      console.error('Error inserting user:', error, { payload });
+      toast({
+        title: 'User Creation Error',
+        description: error.message || 'Failed to create user. Check console for details.',
+        variant: 'destructive',
+        duration: 10000,
+      });
+    }
 
     return {
       data: data as User,
@@ -82,29 +95,54 @@ export class AuthApi extends ApiClient {
     return username;
   }
 
+  /**
+   * Synchronizes OAuth user data with our database
+   * @param oAuthData User data from OAuth provider
+   * @returns ApiResponse with the synced user or error
+   */
   async syncOAuthUser(oAuthData: OAuthUserData): Promise<ApiResponse<User>> {
-    try {
-      // Try to find existing user
-      const { data: existingUser } = await this.findUserByEmail(oAuthData.email);
-
-      if (existingUser) {
-        // Update existing user
-        const updates: Partial<User> = {
-          display_name: oAuthData.display_name || existingUser.display_name,
-          avatar_url: oAuthData.avatar_url || existingUser.avatar_url,
-          last_active_at: new Date().toISOString(),
-        };
-
-        return this.usersApi.updateUser(existingUser.id, updates);
-      } else {
-        // Create new user
-        return this.createUser(oAuthData);
-      }
-    } catch (error) {
-      return {
-        data: null,
-        error: error as Error,
-      };
-    }
+  // Input validation
+  if (!oAuthData?.id || !oAuthData?.email) {
+    const error = new Error('Invalid OAuth data: Missing required fields');
+    console.error('OAuth sync failed:', error);
+    return { data: null, error };
   }
+
+  // Only fetch the user row by UID, with retry logic for trigger delay
+  const maxAttempts = 5;
+  const delayMs = 200;
+  let attempt = 0;
+  let user: User | null = null;
+  let lastError: any = null;
+
+  try {
+    while (attempt < maxAttempts) {
+    const session = await this.usersApi.client.auth.getSession();
+    const { data, error } = await this.usersApi.getUser(oAuthData.id);
+    if (data) {
+      user = data;
+      break;
+    }
+    lastError = error;
+    if (error) {
+      console.error('[syncOAuthUser] getUser error:', error);
+    }
+    await new Promise(res => setTimeout(res, delayMs));
+    attempt++;
+    }
+  } catch (loopError) {
+    console.error('[syncOAuthUser] Exception in fetch loop:', loopError);
+  }
+
+  if (!user) {
+    const error = new Error('User row not found after signup. Trigger may have failed or RLS is blocking SELECT.');
+    console.error('OAuth sync failed:', error, { lastError });
+    return { data: null, error };
+  }
+
+  // Optionally, update last_active_at, display_name, avatar_url if RLS allows UPDATE
+  // await this.usersApi.updateUser(user.id, { ... });
+
+  return { data: user, error: null };
+}
 }

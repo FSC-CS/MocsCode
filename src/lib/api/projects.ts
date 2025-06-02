@@ -19,7 +19,6 @@ export class ProjectsApi extends ApiClient {
   }
 
   async createProject(data: Omit<Project, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<Project>> {
-    console.log('Creating project with data:', data);
     try {
       const { data: project, error } = await this.client
         .from(this.table)
@@ -45,7 +44,6 @@ export class ProjectsApi extends ApiClient {
         return { data: null, error: new Error(error.message) };
       }
 
-      console.log('Project created successfully:', project);
       return { data: project as Project, error: null };
     } catch (error) {
       console.error('Unexpected error in createProject:', error);
@@ -69,17 +67,9 @@ export class ProjectsApi extends ApiClient {
     pagination: PaginationParams = { page: 1, perPage: 10 },
     sort?: SortParams
   ): Promise<PaginatedResponse<Project>> {
-    console.log('listUserProjects called with userId:', userId);
-    console.log('Supabase client:', this.client ? 'Client is initialized' : 'Client is missing');
-    console.log('Table name being queried:', this.table);
     
     try {
       // First try a simple query to check table access
-      console.log('Testing table access...');
-      console.log('Executing access test query:', {
-        table: this.table,
-        query: 'SELECT count(*) FROM projects LIMIT 1'
-      });
 
       const { data: accessTest, error: accessError } = await this.client
         .from(this.table)
@@ -118,10 +108,8 @@ USING (
         throw new Error(`Cannot access table: ${accessError.message}`);
       }
 
-      console.log('Table access successful');
 
       // Now try the actual query
-      console.log('Building query for user projects...');
       let query = this.client
         .from(this.table)
         .select('*', { count: 'exact' })
@@ -134,7 +122,6 @@ USING (
         query = query.order(sort.field, { ascending: sort.direction === 'asc' });
       }
 
-      console.log('Executing query with range:', { start, end: start + perPage - 1 });
       
       try {
         const { data, error, count } = await query.range(start, start + perPage - 1);
@@ -174,12 +161,6 @@ USING (
             error: new Error(`Query failed: ${error.message}`)
           };
         }
-
-        console.log('Query successful:', {
-          dataReceived: !!data,
-          count,
-          itemsCount: data?.length || 0
-        });
 
         return {
           data: {

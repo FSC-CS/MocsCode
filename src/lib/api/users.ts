@@ -7,7 +7,8 @@ export class UsersApi extends ApiClient {
   }
 
   async getUser(id: string): Promise<ApiResponse<User>> {
-    return this.get<User>(id);
+    const result = await this.get<User>(id);
+    return result;
   }
 
   async listUsers(

@@ -69,7 +69,6 @@ const Profile = () => {
   const handleSave = () => {
     setIsEditing(false);
     // Here you would typically save to a backend
-    console.log('Saving profile data:', profileData);
   };
 
   const handleProfilePictureChange = (event: React.ChangeEvent<HTMLInputElement>) => {

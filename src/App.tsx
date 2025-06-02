@@ -11,29 +11,32 @@ import SignIn from "./pages/SignIn";
 import Register from "./pages/Register";
 import Callback from "./pages/auth/Callback";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ApiProvider } from "./contexts/ApiContext";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <BrowserRouter>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/signin" element={<SignIn />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/dashboard" element={<Index />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/auth/callback" element={<Callback />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ApiProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <AuthProvider>
+            <Toaster />
+            <Sonner />
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/signin" element={<SignIn />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/dashboard" element={<Index />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/auth/callback" element={<Callback />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AuthProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ApiProvider>
   </BrowserRouter>
 );
 

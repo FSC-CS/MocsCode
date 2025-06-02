@@ -6,6 +6,7 @@ export class ApiClient {
   protected table: string;
 
   constructor(config: ApiConfig, table: string) {
+    console.log('Initializing API client for table:', table);
     this.client = config.client;
     this.table = table;
   }

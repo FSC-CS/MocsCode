@@ -9,11 +9,11 @@ export type User = {
   id: string;
   email: string;
   username: string;
-  displayName?: string;
-  avatarUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-  lastActiveAt: string;
+  display_name?: string;
+  avatar_url?: string;
+  created_at: string;
+  updated_at: string;
+  last_active_at: string;
 };
 
 export type Project = {
@@ -22,40 +22,40 @@ export type Project = {
   description?: string;
   owner_id: string;  // Match database column name
   is_public: boolean;  // Match database column name
-  templateId?: string;
-  createdAt: string;
-  updatedAt: string;
+  template_id?: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ProjectFile = {
   id: string;
-  projectId: string;
+  project_id: string;
   name: string;
   path: string;
   content?: string;
-  fileType: 'file' | 'directory';
-  mimeType?: string;
-  sizeBytes: number;
-  parentId?: string;
-  createdAt: string;
-  updatedAt: string;
-  createdBy?: string;
+  file_type: 'file' | 'directory';
+  mime_type?: string;
+  size_bytes: number;
+  parent_id?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
 };
 
 export type ProjectMember = {
   id: string;
-  projectId: string;
-  userId: string;
+  project_id: string;
+  user_id: string;
   role: 'owner' | 'editor' | 'viewer';
   permissions: Record<string, unknown>;
-  invitedBy?: string;
-  joinedAt: string;
+  invited_by?: string;
+  joined_at: string;
 };
 
 // Query types
 export type PaginationParams = {
   page?: number;
-  perPage?: number;
+  per_page?: number;
 };
 
 export type SortParams = {
@@ -75,5 +75,5 @@ export type PaginatedResponse<T> = ApiResponse<{
   items: T[];
   total: number;
   page: number;
-  perPage: number;
+  per_page: number;
 }>;

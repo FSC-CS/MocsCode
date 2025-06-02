@@ -8,7 +8,7 @@ describe('ProjectsApi', () => {
     id: 'test-project-id',
     name: 'Test Project',
     description: 'A test project',
-    ownerId: 'test-user-id',
+    owner_id: 'test-user-id',
     isPublic: false,
     createdAt: '2025-01-01T00:00:00Z',
     updatedAt: '2025-01-01T00:00:00Z',
@@ -37,7 +37,7 @@ describe('ProjectsApi', () => {
       const result = await api.listProjects(
         { page: 1, perPage: 10 },
         { field: 'name', direction: 'asc' },
-        { ownerId: 'test-user-id' }
+        { owner_id: 'test-user-id' }
       );
 
       expect(result.data?.items).toEqual(mockProjects);
@@ -55,7 +55,7 @@ describe('ProjectsApi', () => {
       const newProject = {
         name: 'New Project',
         description: 'A new project',
-        ownerId: 'test-user-id',
+        owner_id: 'test-user-id',
         isPublic: false,
       };
 

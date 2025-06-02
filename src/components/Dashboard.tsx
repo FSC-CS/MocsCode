@@ -4,102 +4,53 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Plus, Search, User, Code, Clock, Users, ChevronDown, Loader2, LogOut, LogIn, Moon, Sun } from 'lucide-react';
-import { ProjectsApi } from '@/lib/api/projects';
+import { LogIn, Plus, Search, User, Code, Clock, Users, ChevronDown, Loader2, LogOut, Moon, Sun } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useApi } from '@/contexts/ApiContext';
 import { useToast } from '@/components/ui/use-toast';
 import { format } from 'date-fns';
-import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
+import { UserAvatar } from '@/components/UserAvatar';
+import { PaginationParams, SortParams, Project, PaginatedResponse } from '@/lib/api/types';
 
 interface DashboardProject {
   id: string;
   name: string;
   language: string;
-  lastModified: string;
+  last_modified: string;
   collaborators: number;
-  isOwner: boolean;
+  is_owner: boolean;
   description?: string;
-  collaboratorAvatars: { initials: string; color: string }[];
+  collaborator_avatars: { initials: string; color: string }[];
+  initials: string;
+  color: string;
 }
 
 interface DashboardProps {
   onOpenProject: (project: DashboardProject) => void;
 }
 
+const listProjects = async (
+  projectsApi: any,
+  pagination?: PaginationParams,
+  sort?: SortParams,
+  filters?: { owner_id?: string; is_public?: boolean }
+): Promise<PaginatedResponse<Project>> => {
+  return projectsApi.list(pagination, sort, filters);
+};
+
 const Dashboard = ({ onOpenProject }: DashboardProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'owned' | 'shared'>('all');
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [projects, setProjects] = useState<DashboardProject[]>([
-=======
-  const { signOut, user } = useAuth();
-  const navigate = useNavigate();
-
-  const supportedLanguages = [
-    { name: 'Java', extension: 'java' },
-    { name: 'Python', extension: 'py' },
-    { name: 'JavaScript', extension: 'js' },
-    { name: 'C', extension: 'c' },
-    { name: 'C++', extension: 'cpp' },
-    { name: 'C#', extension: 'cs' }
-  ];
-
-  // Mock projects data with collaborator avatars
-  const [projects] = useState<Project[]>([
->>>>>>> origin/michael
-    {
-      id: '1',
-      name: 'Data Structures Assignment',
-      language: 'Java',
-      lastModified: '2 hours ago',
-      collaborators: 3,
-      isOwner: true,
-      description: 'Implementing sorting algorithms for CS210',
-      collaboratorAvatars: [
-        { initials: 'SK', color: '#ef4444' },
-        { initials: 'MJ', color: '#3b82f6' }
-      ]
-    },
-    {
-      id: '2', 
-      name: 'Web Development Project',
-      language: 'JavaScript',
-      lastModified: '1 day ago',
-      collaborators: 3,
-      isOwner: false,
-      description: 'Building a student portal with React',
-      collaboratorAvatars: [
-        { initials: 'EV', color: '#10b981' },
-        { initials: 'JU', color: '#f59e0b' },
-        { initials: 'JS', color: '#8b5cf6' }
-      ]
-    },
-    {
-      id: '3',
-      name: 'Algorithm Analysis',
-      language: 'Python',
-      lastModified: '3 days ago',
-      collaborators: 1,
-      isOwner: true,
-      collaboratorAvatars: []
-    },
-    {
-      id: '4',
-      name: 'Operating Systems Lab',
-      language: 'C',
-      lastModified: '1 week ago',
-      collaborators: 4,
-      isOwner: false,
-      collaboratorAvatars: [
-        { initials: 'AB', color: '#06b6d4' },
-        { initials: 'CD', color: '#ec4899' },
-        { initials: 'EF', color: '#84cc16' }
-      ]
-    }
-  ]);
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
   
+  const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading, isSigningOut } = useAuth();
+  const { projectsApi } = useApi();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
   const supportedLanguages = [
     { name: 'Java', extension: 'java' },
     { name: 'Python', extension: 'py' },
@@ -108,9 +59,6 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
     { name: 'C++', extension: 'cpp' },
     { name: 'C#', extension: 'cs' }
   ];
-
-  const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading } = useAuth();
-  const { toast } = useToast();
 
   const detectLanguage = (projectName: string): string => {
     const nameLower = projectName.toLowerCase();
@@ -146,7 +94,7 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
 
     setIsCreating(true);
     try {
-      const projectsApi = new ProjectsApi({ client: supabase });
+      console.log('Creating project for user:', user.id);
       const timestamp = format(new Date(), 'yyyy-MM-dd-HH-mm');
       const projectName = `${language} Project - ${timestamp}`;
 
@@ -158,15 +106,17 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
       });
 
       if (error) {
+        console.error('Project creation failed:', error);
         toast({
           title: 'Error creating project',
-          description: error.message,
+          description: error.message || 'Failed to create project. Please try again.',
           variant: 'destructive'
         });
         return;
       }
 
       if (!project) {
+        console.error('No project data returned from API');
         toast({
           title: 'Error',
           description: 'No project data returned',
@@ -175,15 +125,19 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
         return;
       }
 
+      console.log('Project created successfully:', project);
+
       const newProject: DashboardProject = {
         id: project.id,
         name: project.name,
         language,
-        lastModified: 'Just now',
+        last_modified: 'Just now',
         collaborators: 1,
-        isOwner: true,
+        is_owner: true,
         description: project.description,
-        collaboratorAvatars: []
+        collaborator_avatars: [],
+        initials: '',
+        color: ''
       };
 
       setProjects(prev => [newProject, ...prev]);
@@ -205,62 +159,113 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
     }
   };
 
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const handleSignIn = async () => {
+    try {
+      setAuthError(null);
+      setIsSigningIn(true);
+      await signInWithGoogle();
+    } catch (error) {
+      console.error('Sign in error:', error);
+      setAuthError('Failed to sign in. Please try again.');
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      setAuthError(null);
+      await signOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+      setAuthError('Failed to sign out. Please try again.');
+    }
+  };
+
   useEffect(() => {
     const loadProjects = async (): Promise<void> => {
-      setIsLoading(true);
-      try {
-        if (!user) {
-          setProjects([]);
-          setIsLoading(false);
-          return;
-        }
+      // Clear projects immediately when user logs out
+      if (!user) {
+        console.log('No user found, clearing projects');
+        setProjects([]);
+        setIsLoading(false);
+        return;
+      }
 
-        const projectsApi = new ProjectsApi({ client: supabase });
+      console.log('Starting to load projects for user:', user.id);
+      setIsLoading(false);
+      
+      try {
+        console.log('ProjectsApi initialized, fetching projects...');
         const { data, error } = await projectsApi.listUserProjects(user.id);
 
         if (error) {
           console.error('API Error:', error);
-          // Keep the mock data if API fails
-          setIsLoading(false);
+          toast({
+            title: 'Error',
+            description: 'Failed to load projects. Please try again.',
+            variant: 'destructive'
+          });
+          setProjects([]);
           return;
         }
         
-        if (!data) {
-          console.warn('No data returned from API');
-          setIsLoading(false);
+        // Check if user is still logged in before updating state
+        if (!user) {
+          console.log('User logged out during project load, aborting state update');
+          return;
+        }
+        
+        if (!data || !data.items || data.items.length === 0) {
+          console.log('No projects found for user');
+          setProjects([]);
           return;
         }
 
+        console.log('Projects loaded successfully:', data.items.length);
         const dashboardProjects: DashboardProject[] = data.items.map(p => ({
           id: p.id,
           name: p.name,
-          language: detectLanguage(p.name),
-          lastModified: formatLastModified(p.updatedAt),
-          collaborators: 1, // TODO: Implement actual collaborator count
-          isOwner: p.ownerId === user.id,
           description: p.description,
-          collaboratorAvatars: [] // TODO: Implement actual collaborator avatars
+          language: detectLanguage(p.name),
+          last_modified: p.updated_at ? formatLastModified(p.updated_at) : 'Unknown',
+          collaborators: 1,
+          is_owner: p.owner_id === user.id,
+          collaborator_avatars: [],
+          initials: p.name.substring(0, 2).toUpperCase(),
+          color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 80%)`
         }));
-
+        
         setProjects(dashboardProjects);
       } catch (err) {
         console.error('Failed to load projects:', err);
-        // Don't show toast error immediately, keep mock data for demo
-        // toast({
-        //   title: 'Error',
-        //   description: 'Failed to load projects. Please refresh the page.',
-        //   variant: 'destructive'
-        // });
+        // Only show error if user is still logged in
+        if (user) {
+          toast({
+            title: 'Error',
+            description: 'Failed to load projects. Please try again.',
+            variant: 'destructive'
+          });
+        }
+        setProjects([]);
       } finally {
-        setIsLoading(false);
+        // Only update loading state if user is still logged in
+        if (user) {
+          setIsLoading(false);
+        }
       }
     };
 
-    // Only load projects if we have a user and are not in the initial auth loading state
-    if (!isAuthLoading) {
-      loadProjects();
-    }
-  }, [isAuthLoading, user]);
+    loadProjects();
+    
+    // Cleanup function to handle component unmount or user sign out
+    return () => {
+      setIsLoading(false);
+    };
+  }, [user, toast]);
 
   const getFilteredProjects = () => {
     let filtered = projects;
@@ -268,10 +273,10 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
     // Filter by tab
     switch (activeTab) {
       case 'owned':
-        filtered = projects.filter(p => p.isOwner);
+        filtered = projects.filter(p => p.is_owner);
         break;
       case 'shared':
-        filtered = projects.filter(p => !p.isOwner);
+        filtered = projects.filter(p => !p.is_owner);
         break;
       default:
         filtered = projects;
@@ -300,10 +305,18 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
   const handleLogout = async () => {
     try {
       await signOut();
-      navigate('/signin');
+      navigate('/');
     } catch (error) {
-      console.error('Error logging out:', error);
+      console.error('Error signing out:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to sign out. Please try again.',
+        variant: 'destructive'
+      });
     }
+  };
+
+  return (
     <div className="min-h-screen dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
       <header className="bg-white dark:bg-slate-900/95 dark:backdrop-blur-sm shadow-lg dark:shadow-indigo-900/20 border-b dark:border-slate-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -319,39 +332,56 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
                   Loading...
                 </Button>
               ) : user ? (
-                <Button variant="ghost" onClick={signOut} className="text-gray-600 hover:text-gray-900">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
+                <Button 
+                  variant="ghost" 
+                  onClick={handleSignOut} 
+                  disabled={isSigningOut}
+                  className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                >
+                  {isSigningOut ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Signing out...
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </>
+                  )}
                 </Button>
               ) : (
-                <Button variant="ghost" onClick={signInWithGoogle} className="text-gray-600 hover:text-gray-900">
-                  <LogIn className="h-4 w-4 mr-2" />
-                  Sign In with Google
+                <Button 
+                  variant="ghost" 
+                  onClick={handleSignIn} 
+                  disabled={isSigningIn}
+                  className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                >
+                  {isSigningIn ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Signing in...
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="h-4 w-4 mr-2" />
+                      Sign In with Google
+                    </>
+                  )}
                 </Button>
               )}
               <div className="relative">
-<<<<<<< HEAD
                 {user ? (
-                  <img 
-                    src={user.user_metadata.avatar_url} 
-                    alt="Profile" 
-                    className="h-8 w-8 rounded-full"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  <UserAvatar 
+                    src={user.user_metadata?.avatar_url}
+                    name={user.user_metadata?.full_name || user.email}
+                    email={user.email}
+                    size="sm"
                   />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-slate-800/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-medium hover:bg-blue-200 dark:hover:bg-slate-700/70 transition-colors duration-200">
-                    {(user.user_metadata.name || user.email || 'U').charAt(0).toUpperCase()}
-                  </div>
+                  <User className="h-8 w-8 text-gray-400 bg-gray-100 rounded-full p-1 hover:bg-gray-200 dark:bg-slate-800/50 dark:hover:bg-slate-700/70 transition-colors duration-200" />
                 )}
               </div>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-500 dark:text-red-500 dark:hover:text-red-400"
-              >
-                Logout
-              </button>
             </div>
           </div>
         </div>
@@ -366,18 +396,6 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                  onClick={() => createProject(lang.name)}
-                  disabled={isCreating}
-                >
-                  {isCreating ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : null}
-                  {lang.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-=======
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2">
@@ -386,14 +404,15 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
                 <ChevronDown className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuContent align="start">
               {supportedLanguages.map((lang) => (
-                <DropdownMenuItem
-                  key={lang.name}
+                <DropdownMenuItem 
+                  key={lang.name} 
                   onClick={() => createProject(lang.name)}
                   disabled={isCreating}
                 >
                   <div className="flex items-center gap-2">
+                    {isCreating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                     <span className="text-sm font-medium">{lang.name}</span>
                     <Badge variant="outline" className="text-xs">
                       .{lang.extension}
@@ -403,7 +422,6 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
->>>>>>> origin/michael
 
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -415,15 +433,10 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
               className="pl-10"
             />
           </div>
-
-          <Button variant="outline" onClick={handleLogout}>
-            <User className="h-4 w-4 mr-2" />
-            Sign Out
-          </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow">
+          <Card className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-white">Total Projects</p>
@@ -437,7 +450,7 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-white">Collaborations</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{projects.filter(p => !p.isOwner).length}</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{projects.filter(p => !p.is_owner).length}</p>
               </div>
               <Users className="h-12 w-12 text-green-500" />
             </div>
@@ -517,7 +530,7 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Last modified {project.lastModified}
+                    Last modified {project.last_modified}
                   </span>
                 </div>
                 <Button
@@ -541,6 +554,11 @@ const Dashboard = ({ onOpenProject }: DashboardProps) => {
           </div>
         )}
       </main>
+      {authError && (
+        <div className="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded-md shadow-lg">
+          {authError}
+        </div>
+      )}
     </div>
   );
 };

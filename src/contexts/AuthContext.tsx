@@ -1,14 +1,14 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
-import { AuthApi } from '@/lib/api/auth'
 import type { User as DbUser } from '@/lib/api/types'
-import { ApiConfig } from '@/lib/api/types'
+import { useApi } from './ApiContext'
 
 interface AuthContextType {
   user: SupabaseUser | null
   dbUser: DbUser | null
   isLoading: boolean
+  isSigningOut: boolean
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
 }
@@ -18,9 +18,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [dbUser, setDbUser] = useState<DbUser | null>(null)
-  const [isLoading, setIsLoading] = useState(true) // Start with true for initial load
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
-  const authApi = new AuthApi({ client: supabase })
+  const { authApi } = useApi()
 
   useEffect(() => {
     let mounted = true
@@ -42,8 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const { data: dbUserData, error: dbError } = await authApi.syncOAuthUser({
               id: session.user.id,
               email: session.user.email!,
-              displayName: session.user.user_metadata.full_name,
-              avatarUrl: session.user.user_metadata.avatar_url,
+              display_name: session.user.user_metadata.full_name,
+              avatar_url: session.user.user_metadata.avatar_url,
             })
 
             if (dbError) {
@@ -66,7 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event)
+      // Only log non-token refresh events for cleaner console
+      if (event !== 'TOKEN_REFRESHED') {
+        console.log('Auth state changed:', event, session?.user?.email ? `(User: ${session.user.email})` : '')
+      }
       
       if (mounted) {
         // Reset loading state for SIGNED_IN and SIGNED_OUT events
@@ -81,8 +85,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const { data: dbUserData, error: dbError } = await authApi.syncOAuthUser({
             id: session.user.id,
             email: session.user.email!,
-            displayName: session.user.user_metadata.full_name,
-            avatarUrl: session.user.user_metadata.avatar_url,
+            display_name: session.user.user_metadata.full_name,
+            avatar_url: session.user.user_metadata.avatar_url,
           })
 
           if (dbError) {
@@ -145,24 +149,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
+    // Set signing out state immediately for UI feedback
+    setIsSigningOut(true)
+    
     try {
-      setIsLoading(true)
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-      
-      // Manually clear the user state
+      // Clear UI state first for immediate feedback
       setUser(null)
       setDbUser(null)
       
       // Reset theme to light mode
-      localStorage.setItem('theme', 'light');
-      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light')
+      document.documentElement.classList.remove('dark')
       
-      setIsLoading(false)
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      
     } catch (error) {
       console.error('Error signing out:', error)
-      setIsLoading(false)
+      // Even if there's an error, we want to reset the auth state
+      setUser(null)
+      setDbUser(null)
       throw error
+    } finally {
+      // Always reset the signing out state
+      setIsSigningOut(false)
     }
   }
 
@@ -170,6 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     dbUser,
     isLoading,
+    isSigningOut,
     signInWithGoogle,
     signOut
   }

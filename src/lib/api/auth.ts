@@ -5,8 +5,8 @@ import { UsersApi } from './users';
 export interface OAuthUserData {
   id: string;
   email: string;
-  displayName?: string;
-  avatarUrl?: string;
+  display_name?: string;
+  avatar_url?: string;
 }
 
 export class AuthApi extends ApiClient {
@@ -24,11 +24,11 @@ export class AuthApi extends ApiClient {
     const user: Omit<User, 'id'> = {
       email: userData.email,
       username,
-      displayName: userData.displayName || username,
-      avatarUrl: userData.avatarUrl,
-      createdAt: now,
-      updatedAt: now,
-      lastActiveAt: now,
+      display_name: userData.display_name || username,
+      avatar_url: userData.avatar_url,
+      created_at: now,
+      updated_at: now,
+      last_active_at: now,
     };
 
     const { data, error } = await this.client
@@ -58,7 +58,7 @@ export class AuthApi extends ApiClient {
 
   async updateLastActive(id: string): Promise<ApiResponse<User>> {
     return this.usersApi.updateUser(id, {
-      lastActiveAt: new Date().toISOString(),
+      last_active_at: new Date().toISOString(),
     });
   }
 
@@ -90,9 +90,9 @@ export class AuthApi extends ApiClient {
       if (existingUser) {
         // Update existing user
         const updates: Partial<User> = {
-          displayName: oAuthData.displayName || existingUser.displayName,
-          avatarUrl: oAuthData.avatarUrl || existingUser.avatarUrl,
-          lastActiveAt: new Date().toISOString(),
+          display_name: oAuthData.display_name || existingUser.display_name,
+          avatar_url: oAuthData.avatar_url || existingUser.avatar_url,
+          last_active_at: new Date().toISOString(),
         };
 
         return this.usersApi.updateUser(existingUser.id, updates);

@@ -1,6 +1,5 @@
-
-import React, { useState } from 'react';
-import { FileText, Folder, FolderOpen, Plus, MoreHorizontal, Edit, Trash } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FileText, Folder, FolderOpen, Plus, MoreHorizontal, Edit, Trash, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -8,82 +7,126 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useApi } from '@/contexts/ApiContext';
+import { useToast } from '@/components/ui/use-toast';
+import { ProjectFile } from '@/lib/api/types';
+import { useAuth } from '@/contexts/AuthContext';
 
-interface FileItem {
-  name: string;
+interface FileItem extends ProjectFile {
   type: 'file' | 'folder';
-  language?: string;
   children?: FileItem[];
 }
 
 interface FileExplorerProps {
   currentFile: string;
-  onFileSelect: (filename: string) => void;
+  onFileSelect: (filename: string, fileId: string) => void;
+  projectId: string;
 }
 
-const FileExplorer = ({ currentFile, onFileSelect }: FileExplorerProps) => {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['src']));
-  const [editingItem, setEditingItem] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState('');
-  const [draggedItem, setDraggedItem] = useState<string | null>(null);
-  
-  const [fileStructure, setFileStructure] = useState<FileItem[]>([
-    {
-      name: 'src',
-      type: 'folder',
-      children: [
-        { name: 'main.java', type: 'file', language: 'java' },
-        { name: 'Utils.java', type: 'file', language: 'java' },
-        { name: 'DataStructure.java', type: 'file', language: 'java' }
-      ]
-    },
-    {
-      name: 'test',
-      type: 'folder', 
-      children: [
-        { name: 'TestMain.java', type: 'file', language: 'java' }
-      ]
-    },
-    { name: 'README.md', type: 'file', language: 'markdown' },
-    { name: '.gitignore', type: 'file', language: 'gitignore' }
-  ]);
+// Utility to build a hierarchical file tree from a flat array
+function buildFileTree(flatFiles: ProjectFile[]): FileItem[] {
+  const fileMap = new Map<string, FileItem>();
+  const rootFiles: FileItem[] = [];
 
-  const toggleFolder = (folderName: string) => {
-    setExpandedFolders(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(folderName)) {
-        newSet.delete(folderName);
-      } else {
-        newSet.add(folderName);
-      }
-      return newSet;
+  // First pass: create all items
+  flatFiles.forEach(file => {
+    fileMap.set(file.id, {
+      ...file,
+      type: file.file_type === 'directory' ? 'folder' : 'file',
+      children: file.file_type === 'directory' ? [] : undefined
     });
-  };
+  });
 
-  const startEditing = (itemName: string) => {
-    setEditingItem(itemName);
-    setEditingText(itemName);
-  };
-
-  const saveEdit = () => {
-    if (editingText.trim() && editingItem) {
-      // Update file structure with new name
-      const updateStructure = (items: FileItem[]): FileItem[] => {
-        return items.map(item => {
-          if (item.name === editingItem) {
-            return { ...item, name: editingText.trim() };
-          }
-          if (item.children) {
-            return { ...item, children: updateStructure(item.children) };
-          }
-          return item;
-        });
-      };
-      
-      setFileStructure(updateStructure(fileStructure));
-      setEditingItem(null);
-      setEditingText('');
+  // Second pass: build hierarchy
+  flatFiles.forEach(file => {
+    const item = fileMap.get(file.id)!;
+    if (file.parent_id) {
+      const parent = fileMap.get(file.parent_id);
+      if (parent && parent.children) {
+        parent.children.push(item);
+      }
+    } else {
+      rootFiles.push(item);
     }
+  });
+
+  return rootFiles;
+}
+
+// Helper to flatten the file tree back to array
+function flattenFileTree(items: FileItem[]): FileItem[] {
+  let flat: FileItem[] = [];
+  for (const item of items) {
+    flat.push(item);
+    if (item.children) {
+      flat = flat.concat(flattenFileTree(item.children));
+    }
+  }
+  return flat;
+}
+
+// Helper to find an item by ID in the tree
+function findItemById(items: FileItem[], id: string): FileItem | null {
+  for (const item of items) {
+    if (item.id === id) return item;
+    if (item.children) {
+      const found = findItemById(item.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// Helper to generate file path
+function generatePath(parentPath: string, fileName: string): string {
+  if (!parentPath || parentPath === '/') return `/${fileName}`;
+  return `${parentPath}/${fileName}`;
+}
+
+// --- Sorting Utilities ---
+interface SortOptions {
+  foldersFirst: boolean;
+  caseSensitive: boolean;
+  direction: 'asc' | 'desc';
+}
+
+const defaultSortOptions: SortOptions = {
+  foldersFirst: true,
+  caseSensitive: false,
+  direction: 'asc',
+};
+
+function sortItems(items: FileItem[], options: SortOptions = defaultSortOptions): FileItem[] {
+  return items.sort((a, b) => {
+    // Folders first if enabled
+    if (options.foldersFirst && a.type !== b.type) {
+      return a.type === 'folder' ? -1 : 1;
+    }
+    // Name comparison
+    const nameA = options.caseSensitive ? a.name : a.name.toLowerCase();
+    const nameB = options.caseSensitive ? b.name : b.name.toLowerCase();
+    const comparison = nameA.localeCompare(nameB);
+    return options.direction === 'asc' ? comparison : -comparison;
+  });
+}
+
+function sortFileStructureRecursively(items: FileItem[], options: SortOptions = defaultSortOptions): FileItem[] {
+  const sorted = sortItems([...items], options);
+  return sorted.map(item => ({
+    ...item,
+    children: item.children ? sortFileStructureRecursively(item.children, options) : undefined
+  }));
+}
+
+const FileExplorer = ({ currentFile, onFileSelect, projectId }: FileExplorerProps) => {
+  const { user, dbUser } = useAuth();
+  const currentUserId = user?.id || dbUser?.id;
+  // ...state declarations
+
+  // --- File/Folder Editing & CRUD Functions ---
+  const startEditing = (itemId: string, currentName: string) => {
+    setEditingItem(itemId);
+    setEditingText(currentName);
   };
 
   const cancelEdit = () => {
@@ -91,56 +134,203 @@ const FileExplorer = ({ currentFile, onFileSelect }: FileExplorerProps) => {
     setEditingText('');
   };
 
-  const deleteItem = (itemName: string) => {
-    const removeFromStructure = (items: FileItem[]): FileItem[] => {
-      return items.filter(item => item.name !== itemName).map(item => {
-        if (item.children) {
-          return { ...item, children: removeFromStructure(item.children) };
-        }
-        return item;
-      });
-    };
-    
-    setFileStructure(removeFromStructure(fileStructure));
-  };
-
-  const createNewItem = (type: 'file' | 'folder', parentFolder?: string) => {
-    const newName = type === 'file' ? 'newfile.txt' : 'newfolder';
-    const newItem: FileItem = {
-      name: newName,
-      type,
-      children: type === 'folder' ? [] : undefined
-    };
-
-    if (parentFolder) {
-      // Add to specific folder
-      const updateStructure = (items: FileItem[]): FileItem[] => {
-        return items.map(item => {
-          if (item.name === parentFolder && item.type === 'folder') {
-            return {
-              ...item,
-              children: [...(item.children || []), newItem]
-            };
-          }
-          if (item.children) {
-            return { ...item, children: updateStructure(item.children) };
-          }
-          return item;
-        });
-      };
-      setFileStructure(updateStructure(fileStructure));
-      setExpandedFolders(prev => new Set([...prev, parentFolder]));
-    } else {
-      // Add to root
-      setFileStructure([...fileStructure, newItem]);
+  const saveEdit = async () => {
+    if (!editingItem || !editingText.trim()) {
+      cancelEdit();
+      return;
     }
-    
-    // Start editing the new item immediately
-    startEditing(newName);
+    try {
+      const { error } = await projectFilesApi.updateFile(editingItem, {
+        name: editingText.trim()
+      });
+      if (error) throw error;
+      // Update local state with sorting applied
+      const updatedFiles = flattenFileTree(fileStructure).map(f =>
+        f.id === editingItem ? { ...f, name: editingText.trim() } : f
+      );
+      updateAndSortStructure(updatedFiles);
+      toast({ title: 'Success', description: 'File renamed successfully' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to rename file', variant: 'destructive' });
+    } finally {
+      cancelEdit();
+    }
   };
 
-  const handleDragStart = (e: React.DragEvent, itemName: string) => {
-    setDraggedItem(itemName);
+  // Helper: Generate default content based on file extension
+const getDefaultContent = (fileName: string): string => {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'java': {
+      const className = fileName.replace('.java', '');
+      return `public class ${className} {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}`;
+    }
+    case 'py':
+      return `# ${fileName}\n# Python file\n\nprint(\"Hello, World!\")`;
+    case 'js':
+      return `// ${fileName}\n// JavaScript file\n\nconsole.log(\"Hello, World!\");`;
+    case 'c':
+      return `#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}`;
+    case 'cpp':
+      return `#include <iostream>\n\nint main() {\n    std::cout << \"Hello, World!\" << std::endl;\n    return 0;\n}`;
+    case 'cs':
+      return `using System;\n\nclass Program {\n    static void Main() {\n        Console.WriteLine(\"Hello, World!\");\n    }\n}`;
+    case 'md':
+      return `# ${fileName.replace('.md', '')}\n\nAdd your documentation here.`;
+    case 'txt':
+      return `This is a text file.\nAdd your content here.`;
+    default:
+      return `// ${fileName}\n// Add your code here`;
+  }
+};
+
+  const createNewItem = async (type: 'file' | 'folder', parentId?: string) => {
+    // Check if user is authenticated
+    if (!currentUserId) {
+      toast({
+        title: 'Authentication Required',
+        description: 'You must be logged in to create files',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const name = type === 'file' ? 'new-file.txt' : 'new-folder';
+      const parent = parentId ? findItemById(fileStructure, parentId) : null;
+      const parentPath = parent?.path || '/';
+      const filePath = generatePath(parentPath, name);
+      const defaultContent = type === 'file' ? getDefaultContent(name) : undefined;
+      const now = new Date().toISOString();
+      const { data, error } = await projectFilesApi.createFile({
+        project_id: projectId,
+        name,
+        path: filePath,
+        file_type: type === 'folder' ? 'directory' : 'file',
+        mime_type: type === 'file' ? 'text/plain' : undefined,
+        size_bytes: defaultContent ? defaultContent.length : 0,
+        parent_id: parentId || null,
+        content: defaultContent,
+        created_at: now,
+        updated_at: now,
+        created_by: currentUserId
+      });
+
+      if (error) {
+        console.error('File creation error:', {
+          error: {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          },
+          fileData: { name, content: defaultContent }
+        });
+        throw error;
+      }
+
+      console.log('File created successfully:', {
+        fileId: data?.id,
+        name,
+        hasContent: !!data?.content,
+        contentLength: data?.content?.length || 0,
+        data
+      });
+
+      // Add new item and apply sorting
+      const allFiles = [...flattenFileTree(fileStructure), data];
+      updateAndSortStructure(allFiles);
+      // Expand parent folder if creating inside one
+      if (parentId) {
+        setExpandedFolders(prev => new Set([...prev, parentId]));
+      }
+      toast({ title: 'Success', description: `${type} created successfully` });
+    } catch (error: any) {
+      console.error(`Failed to create ${type}:`, error);
+      toast({ title: 'Error', description: `Failed to create ${type}: ${error.message}`, variant: 'destructive' });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const deleteItem = async (itemId: string) => {
+    try {
+      const { error } = await projectFilesApi.deleteFile(itemId);
+      if (error) throw error;
+      // Remove item and apply sorting
+      const updatedFiles = flattenFileTree(fileStructure).filter(f => f.id !== itemId);
+      updateAndSortStructure(updatedFiles);
+      toast({ title: 'Success', description: 'Item deleted successfully' });
+    } catch (error) {
+      console.error('Failed to delete item:', error);
+      toast({ title: 'Error', description: 'Failed to delete item', variant: 'destructive' });
+    }
+  };
+
+  // Utility to update and sort structure after file operations
+  const updateAndSortStructure = (flatFiles: ProjectFile[]) => {
+    const hierarchicalFiles = buildFileTree(flatFiles);
+    const sortedFiles = sortFileStructureRecursively(hierarchicalFiles, defaultSortOptions);
+    setFileStructure(sortedFiles);
+  };
+
+
+  // Ensure toggleFolder is defined and accessible
+  const toggleFolder = (folderId: string) => {
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(folderId)) {
+        newSet.delete(folderId);
+      } else {
+        newSet.add(folderId);
+      }
+      return newSet;
+    });
+  };
+
+  const { projectFilesApi } = useApi();
+  const { toast } = useToast();
+
+  const [fileStructure, setFileStructure] = useState<FileItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [dropTargets, setDropTargets] = useState<Set<string>>(new Set()); // For visual feedback
+
+  // Load project files on component mount
+  useEffect(() => {
+    const loadProjectFiles = async () => {
+      if (!projectId) return;
+      setIsLoading(true);
+      try {
+        // Fetch ALL files for the project (not just root level)
+        const { data, error } = await projectFilesApi.listProjectFiles(
+          projectId,
+          undefined, // parentId = undefined to get all files
+          { page: 1, per_page: 1000 }
+        );
+        if (error) throw error;
+        updateAndSortStructure(data?.items || []);
+      } catch (error) {
+        console.error('Failed to load project files:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load files',
+          variant: 'destructive'
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadProjectFiles();
+  }, [projectId, projectFilesApi, toast]);
+
+  const handleDragStart = (e: React.DragEvent, itemId: string) => {
+    setDraggedItem(itemId);
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -149,99 +339,106 @@ const FileExplorer = ({ currentFile, onFileSelect }: FileExplorerProps) => {
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = (e: React.DragEvent, targetFolder: string) => {
+  const handleDrop = async (e: React.DragEvent, targetFolderId: string) => {
     e.preventDefault();
-    if (!draggedItem || draggedItem === targetFolder) return;
+    e.stopPropagation(); // Prevent bubbling to root handler
+    if (!draggedItem || draggedItem === targetFolderId) return;
 
-    // Move item to target folder
-    let itemToMove: FileItem | null = null;
-    
-    // Remove item from current location
-    const removeItem = (items: FileItem[]): FileItem[] => {
-      return items.filter(item => {
-        if (item.name === draggedItem) {
-          itemToMove = item;
-          return false;
-        }
-        return true;
-      }).map(item => {
-        if (item.children) {
-          return { ...item, children: removeItem(item.children) };
-        }
-        return item;
-      });
-    };
-
-    // Add item to target folder
-    const addToTarget = (items: FileItem[]): FileItem[] => {
-      return items.map(item => {
-        if (item.name === targetFolder && item.type === 'folder' && itemToMove) {
-          return {
-            ...item,
-            children: [...(item.children || []), itemToMove]
-          };
-        }
-        if (item.children) {
-          return { ...item, children: addToTarget(item.children) };
-        }
-        return item;
-      });
-    };
-
-    let newStructure = removeItem(fileStructure);
-    if (itemToMove) {
-      newStructure = addToTarget(newStructure);
-      setFileStructure(newStructure);
-      setExpandedFolders(prev => new Set([...prev, targetFolder]));
+    try {
+      const dragged = findItemById(fileStructure, draggedItem);
+      const target = findItemById(fileStructure, targetFolderId);
+      if (!dragged || !target || target.type !== 'folder') return;
+      const newPath = generatePath(target.path, dragged.name);
+      const { data, error } = await projectFilesApi.moveFile(dragged.id, target.id, newPath);
+      if (error) throw error;
+      // Update local state with sorting applied
+      const updatedFiles = flattenFileTree(fileStructure).map(f =>
+        f.id === dragged.id 
+          ? { ...f, parent_id: target.id, path: newPath } 
+          : f
+      );
+      updateAndSortStructure(updatedFiles);
+      setExpandedFolders(prev => new Set([...prev, targetFolderId]));
+      toast({ title: 'Success', description: 'Item moved successfully' });
+    } catch (error) {
+      console.error('Failed to move item:', error);
+      toast({ title: 'Error', description: 'Failed to move item', variant: 'destructive' });
+    } finally {
+      setDraggedItem(null);
     }
-    
-    setDraggedItem(null);
+  };
+
+  const handleRootDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggedItem) return;
+    try {
+      const dragged = findItemById(fileStructure, draggedItem);
+      if (!dragged || !dragged.parent_id) return; // Already at root
+      const newPath = `/${dragged.name}`;
+      const { data, error } = await projectFilesApi.moveFile(dragged.id, null, newPath);
+      if (error) throw error;
+      // Update local state with sorting applied
+      const updatedFiles = flattenFileTree(fileStructure).map(f =>
+        f.id === draggedItem 
+          ? { ...f, parent_id: null, path: newPath } 
+          : f
+      );
+      updateAndSortStructure(updatedFiles);
+      toast({ title: 'Success', description: 'File moved to root' });
+    } catch (error) {
+      console.error('Failed to move to root:', error);
+      toast({ title: 'Error', description: 'Failed to move file to root', variant: 'destructive' });
+    } finally {
+      setDraggedItem(null);
+    }
   };
 
   const getFileIcon = (filename: string) => {
     return <FileText className="h-4 w-4 text-blue-400" />;
   };
 
-  const getItemPath = (itemName: string, items: FileItem[] = fileStructure, currentPath: string[] = []): string[] => {
-    for (const item of items) {
-      if (item.name === itemName) {
-        return [...currentPath, itemName];
-      }
-      if (item.children) {
-        const found = getItemPath(itemName, item.children, [...currentPath, item.name]);
-        if (found.length > 0) return found;
-      }
-    }
-    return [];
-  };
-
-  const renderFileStructure = (items: FileItem[], depth = 0, parentPath: string[] = []) => {
+  const renderFileStructure = (items: FileItem[], depth = 0) => {
     return items.map((item) => {
-      const itemPath = [...parentPath, item.name].join('/');
-      const isEditing = editingItem === item.name;
-      
+      const isExpanded = expandedFolders.has(item.id);
+      const isEditing = editingItem === item.id;
+      const isCurrentFile = item.type === 'file' && currentFile === item.name;
+      const isDraggedOver = dropTargets.has(item.id);
+      const isDragging = draggedItem === item.id;
       return (
-        <div key={itemPath}>
+        <div key={item.id}>
           <div
             className={`flex items-center space-x-2 px-2 py-1 hover:bg-gray-700 cursor-pointer group ${
-              item.type === 'file' && currentFile === item.name ? 'bg-gray-700 text-blue-400' : 'text-gray-300'
-            }`}
+              isCurrentFile ? 'bg-gray-700 text-blue-400' : 'text-gray-300'
+            } ${isDragging ? 'opacity-50' : ''} ${isDraggedOver && item.type === 'folder' ? 'bg-blue-600/20 border-blue-400 border-dashed border-2' : ''}`}
             style={{ paddingLeft: `${8 + depth * 16}px` }}
             draggable={!isEditing}
-            onDragStart={(e) => handleDragStart(e, item.name)}
+            onDragEnter={() => {
+              if (item.type === 'folder' && draggedItem !== item.id) {
+                setDropTargets(prev => new Set([...prev, item.id]));
+              }
+            }}
+            onDragLeave={() => {
+              setDropTargets(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(item.id);
+                return newSet;
+              });
+            }}
+            onDragStart={(e) => handleDragStart(e, item.id)}
             onDragOver={item.type === 'folder' ? handleDragOver : undefined}
-            onDrop={item.type === 'folder' ? (e) => handleDrop(e, item.name) : undefined}
-            onDoubleClick={() => item.type === 'file' && startEditing(item.name)}
+            onDrop={item.type === 'folder' ? (e) => handleDrop(e, item.id) : undefined}
+            onDoubleClick={() => item.type === 'file' && startEditing(item.id, item.name)}
             onClick={() => {
               if (item.type === 'folder') {
-                toggleFolder(item.name);
+                toggleFolder(item.id);
               } else if (!isEditing) {
-                onFileSelect(item.name);
+                onFileSelect(item.name, item.id);
               }
             }}
           >
+            {/* Icon */}
             {item.type === 'folder' ? (
-              expandedFolders.has(item.name) ? (
+              isExpanded ? (
                 <FolderOpen className="h-4 w-4 text-yellow-400" />
               ) : (
                 <Folder className="h-4 w-4 text-yellow-400" />
@@ -250,6 +447,7 @@ const FileExplorer = ({ currentFile, onFileSelect }: FileExplorerProps) => {
               getFileIcon(item.name)
             )}
             
+            {/* Name or Edit Input */}
             {isEditing ? (
               <input
                 type="text"
@@ -267,6 +465,7 @@ const FileExplorer = ({ currentFile, onFileSelect }: FileExplorerProps) => {
               <span className="text-sm flex-1">{item.name}</span>
             )}
             
+            {/* Actions Dropdown */}
             {!isEditing && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -280,23 +479,35 @@ const FileExplorer = ({ currentFile, onFileSelect }: FileExplorerProps) => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="bg-gray-700 border-gray-600">
-                  <DropdownMenuItem onClick={() => startEditing(item.name)} className="text-gray-200 hover:bg-gray-600">
+                  <DropdownMenuItem 
+                    onClick={() => startEditing(item.id, item.name)} 
+                    className="text-gray-200 hover:bg-gray-600"
+                  >
                     <Edit className="h-3 w-3 mr-2" />
                     Rename
                   </DropdownMenuItem>
                   {item.type === 'folder' && (
                     <>
-                      <DropdownMenuItem onClick={() => createNewItem('file', item.name)} className="text-gray-200 hover:bg-gray-600">
+                      <DropdownMenuItem 
+                        onClick={() => createNewItem('file', item.id)} 
+                        className="text-gray-200 hover:bg-gray-600"
+                      >
                         <FileText className="h-3 w-3 mr-2" />
                         New File
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => createNewItem('folder', item.name)} className="text-gray-200 hover:bg-gray-600">
+                      <DropdownMenuItem 
+                        onClick={() => createNewItem('folder', item.id)} 
+                        className="text-gray-200 hover:bg-gray-600"
+                      >
                         <Folder className="h-3 w-3 mr-2" />
                         New Folder
                       </DropdownMenuItem>
                     </>
                   )}
-                  <DropdownMenuItem onClick={() => deleteItem(item.name)} className="text-red-400 hover:bg-gray-600">
+                  <DropdownMenuItem 
+                    onClick={() => deleteItem(item.id)} 
+                    className="text-red-400 hover:bg-gray-600"
+                  >
                     <Trash className="h-3 w-3 mr-2" />
                     Delete
                   </DropdownMenuItem>
@@ -305,9 +516,10 @@ const FileExplorer = ({ currentFile, onFileSelect }: FileExplorerProps) => {
             )}
           </div>
           
-          {item.type === 'folder' && expandedFolders.has(item.name) && item.children && (
+          {/* Render children if folder is expanded */}
+          {item.type === 'folder' && isExpanded && item.children && (
             <div>
-              {renderFileStructure(item.children, depth + 1, [...parentPath, item.name])}
+              {renderFileStructure(item.children, depth + 1)}
             </div>
           )}
         </div>
@@ -317,21 +529,39 @@ const FileExplorer = ({ currentFile, onFileSelect }: FileExplorerProps) => {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Header */}
       <div className="p-3 border-b border-gray-700">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-gray-300">Explorer</h3>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-gray-400 hover:text-white">
-                <Plus className="h-4 w-4" />
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="h-6 w-6 p-0 text-gray-400 hover:text-white"
+                disabled={isCreating}
+              >
+                {isCreating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-gray-700 border-gray-600">
-              <DropdownMenuItem onClick={() => createNewItem('file')} className="text-gray-200 hover:bg-gray-600">
+              <DropdownMenuItem 
+                onClick={() => createNewItem('file')} 
+                className="text-gray-200 hover:bg-gray-600"
+                disabled={isCreating}
+              >
                 <FileText className="h-3 w-3 mr-2" />
                 New File
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => createNewItem('folder')} className="text-gray-200 hover:bg-gray-600">
+              <DropdownMenuItem 
+                onClick={() => createNewItem('folder')} 
+                className="text-gray-200 hover:bg-gray-600"
+                disabled={isCreating}
+              >
                 <Folder className="h-3 w-3 mr-2" />
                 New Folder
               </DropdownMenuItem>
@@ -340,8 +570,26 @@ const FileExplorer = ({ currentFile, onFileSelect }: FileExplorerProps) => {
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto py-2">
-        {renderFileStructure(fileStructure)}
+      {/* File Tree */}
+      <div
+        className={`flex-1 overflow-y-auto py-2 ${dropTargets.has('root') ? 'bg-blue-600/10 border-blue-400 border-dashed border-2' : ''}`}
+        onDragOver={handleDragOver}
+        onDrop={handleRootDrop}
+        onDragEnter={() => setDropTargets(prev => new Set([...prev, 'root']))}
+        onDragLeave={() => setDropTargets(prev => {
+          const newSet = new Set(prev);
+          newSet.delete('root');
+          return newSet;
+        })}
+      >
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="animate-spin mr-2" />
+            Loading files...
+          </div>
+        ) : (
+          renderFileStructure(fileStructure)
+        )}
       </div>
     </div>
   );

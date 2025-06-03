@@ -9,6 +9,9 @@ interface AuthContextType {
   dbUser: DbUser | null
   isLoading: boolean
   isSigningOut: boolean
+  isInitialized: boolean
+  isSyncing: boolean
+  isReady: boolean
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
 }

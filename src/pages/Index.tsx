@@ -1,44 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Dashboard from '../components/Dashboard';
-import CodeEditor from '../components/CodeEditor';
+import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { Navigate } from 'react-router-dom';
+import Dashboard from '../components/Dashboard';
 
 const Index = () => {
-  const navigate = useNavigate();
-  const { user, signOut } = useAuth();
-  const [currentView, setCurrentView] = useState<'dashboard' | 'editor'>('dashboard');
-  const [currentProject, setCurrentProject] = useState<any>(null);
+  const { user, isReady } = useAuth();
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/landing');
-    } else {
-      navigate('/dashboard');
-    }
-  }, [user, navigate]);
+  // Wait for auth to be ready
+  if (!isReady) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
-  const openProject = (project: any) => {
-    setCurrentProject(project);
-    setCurrentView('editor');
-  };
+  // Redirect to landing if not authenticated
+  if (!user) {
+    return <Navigate to="/landing" replace />;
+  }
 
-  const backToDashboard = () => {
-    setCurrentView('dashboard');
-    setCurrentProject(null);
-  };
-
-  return (
-    <div className="min-h-screen dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
-      <main>
-        {currentView === 'dashboard' ? (
-          <Dashboard onOpenProject={openProject} />
-        ) : (
-          <CodeEditor project={currentProject} onBack={backToDashboard} />
-        )}
-      </main>
-    </div>
-  );
+  // Always show dashboard (remove editor state logic)
+  return <Dashboard />;
 };
 
 export default Index;

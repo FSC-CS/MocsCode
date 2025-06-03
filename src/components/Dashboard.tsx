@@ -28,7 +28,7 @@ interface DashboardProject {
 }
 
 interface DashboardProps {
-  onOpenProject: (project: DashboardProject) => void;
+  // onOpenProject is no longer needed, navigation is handled internally
 }
 
 const listProjects = async (
@@ -40,7 +40,7 @@ const listProjects = async (
   return projectsApi.list(pagination, sort, filters);
 };
 
-const Dashboard = ({ onOpenProject }: DashboardProps) => {
+const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
   // New: project-specific loading state
   const [isProjectsLoading, setIsProjectsLoading] = useState(false);
 const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
@@ -516,7 +516,10 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
                 <ProjectCard 
                   key={project.id} 
                   project={project} 
-                  onOpen={onOpenProject}
+                  onOpen={(project: DashboardProject) => {
+  const projectName = project.name.toLowerCase().replace(/\s+/g, '-');
+  navigate(`/editor/${project.id}/${projectName}`);
+}}
                 />
               ))}
             </div>

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Play, Share, Users, FileText, Settings, User, X } from 'lucide-react';
+import { useApi } from '@/contexts/ApiContext';
 import FileExplorer from './FileExplorer';
 import CollaboratorPanel from './CollaboratorPanel';
 import OutputPanel from './OutputPanel';
@@ -16,27 +17,25 @@ interface CodeEditorProps {
   onBack: () => void;
 }
 
+interface FileExplorerProps {
+  currentFile: string;
+  onFileSelect: (filename: string, fileId: string) => void;
+  projectId: string;
+}
+
 interface OpenFile {
   name: string;
   content: string;
   language: string;
+  id?: string; // Add file ID for saving
 }
 
+import { useToast } from '@/components/ui/use-toast';
+
 const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>([
-    {
-      name: 'main.java',
-      content: `public class Main {
-    public static void main(String[] args) {
-        System.out.println("Hello, CodeCollab!");
-        
-        // Start coding your assignment here
-        // This is a collaborative space for your team
-    }
-}`,
-      language: 'java'
-    }
-  ]);
+  const { toast } = useToast();
+  const { projectFilesApi } = useApi();
+  const [openFiles, setOpenFiles] = useState<(OpenFile & { id?: string })[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [output, setOutput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
@@ -71,7 +70,8 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     return languageMap[extension || ''] || 'plaintext';
   };
 
-  const openFile = (filename: string) => {
+  // Open file by name and fileId, fetch content from DB if fileId is present
+  const openFile = async (filename: string, fileId?: string) => {
     // Check if file is already open
     const existingIndex = openFiles.findIndex(file => file.name === filename);
     if (existingIndex !== -1) {
@@ -79,32 +79,86 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       return;
     }
 
-    // Create new file content based on filename
-    const getDefaultContent = (name: string) => {
-      const extension = name.split('.').pop();
-      switch (extension) {
-        case 'java':
-          return `public class ${name.replace('.java', '')} {\n    // Add your code here\n}`;
-        case 'py':
-          return `# ${name}\n# Add your Python code here\n`;
-        case 'js':
-          return `// ${name}\n// Add your JavaScript code here\n`;
-        case 'md':
-          return `# ${name.replace('.md', '')}\n\nAdd your documentation here.\n`;
-        default:
-          return `// ${name}\n// Add your code here\n`;
+    let fileContent = '';
+    let loadedFile: any = null;
+    if (fileId) {
+      try {
+        const { data, error } = await projectFilesApi.getFile(fileId);
+        if (error) {
+          console.error('File load error details:', {
+            fileId,
+            filename,
+            error: {
+              message: error.message,
+              details: (error as any).details || undefined,
+              hint: (error as any).hint || undefined,
+              code: (error as any).code || undefined
+            }
+          });
+          throw error;
+        }
+        loadedFile = data;
+        console.log('File loaded successfully:', {
+          fileId,
+          filename,
+          hasContent: !!data?.content,
+          contentLength: data?.content?.length || 0,
+          data
+        });
+        fileContent = data?.content || getDefaultContent(filename);
+      } catch (error: any) {
+        console.error('Failed to load file content:', error);
+        fileContent = getDefaultContent(filename);
+        toast({
+          title: 'Warning',
+          description: `Failed to load file content: ${error?.message || 'Unknown error'}. Using default template.`,
+          variant: 'destructive'
+        });
       }
-    };
+    } else {
+      fileContent = getDefaultContent(filename);
+    }
 
-    const newFile: OpenFile = {
+    const newFile: OpenFile & { id?: string } = {
       name: filename,
-      content: getDefaultContent(filename),
-      language: getLanguageFromFile(filename)
+      content: fileContent,
+      language: getLanguageFromFile(filename),
+      id: fileId // Store file ID for saving
     };
 
     setOpenFiles([...openFiles, newFile]);
     setActiveFileIndex(openFiles.length);
   };
+
+
+  // Helper for default content
+  const getDefaultContent = (fileName: string): string => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    switch (extension) {
+      case 'java': {
+        const className = fileName.replace('.java', '');
+        return `public class ${className} {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}`;
+      }
+      case 'py':
+        return `# ${fileName}\n# Python file\n\nprint(\"Hello, World!\")`;
+      case 'js':
+        return `// ${fileName}\n// JavaScript file\n\nconsole.log(\"Hello, World!\");`;
+      case 'c':
+        return `#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}`;
+      case 'cpp':
+        return `#include <iostream>\n\nint main() {\n    std::cout << \"Hello, World!\" << std::endl;\n    return 0;\n}`;
+      case 'cs':
+        return `using System;\n\nclass Program {\n    static void Main() {\n        Console.WriteLine(\"Hello, World!\");\n    }\n}`;
+      case 'md':
+        return `# ${fileName.replace('.md', '')}\n\nAdd your documentation here.`;
+      case 'txt':
+        return `This is a text file.\nAdd your content here.`;
+      default:
+        return `// ${fileName}\n// Add your code here`;
+    }
+  };
+
+
 
   const closeFile = (index: number) => {
     if (openFiles.length === 1) return; // Don't close the last file
@@ -120,6 +174,72 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     }
   };
 
+  // Debounced save to database
+  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Manual save function
+  const saveCurrentFile = async () => {
+    const currentFile = openFiles[activeFileIndex];
+    if (!currentFile?.id) {
+      toast({
+        title: 'Cannot Save',
+        description: 'File must be created before it can be saved',
+        variant: 'destructive'
+      });
+      return;
+    }
+    try {
+      const now = new Date().toISOString();
+      const { error } = await projectFilesApi.updateFile(currentFile.id, {
+        content: currentFile.content,
+        updated_at: now,
+        size_bytes: currentFile.content.length
+      });
+      if (error) {
+        console.error('Manual save error:', {
+          fileId: currentFile.id,
+          filename: currentFile.name,
+          error: {
+            message: error.message,
+            details: (error as any).details || undefined,
+            hint: (error as any).hint || undefined,
+            code: (error as any).code || undefined
+          }
+        });
+        throw error;
+      }
+      console.log('Manual save successful:', {
+        fileId: currentFile.id,
+        filename: currentFile.name,
+        contentLength: currentFile.content.length
+      });
+      toast({
+        title: 'File Saved',
+        description: `${currentFile.name} saved successfully`
+      });
+    } catch (error: any) {
+      console.error('Manual save failed:', error);
+      toast({
+        title: 'Save Failed',
+        description: `Failed to save ${currentFile.name}: ${error.message}`,
+        variant: 'destructive'
+      });
+    }
+  };
+
+
+  // Keyboard shortcut for save
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        saveCurrentFile();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [openFiles, activeFileIndex]);
+
   const updateFileContent = (content: string) => {
     const updatedFiles = [...openFiles];
     updatedFiles[activeFileIndex] = {
@@ -127,7 +247,52 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       content: content
     };
     setOpenFiles(updatedFiles);
+
+    // Auto-save to database with improved logic
+    const currentFile = updatedFiles[activeFileIndex];
+    if (currentFile?.id) {
+      // Clear any existing timeout
+      if (saveTimeout.current) {
+        clearTimeout(saveTimeout.current);
+      }
+      // Set new timeout for auto-save
+      saveTimeout.current = setTimeout(async () => {
+        try {
+          const now = new Date().toISOString();
+          const { error } = await projectFilesApi.updateFile(currentFile.id, {
+            content: content,
+            updated_at: now,
+            size_bytes: content.length
+          });
+          if (error) {
+            console.error('Auto-save error:', {
+              fileId: currentFile.id,
+              filename: currentFile.name,
+              error: {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+              }
+            });
+            throw error;
+          }
+          console.log(`Auto-saved ${currentFile.name} successfully`, {
+            fileId: currentFile.id,
+            contentLength: content.length
+          });
+        } catch (error: any) {
+          console.error('Auto-save failed:', error);
+          toast({
+            title: 'Auto-save Failed',
+            description: `Failed to save ${currentFile.name}: ${error?.message || 'Unknown error'}`,
+            variant: 'destructive'
+          });
+        }
+      }, 1000); // 1 second debounce
+    }
   };
+
 
   // Mock collaborators
   const collaborators = [
@@ -177,6 +342,15 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
               <Share className="h-4 w-4 mr-2" />
               Share
             </Button>
+            {/* Manual Save Button */}
+            <Button
+              onClick={saveCurrentFile}
+              variant="outline"
+              className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Save
+            </Button>
             
             <Button
               variant="outline"
@@ -195,7 +369,11 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
         {/* File Explorer with Source Control */}
         <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
           <div className="flex-1">
-            <FileExplorer currentFile={activeFile?.name || ''} onFileSelect={openFile} />
+            <FileExplorer 
+              currentFile={openFiles[activeFileIndex]?.name || ''} 
+              onFileSelect={openFile}
+              projectId={project.id}
+            />
           </div>
           <div className="h-64">
             <SourceControlPanel />

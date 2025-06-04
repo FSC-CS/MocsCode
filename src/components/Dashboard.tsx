@@ -148,7 +148,9 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
         description: 'Project created successfully'
       });
 
-      onOpenProject(newProject);
+      // Navigate to the editor with the new project
+      const projectNameSlug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      navigate(`/editor/${newProject.id}/${projectNameSlug}`);
     } catch (err) {
       console.error('Failed to create project:', err);
       toast({

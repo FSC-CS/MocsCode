@@ -596,10 +596,6 @@ const EmptyProjectsState = ({ activeTab }: { activeTab: string }) => {
       <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
         {message.description}
       </p>
-      <Button className="bg-blue-600 hover:bg-blue-700">
-        <Plus className="h-4 w-4 mr-2" />
-        {message.action}
-      </Button>
     </div>
   );
 };

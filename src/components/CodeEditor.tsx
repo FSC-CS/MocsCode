@@ -270,9 +270,9 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
               filename: currentFile.name,
               error: {
                 message: error.message,
-                details: error.details,
-                hint: error.hint,
-                code: error.code
+                details: (error as any).details,
+                hint: (error as any).hint,
+                code: (error as any).code
               }
             });
             throw error;

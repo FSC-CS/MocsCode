@@ -79,8 +79,15 @@ function findItemById(items: FileItem[], id: string): FileItem | null {
 
 // Helper to generate file path
 function generatePath(parentPath: string, fileName: string): string {
-  if (!parentPath || parentPath === '/') return `/${fileName}`;
-  return `${parentPath}/${fileName}`;
+  // Handle root directory
+  if (!parentPath || parentPath === '/') {
+    return `/${fileName}`;
+  }
+  
+  // Ensure parent path doesn't end with slash (except root)
+  const normalizedParent = parentPath.endsWith('/') ? parentPath.slice(0, -1) : parentPath;
+  
+  return `${normalizedParent}/${fileName}`;
 }
 
 // --- Sorting Utilities ---
@@ -134,24 +141,111 @@ const FileExplorer = ({ currentFile, onFileSelect, projectId }: FileExplorerProp
     setEditingText('');
   };
 
+  const updateChildrenPaths = async (renamedFolder: FileItem, newFolderPath: string) => {
+    const childrenToUpdate = flattenFileTree(fileStructure).filter(
+      f => f.path.startsWith(renamedFolder.path + '/')
+    );
+    
+    for (const child of childrenToUpdate) {
+      const relativePath = child.path.substring(renamedFolder.path.length);
+      const newChildPath = newFolderPath + relativePath;
+      
+      try {
+        const { error } = await projectFilesApi.updateFile(child.id, {
+          path: newChildPath,
+          updated_at: new Date().toISOString()
+        });
+        
+        if (error) {
+          console.error(`Failed to update child path for ${child.name}:`, error);
+        }
+      } catch (error) {
+        console.error(`Error updating child path for ${child.name}:`, error);
+      }
+    }
+  };
+
   const saveEdit = async () => {
     if (!editingItem || !editingText.trim()) {
       cancelEdit();
       return;
     }
+    
     try {
-      const { error } = await projectFilesApi.updateFile(editingItem, {
-        name: editingText.trim()
-      });
-      if (error) throw error;
-      // Update local state with sorting applied
-      const updatedFiles = flattenFileTree(fileStructure).map(f =>
-        f.id === editingItem ? { ...f, name: editingText.trim() } : f
+      const itemToEdit = findItemById(fileStructure, editingItem);
+      if (!itemToEdit) {
+        throw new Error('File not found');
+      }
+      
+      const newName = editingText.trim();
+      
+      // Generate the new path
+      let newPath: string;
+      if (itemToEdit.parent_id) {
+        // Find parent to get parent path
+        const parent = findItemById(fileStructure, itemToEdit.parent_id);
+        if (!parent) {
+          throw new Error('Parent folder not found');
+        }
+        newPath = generatePath(parent.path, newName);
+      } else {
+        // Root level file/folder
+        newPath = `/${newName}`;
+      }
+      
+      // Check if new path already exists (avoid duplicate constraint)
+      const existingItem = flattenFileTree(fileStructure).find(
+        f => f.path === newPath && f.id !== editingItem
       );
+      
+      if (existingItem) {
+        toast({
+          title: 'Error',
+          description: `A file or folder with the name "${newName}" already exists in this location`,
+          variant: 'destructive'
+        });
+        return;
+      }
+      
+      // Update both name and path
+      const { error } = await projectFilesApi.updateFile(editingItem, {
+        name: newName,
+        path: newPath,
+        updated_at: new Date().toISOString()
+      });
+      
+      if (error) throw error;
+      
+      // If renaming a folder, we need to update all children's paths recursively
+      if (itemToEdit.file_type === 'directory') {
+        await updateChildrenPaths(itemToEdit, newPath);
+      }
+      
+      // Update local state with sorting applied
+      const updatedFiles = flattenFileTree(fileStructure).map(f => {
+        if (f.id === editingItem) {
+          return { ...f, name: newName, path: newPath };
+        }
+        // Update children paths if this was a folder rename
+        if (itemToEdit.file_type === 'directory' && f.path.startsWith(itemToEdit.path + '/')) {
+          const relativePath = f.path.substring(itemToEdit.path.length);
+          return { ...f, path: newPath + relativePath };
+        }
+        return f;
+      });
+      
       updateAndSortStructure(updatedFiles);
-      toast({ title: 'Success', description: 'File renamed successfully' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to rename file', variant: 'destructive' });
+      toast({ 
+        title: 'Success', 
+        description: `${itemToEdit.file_type === 'directory' ? 'Folder' : 'File'} renamed successfully` 
+      });
+    } catch (error: any) {
+      console.error('Rename error:', error);
+      toast({ 
+        title: 'Error', 
+        description: `Failed to rename: ${error.message}`, 
+        variant: 'destructive' 
+      });
     } finally {
       cancelEdit();
     }
@@ -184,6 +278,37 @@ const getDefaultContent = (fileName: string): string => {
   }
 };
 
+  // Helper function to generate a unique name for new files/folders
+  const generateUniqueName = (baseName: string, isFile: boolean, parentId?: string): string => {
+    const allFiles = flattenFileTree(fileStructure);
+    const siblings = allFiles.filter(file => file.parent_id === (parentId || null));
+    
+    // Extract base name and extension
+    let name = baseName;
+    let extension = '';
+    
+    if (isFile) {
+      const lastDot = baseName.lastIndexOf('.');
+      if (lastDot > 0) {
+        name = baseName.substring(0, lastDot);
+        extension = baseName.substring(lastDot);
+      }
+    }
+    
+    // Check if name already exists
+    let newName = baseName;
+    let counter = 1;
+    
+    while (siblings.some(file => file.name === newName)) {
+      newName = isFile 
+        ? `${name} (${counter})${extension}`
+        : `${name} (${counter})`;
+      counter++;
+    }
+    
+    return newName;
+  };
+
   const createNewItem = async (type: 'file' | 'folder', parentId?: string) => {
     // Check if user is authenticated
     if (!currentUserId) {
@@ -196,7 +321,8 @@ const getDefaultContent = (fileName: string): string => {
     }
     setIsCreating(true);
     try {
-      const name = type === 'file' ? 'new-file.txt' : 'new-folder';
+      const baseName = type === 'file' ? 'new-file.txt' : 'new-folder';
+      const name = generateUniqueName(baseName, type === 'file', parentId);
       const parent = parentId ? findItemById(fileStructure, parentId) : null;
       const parentPath = parent?.path || '/';
       const filePath = generatePath(parentPath, name);
@@ -244,7 +370,7 @@ const getDefaultContent = (fileName: string): string => {
       if (parentId) {
         setExpandedFolders(prev => new Set([...prev, parentId]));
       }
-      toast({ title: 'Success', description: `${type} created successfully` });
+      toast({ title: 'Success', description: `Created ${type}: ${name}` });
     } catch (error: any) {
       console.error(`Failed to create ${type}:`, error);
       toast({ title: 'Error', description: `Failed to create ${type}: ${error.message}`, variant: 'destructive' });

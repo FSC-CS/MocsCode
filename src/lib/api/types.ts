@@ -52,6 +52,18 @@ export type ProjectMember = {
   joined_at: string;
 };
 
+export interface ShareInvitation {
+  email: string;
+  role: 'viewer' | 'editor';
+  message?: string;
+};
+
+export interface ShareableLink {
+  token: string;
+  permissions: 'viewer' | 'editor';
+  expires_at?: string;
+};
+
 // Query types
 export type PaginationParams = {
   page?: number;
@@ -77,3 +89,4 @@ export type PaginatedResponse<T> = ApiResponse<{
   page: number;
   per_page: number;
 }>;
+

@@ -28,7 +28,7 @@ export class ApiClient {
     sort?: SortParams,
     filters?: FilterParams
   ): Promise<PaginatedResponse<T>> {
-    const { page = 1, perPage = 10 } = pagination || {};
+    const { page = 1, per_page = 10 } = pagination || {};
     let query = this.client.from(this.table).select('*', { count: 'exact' });
 
     // Apply filters
@@ -44,8 +44,8 @@ export class ApiClient {
     }
 
     // Apply pagination
-    const start = (page - 1) * perPage;
-    query = query.range(start, start + perPage - 1);
+    const start = (page - 1) * per_page;
+    query = query.range(start, start + per_page - 1);
 
     const { data, error, count } = await query;
 
@@ -54,7 +54,7 @@ export class ApiClient {
         items: (data || []) as T[],
         total: count || 0,
         page,
-        perPage,
+        per_page,
       },
       error: error as Error | null,
     };

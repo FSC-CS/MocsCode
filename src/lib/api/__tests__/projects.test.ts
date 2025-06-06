@@ -35,7 +35,7 @@ describe('ProjectsApi', () => {
       }));
 
       const result = await api.listProjects(
-        { page: 1, perPage: 10 },
+        { page: 1, per_page: 10 },
         { field: 'name', direction: 'asc' },
         { owner_id: 'test-user-id' }
       );
@@ -90,7 +90,7 @@ describe('ProjectsApi', () => {
         select: mockResponse,
       }));
 
-      const result = await api.listUserProjects('test-user-id', { page: 1, perPage: 10 });
+      const result = await api.listUserProjects('test-user-id', { page: 1, per_page: 10 });
       expect(result.data?.items).toEqual(mockProjects);
       expect(result.data?.total).toBe(1);
       expect(result.error).toBeNull();

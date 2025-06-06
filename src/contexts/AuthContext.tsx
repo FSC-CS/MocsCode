@@ -1,8 +1,11 @@
+// Fixed AuthContext.tsx - Simplified to avoid RLS recursion issues
+
 import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import type { User as DbUser } from '@/lib/api/types'
 import { useApi } from './ApiContext'
+import { useToast } from '@/components/ui/use-toast';
 
 interface AuthContextType {
   user: SupabaseUser | null
@@ -25,8 +28,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-import { useToast } from '@/components/ui/use-toast';
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [dbUser, setDbUser] = useState<DbUser | null>(null)
@@ -34,68 +35,87 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isSigningUp, setIsSigningUp] = useState(false)
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
-  // New coordinated auth states
   const [isInitialized, setIsInitialized] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
   // Derived readiness state
-  const isReady = isInitialized && !isSyncing && !isLoading;
+  const isReady = isInitialized && !isSyncing && !isLoading && !!user;
 
   const { authApi } = useApi()
   const { toast } = useToast();
 
   const clearError = () => setError(null);
 
-  // Phase 2: Sync OAuth user with DB user when initialized and user is present
+  // SIMPLIFIED: User sync without recursive lookups
   useEffect(() => {
     if (!isInitialized || !user) {
       setDbUser(null);
       return;
     }
-    let isActive = true;
-    const sync = async () => {
+    
+    const syncUser = async () => {
       setIsSyncing(true);
-      const oAuthData = {
-        id: user.id,
-        email: user.email,
-        display_name: user.user_metadata?.full_name || user.email,
-        avatar_url: user.user_metadata?.avatar_url,
-      };
-      const { data, error } = await authApi.syncOAuthUser(oAuthData);
-      if (!isActive) return;
-      if (error) {
-        console.error('Error syncing user:', error);
-        setDbUser(null);
-        setIsSyncing(false);
-        return;
-      }
-      setDbUser(data);
-      setIsSyncing(false);
-    };
-    sync();
-    return () => { isActive = false; };
-  }, [isInitialized, user]);
+      
+      try {
+        // Create a simple dbUser object from the Supabase user
+        // This avoids the problematic database lookup that was causing recursion
+        const simpleDbUser: DbUser = {
+          id: user.id,
+          email: user.email!,
+          username: user.email?.split('@')[0] || 'user',
+          display_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0],
+          avatar_url: user.user_metadata?.avatar_url,
+          created_at: user.created_at,
+          updated_at: new Date().toISOString(),
+          last_active_at: new Date().toISOString()
+        };
 
-    // Phase 1: Initialize auth state (restore session, set up listeners)
+        setDbUser(simpleDbUser);
+        console.log('User synced successfully (simplified):', simpleDbUser.id);
+        
+      } catch (error: any) {
+        console.error('User sync error:', error);
+        setError('Failed to sync user data. Please refresh the page.');
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+    
+    syncUser();
+  }, [isInitialized, user, authApi]);
+
+  // Initialize auth state (restore session, set up listeners)
   useEffect(() => {
     let mounted = true;
+    
     const initializeAuth = async () => {
-      const { data: sessionData, error } = await supabase.auth.getSession();
-      if (!mounted) return;
-      
-      if (error) {
-        console.error('Error restoring session:', error);
-      } 
-      
-      if (sessionData?.session) {
-        setUser(sessionData.session.user);
-      } else {
-        setUser(null);
+      try {
+        const { data: sessionData, error } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+        
+        if (error) {
+          console.error('Error restoring session:', error);
+          setError('Failed to restore session');
+        } 
+        
+        if (sessionData?.session?.user) {
+          console.log('Restored session for user:', sessionData.session.user.id);
+          setUser(sessionData.session.user);
+        } else {
+          setUser(null);
+        }
+        
+      } catch (error) {
+        console.error('Unexpected error during auth initialization:', error);
+        setError('Failed to initialize authentication');
+      } finally {
+        if (mounted) {
+          setIsInitialized(true);
+          setIsLoading(false);
+        }
       }
-      
-      // Always set initialized and loading states
-      setIsInitialized(true);
-      setIsLoading(false);
     };
     
     initializeAuth();
@@ -104,11 +124,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       
-      // Always reset loading state for any auth state change
+      console.log('Auth state change:', event, session?.user?.id);
+      
       setIsLoading(false);
       
-      setUser(session?.user || null);
-      if (!session?.user) {
+      if (session?.user) {
+        setUser(session.user);
+      } else {
+        setUser(null);
         setDbUser(null);
       }
     });
@@ -124,7 +147,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       clearError();
       setIsLoading(true);
       
-      // Ensure we have the correct redirect URL
       const redirectUrl = new URL('/auth/callback', window.location.origin).toString();
       
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -150,8 +172,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         throw error;
       }
 
-
-      // If we have a URL, the OAuth flow is proceeding
       if (data?.url) {
         window.location.href = data.url;
       } else {
@@ -193,7 +213,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         throw error;
       }
 
-      // User is automatically set by the auth state change listener
       toast({
         title: 'Signed in successfully',
         description: 'Welcome back!',
@@ -285,13 +304,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signOut = async () => {
-    // Set signing out state immediately for UI feedback
     setIsSigningOut(true)
     
     try {
       // Clear UI state first for immediate feedback
       setUser(null)
       setDbUser(null)
+      clearError()
       
       // Reset theme to light mode
       localStorage.setItem('theme', 'light')
@@ -308,7 +327,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setDbUser(null)
       throw error
     } finally {
-      // Always reset the signing out state
       setIsSigningOut(false)
     }
   }
@@ -341,15 +359,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     isSyncing,
     isReady,
     error,
-    signInWithGoogle,
-    signInWithEmail,
-    signUpWithEmail,
-    resetPassword,
-    signOut,
-    clearError,
   ]);
 
-  // Debugging: log auth state changes
+  // Enhanced debugging
   useEffect(() => {
     console.log('Auth State:', {
       isReady, 
@@ -360,7 +372,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       isSigningIn,
       isSigningOut,
       hasUser: !!user, 
-      hasDbUser: !!dbUser
+      hasDbUser: !!dbUser,
+      userEmail: user?.email
     });
   }, [isReady, isInitialized, isSyncing, isLoading, isSigningUp, isSigningIn, isSigningOut, user, dbUser]);
 

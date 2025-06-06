@@ -24,8 +24,8 @@ export class ProjectFilesApi extends ApiClient {
       parentIdValue: JSON.stringify(parentId)
     });
 
-    const { page = 1, perPage = 50 } = pagination || {};
-    const start = (page - 1) * perPage;
+    const { page = 1, per_page = 50 } = pagination || {};
+    const start = (page - 1) * per_page;
     let query = this.client
       .from(this.table)
       .select('*', { count: 'exact' })
@@ -46,7 +46,7 @@ export class ProjectFilesApi extends ApiClient {
     }
 
     // Apply pagination
-    query = query.range(start, start + perPage - 1);
+    query = query.range(start, start + per_page - 1);
     const { data, error, count } = await query;
 
     return {
@@ -54,7 +54,7 @@ export class ProjectFilesApi extends ApiClient {
         items: (data || []) as ProjectFile[],
         total: count || 0,
         page,
-        perPage,
+        per_page,
       },
       error: error as Error | null,
     };
@@ -157,22 +157,22 @@ export class ProjectFilesApi extends ApiClient {
     query: string,
     pagination?: PaginationParams
   ): Promise<PaginatedResponse<ProjectFile>> {
-    const { page = 1, perPage = 10 } = pagination || {};
-    const start = (page - 1) * perPage;
+    const { page = 1, per_page = 10 } = pagination || {};
+    const start = (page - 1) * per_page;
 
     const { data, error, count } = await this.client
       .from(this.table)
       .select('*', { count: 'exact' })
       .eq('project_id', projectId)
       .ilike('name', `%${query}%`)
-      .range(start, start + perPage - 1);
+      .range(start, start + per_page - 1);
 
     return {
       data: {
         items: (data || []) as ProjectFile[],
         total: count || 0,
         page,
-        perPage,
+        per_page,
       },
       error: error as Error | null,
     };

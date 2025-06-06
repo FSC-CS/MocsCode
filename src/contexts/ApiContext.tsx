@@ -1,34 +1,68 @@
-import { createContext, useContext } from 'react';
-import { AuthApi } from '@/lib/api/auth';
-import { ProjectsApi } from '@/lib/api/projects';
-import { ProjectFilesApi } from '@/lib/api/project-files';
-import { supabase } from '@/lib/supabase';
+// ApiContext.tsx - Make sure this is properly exported
 
-interface ApiContextType {
-  authApi: AuthApi;
-  projectsApi: ProjectsApi;
-  projectFilesApi: ProjectFilesApi;
+import React, { createContext, useContext } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { UsersApi } from '@/lib/api/users';
+import { ProjectsApi } from '@/lib/api/projects';
+import { ProjectMembersApi } from '@/lib/api/project-members';
+import { ProjectFilesApi } from '@/lib/api/project-files';
+import { CollaborationApi } from '@/lib/api/collaboration';
+import { AuthApi } from '@/lib/api/auth';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables');
 }
 
-const ApiContext = createContext<ApiContextType | undefined>(undefined);
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Initialize APIs once
-const authApi = new AuthApi({ client: supabase });
-const projectsApi = new ProjectsApi({ client: supabase });
-const projectFilesApi = new ProjectFilesApi({ client: supabase });
+// Create API instances
+const apiConfig = { client: supabase };
 
-export function ApiProvider({ children }: { children: React.ReactNode }) {
+const apis = {
+  usersApi: new UsersApi(apiConfig),
+  projectsApi: new ProjectsApi(apiConfig),
+  projectMembersApi: new ProjectMembersApi(apiConfig),
+  projectFilesApi: new ProjectFilesApi(apiConfig),
+  collaborationApi: new CollaborationApi(apiConfig),
+  authApi: new AuthApi(apiConfig),
+  supabase // Also export the raw client
+};
+
+// Create context
+const ApiContext = createContext<typeof apis | null>(null);
+
+// Provider component
+export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
-    <ApiContext.Provider value={{ authApi, projectsApi, projectFilesApi }}>
+    <ApiContext.Provider value={apis}>
       {children}
     </ApiContext.Provider>
   );
-}
+};
 
-export function useApi() {
+// Hook to use the API context - THIS MUST BE EXPORTED
+export const useApi = () => {
   const context = useContext(ApiContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useApi must be used within an ApiProvider');
   }
   return context;
-}
+};
+
+// Also export individual APIs if needed
+export const { 
+  usersApi, 
+  projectsApi, 
+  projectMembersApi, 
+  projectFilesApi, 
+  collaborationApi, 
+  authApi 
+} = apis;
+
+// Export the supabase client directly
+export { supabase };
+
+export default ApiContext;

@@ -1,13 +1,15 @@
-
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Play, Share, Users, FileText, Settings, User, X } from 'lucide-react';
+import { ArrowLeft, Play, Share, FileText, Settings, X } from 'lucide-react';
 import { useApi } from '@/contexts/ApiContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import ShareDialog from './ShareDialog';
+import MemberManagementDialog from './MemberManagementDialog';
 import FileExplorer from './FileExplorer';
-import CollaboratorPanel from './CollaboratorPanel';
 import OutputPanel from './OutputPanel';
 import ChatPanel from './ChatPanel';
 import SourceControlPanel from './SourceControlPanel';
@@ -17,38 +19,367 @@ interface CodeEditorProps {
   onBack: () => void;
 }
 
-interface FileExplorerProps {
-  currentFile: string;
-  onFileSelect: (filename: string, fileId: string) => void;
-  projectId: string;
-}
-
 interface OpenFile {
   name: string;
   content: string;
   language: string;
-  id?: string; // Add file ID for saving
+  id?: string;
 }
 
-import { useToast } from '@/components/ui/use-toast';
+// Enhanced member interface to match what we expect from the API
+interface EnhancedMember {
+  id: string;
+  project_id: string;
+  user_id: string;
+  role: 'owner' | 'editor' | 'viewer';
+  permissions: Record<string, unknown>;
+  invited_by?: string;
+  joined_at: string;
+  user?: {
+    id: string;
+    email: string;
+    username: string;
+    display_name?: string;
+    avatar_url?: string;
+  };
+}
 
 const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const { toast } = useToast();
-  const { projectFilesApi } = useApi();
+  const { projectFilesApi, projectMembersApi } = useApi();
+  const { user, dbUser } = useAuth();
+  
+  // File management state
   const [openFiles, setOpenFiles] = useState<(OpenFile & { id?: string })[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [output, setOutput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
-  const [showCollaborators, setShowCollaborators] = useState(false);
+  
+  // Collaboration state
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showMemberDialog, setShowMemberDialog] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<EnhancedMember | null>(null);
+  const [projectMembers, setProjectMembers] = useState<EnhancedMember[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [memberRefreshTrigger, setMemberRefreshTrigger] = useState(0);
+  const [currentUserRole, setCurrentUserRole] = useState<string>('viewer');
+  
+  // Real-time member updates
+  const [memberOperationStatus, setMemberOperationStatus] = useState<{
+    type: 'idle' | 'adding' | 'updating' | 'removing';
+    memberId?: string;
+  }>({ type: 'idle' });
+  
+  // Member list refresh management
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
   const editorRef = useRef(null);
 
+  // Load project members when component mounts or when refresh is triggered
+  useEffect(() => {
+    if (project?.id && user?.id) {
+      loadProjectMembers();
+    }
+  }, [project?.id, user?.id, memberRefreshTrigger]);
+
+  // Set up auto-refresh for member list (every 30 seconds when enabled)
+  useEffect(() => {
+    if (!autoRefreshEnabled || !project?.id || !user?.id) {
+      return;
+    }
+
+    refreshIntervalRef.current = setInterval(() => {
+      // Only auto-refresh if no member operations are in progress
+      if (memberOperationStatus.type === 'idle') {
+        loadProjectMembers(true); // Silent refresh
+      }
+    }, 30000); // 30 seconds
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, [autoRefreshEnabled, project?.id, user?.id, memberOperationStatus.type]);
+
+  // Cleanup auto-refresh on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const loadProjectMembers = async (silent: boolean = false) => {
+    if (!project?.id || !user?.id) return;
+
+    if (!silent) {
+      setIsLoadingMembers(true);
+    }
+    
+    try {
+      const { data, error } = await projectMembersApi.listProjectMembers(
+        project.id,
+        { page: 1, per_page: 50 },
+        { field: 'role', direction: 'desc' }
+      );
+
+      if (error) {
+        console.error('Error loading project members:', error);
+        if (!silent) {
+          toast({
+            title: 'Error',
+            description: 'Failed to load project collaborators',
+            variant: 'destructive'
+          });
+        }
+        return;
+      }
+
+      const members = data?.items || [];
+      
+      // Check if member list has actually changed to avoid unnecessary updates
+      if (!silent || !arraysEqual(members, projectMembers)) {
+        setProjectMembers(members);
+        setLastRefresh(new Date());
+      }
+
+      // Set current user's role
+      const currentMember = members.find(member => member.user_id === user.id);
+      if (currentMember && currentMember.role !== currentUserRole) {
+        setCurrentUserRole(currentMember.role);
+      }
+
+    } catch (error) {
+      console.error('Unexpected error loading members:', error);
+      if (!silent) {
+        toast({
+          title: 'Error',
+          description: 'An unexpected error occurred while loading collaborators',
+          variant: 'destructive'
+        });
+      }
+    } finally {
+      if (!silent) {
+        setIsLoadingMembers(false);
+      }
+    }
+  };
+
+  // Utility function to compare member arrays
+  const arraysEqual = (a: EnhancedMember[], b: EnhancedMember[]): boolean => {
+    if (a.length !== b.length) return false;
+    return a.every((member, index) => 
+      member.id === b[index]?.id && 
+      member.role === b[index]?.role &&
+      member.user_id === b[index]?.user_id
+    );
+  };
+
+  // Force refresh members list
+  const forceRefreshMembers = async () => {
+    setMemberRefreshTrigger(prev => prev + 1);
+    toast({
+      title: 'Refreshing',
+      description: 'Updating collaborator list...'
+    });
+  };
+
+  // Check if current user can manage members (owner or editor with management permissions)
+  const canManageMembers = (): boolean => {
+    return currentUserRole === 'owner' || 
+           (currentUserRole === 'editor' && project?.owner_id === user?.id);
+  };
+
+  // Handle successful member updates with optimistic updates and rollback
+  const handleMemberUpdated = async (updatedMember: EnhancedMember) => {
+    setMemberOperationStatus({ type: 'updating', memberId: updatedMember.id });
+    
+    // Optimistic update
+    const originalMembers = [...projectMembers];
+    setProjectMembers(prev => 
+      prev.map(member => 
+        member.id === updatedMember.id ? updatedMember : member
+      )
+    );
+
+    try {
+      // Verify the update was successful by refreshing from server
+      await new Promise(resolve => setTimeout(resolve, 500)); // Brief delay for better UX
+      await loadProjectMembers(true);
+      
+      toast({
+        title: 'Success',
+        description: `${updatedMember.user?.display_name || 'Member'} permissions updated successfully`,
+        duration: 3000
+      });
+    } catch (error) {
+      // Rollback on error
+      setProjectMembers(originalMembers);
+      toast({
+        title: 'Update Failed',
+        description: 'Failed to update member permissions. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setMemberOperationStatus({ type: 'idle' });
+    }
+  };
+
+  // Handle member removal with optimistic updates
+  const handleMemberRemoved = async (removedMemberId: string) => {
+    setMemberOperationStatus({ type: 'removing', memberId: removedMemberId });
+    
+    // Get member info for feedback
+    const removedMember = projectMembers.find(m => m.id === removedMemberId);
+    
+    // Optimistic update
+    const originalMembers = [...projectMembers];
+    setProjectMembers(prev => 
+      prev.filter(member => member.id !== removedMemberId)
+    );
+
+    try {
+      // Verify removal and refresh
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await loadProjectMembers(true);
+      
+      toast({
+        title: 'Success',
+        description: `${removedMember?.user?.display_name || 'Member'} removed from project`,
+        duration: 3000
+      });
+    } catch (error) {
+      // Rollback on error
+      setProjectMembers(originalMembers);
+      toast({
+        title: 'Removal Failed',
+        description: 'Failed to remove member. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setMemberOperationStatus({ type: 'idle' });
+    }
+  };
+
+  // Handle new member addition with enhanced feedback
+  const handleMemberAdded = async (newMember: any) => {
+    setMemberOperationStatus({ type: 'adding' });
+    
+    try {
+      // Refresh the members list
+      await loadProjectMembers();
+      
+      toast({
+        title: 'Collaborator Added',
+        description: `${newMember?.user?.email || 'New member'} has been added to the project`,
+        duration: 4000
+      });
+      
+      // Enable auto-refresh for a short period to catch any delayed updates
+      setAutoRefreshEnabled(true);
+      setTimeout(() => {
+        if (memberOperationStatus.type === 'idle') {
+          setAutoRefreshEnabled(true); // Keep enabled by default
+        }
+      }, 10000);
+      
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to refresh member list after addition',
+        variant: 'destructive'
+      });
+    } finally {
+      setMemberOperationStatus({ type: 'idle' });
+    }
+  };
+
+  // Handle share dialog invite click
+  const handleInviteClick = () => {
+    if (!canManageMembers()) {
+      toast({
+        title: 'Permission Denied',
+        description: 'You do not have permission to invite collaborators to this project',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setShowShareDialog(true);
+  };
+
+  // Enhanced member click with permission validation
+  const handleMemberClick = (member: EnhancedMember) => {
+    if (!canManageMembers()) {
+      toast({
+        title: 'Permission Denied',
+        description: 'You do not have permission to manage project members',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    if (member.user_id === user?.id) {
+      toast({
+        title: 'Cannot Modify Self',
+        description: 'You cannot modify your own permissions',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (member.role === 'owner' && currentUserRole !== 'owner') {
+      toast({
+        title: 'Cannot Modify Owner',
+        description: 'Only the project owner can modify owner permissions',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    setSelectedMember(member);
+    setShowMemberDialog(true);
+  };
+
+  // Handle connection status changes (for auto-refresh management)
+  const handleConnectionChange = () => {
+    if (navigator.onLine) {
+      toast({
+        title: 'Connection Restored',
+        description: 'Refreshing collaborator data...'
+      });
+      forceRefreshMembers();
+    } else {
+      setAutoRefreshEnabled(false);
+      toast({
+        title: 'Connection Lost',
+        description: 'Collaborator updates paused until connection is restored',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Listen for online/offline events
+  useEffect(() => {
+    window.addEventListener('online', handleConnectionChange);
+    window.addEventListener('offline', handleConnectionChange);
+    
+    return () => {
+      window.removeEventListener('online', handleConnectionChange);
+      window.removeEventListener('offline', handleConnectionChange);
+    };
+  }, []);
+
+  // File management functions (existing functionality)
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
   };
 
   const runCode = async () => {
     setIsRunning(true);
-    // Simulate code execution
     setTimeout(() => {
       setOutput(`> Running ${openFiles[activeFileIndex]?.name}...\nHello, CodeCollab!\n\n> Execution completed successfully.`);
       setIsRunning(false);
@@ -70,9 +401,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     return languageMap[extension || ''] || 'plaintext';
   };
 
-  // Open file by name and fileId, fetch content from DB if fileId is present
   const openFile = async (filename: string, fileId?: string) => {
-    // Check if file is already open
     const existingIndex = openFiles.findIndex(file => file.name === filename);
     if (existingIndex !== -1) {
       setActiveFileIndex(existingIndex);
@@ -80,31 +409,13 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     }
 
     let fileContent = '';
-    let loadedFile: any = null;
     if (fileId) {
       try {
         const { data, error } = await projectFilesApi.getFile(fileId);
         if (error) {
-          console.error('File load error details:', {
-            fileId,
-            filename,
-            error: {
-              message: error.message,
-              details: (error as any).details || undefined,
-              hint: (error as any).hint || undefined,
-              code: (error as any).code || undefined
-            }
-          });
+          console.error('File load error:', error);
           throw error;
         }
-        loadedFile = data;
-        console.log('File loaded successfully:', {
-          fileId,
-          filename,
-          hasContent: !!data?.content,
-          contentLength: data?.content?.length || 0,
-          data
-        });
         fileContent = data?.content || getDefaultContent(filename);
       } catch (error: any) {
         console.error('Failed to load file content:', error);
@@ -123,15 +434,13 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       name: filename,
       content: fileContent,
       language: getLanguageFromFile(filename),
-      id: fileId // Store file ID for saving
+      id: fileId
     };
 
     setOpenFiles([...openFiles, newFile]);
     setActiveFileIndex(openFiles.length);
   };
 
-
-  // Helper for default content
   const getDefaultContent = (fileName: string): string => {
     const extension = fileName.split('.').pop()?.toLowerCase();
     switch (extension) {
@@ -158,15 +467,12 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     }
   };
 
-
-
   const closeFile = (index: number) => {
-    if (openFiles.length === 1) return; // Don't close the last file
+    if (openFiles.length === 1) return;
     
     const newOpenFiles = openFiles.filter((_, i) => i !== index);
     setOpenFiles(newOpenFiles);
     
-    // Adjust active file index
     if (index === activeFileIndex) {
       setActiveFileIndex(Math.max(0, index - 1));
     } else if (index < activeFileIndex) {
@@ -174,10 +480,8 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     }
   };
 
-  // Debounced save to database
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Manual save function
   const saveCurrentFile = async () => {
     const currentFile = openFiles[activeFileIndex];
     if (!currentFile?.id) {
@@ -196,23 +500,9 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
         size_bytes: currentFile.content.length
       });
       if (error) {
-        console.error('Manual save error:', {
-          fileId: currentFile.id,
-          filename: currentFile.name,
-          error: {
-            message: error.message,
-            details: (error as any).details || undefined,
-            hint: (error as any).hint || undefined,
-            code: (error as any).code || undefined
-          }
-        });
+        console.error('Manual save error:', error);
         throw error;
       }
-      console.log('Manual save successful:', {
-        fileId: currentFile.id,
-        filename: currentFile.name,
-        contentLength: currentFile.content.length
-      });
       toast({
         title: 'File Saved',
         description: `${currentFile.name} saved successfully`
@@ -227,9 +517,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     }
   };
 
-
-  // Keyboard shortcut for save
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 's') {
         event.preventDefault();
@@ -248,14 +536,11 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     };
     setOpenFiles(updatedFiles);
 
-    // Auto-save to database with improved logic
     const currentFile = updatedFiles[activeFileIndex];
     if (currentFile?.id) {
-      // Clear any existing timeout
       if (saveTimeout.current) {
         clearTimeout(saveTimeout.current);
       }
-      // Set new timeout for auto-save
       saveTimeout.current = setTimeout(async () => {
         try {
           const now = new Date().toISOString();
@@ -265,22 +550,9 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             size_bytes: content.length
           });
           if (error) {
-            console.error('Auto-save error:', {
-              fileId: currentFile.id,
-              filename: currentFile.name,
-              error: {
-                message: error.message,
-                details: (error as any).details,
-                hint: (error as any).hint,
-                code: (error as any).code
-              }
-            });
+            console.error('Auto-save error:', error);
             throw error;
           }
-          console.log(`Auto-saved ${currentFile.name} successfully`, {
-            fileId: currentFile.id,
-            contentLength: content.length
-          });
         } catch (error: any) {
           console.error('Auto-save failed:', error);
           toast({
@@ -289,17 +561,21 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             variant: 'destructive'
           });
         }
-      }, 1000); // 1 second debounce
+      }, 1000);
     }
   };
 
-
-  // Mock collaborators
-  const collaborators = [
-    { id: 1, name: 'Alice Chen', color: '#3B82F6', cursor: { line: 4, column: 12 }, isTyping: true, accessLevel: 'edit' as const },
-    { id: 2, name: 'Bob Smith', color: '#10B981', cursor: { line: 7, column: 0 }, isTyping: false, accessLevel: 'edit' as const },
-    { id: 3, name: 'Carol Johnson', color: '#F59E0B', cursor: null, isTyping: false, accessLevel: 'view' as const }
-  ];
+  // Transform project members to chat collaborators format
+  const chatCollaborators = projectMembers
+    .filter(member => member.user_id !== user?.id) // Exclude current user
+    .map(member => ({
+      id: parseInt(member.id.slice(-8), 16), // Convert UUID to number for mock compatibility
+      name: member.user?.display_name || member.user?.username || member.user?.email?.split('@')[0] || 'Unknown',
+      color: '#3B82F6',
+      cursor: null as { line: number; column: number } | null,
+      isTyping: false,
+      accessLevel: member.role as 'owner' | 'edit' | 'view'
+    }));
 
   const activeFile = openFiles[activeFileIndex];
 
@@ -322,44 +598,51 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             <div className="flex items-center space-x-3">
               <h1 className="text-lg font-semibold text-white">{project?.name}</h1>
               <Badge className="bg-orange-100 text-orange-800">{project?.language}</Badge>
+              {currentUserRole && (
+                <Badge variant="outline" className="text-gray-300 border-gray-500">
+                  {currentUserRole === 'owner' ? 'Owner' : 
+                   currentUserRole === 'editor' ? 'Editor' : 'Viewer'}
+                </Badge>
+              )}
             </div>
           </div>
 
           <div className="flex items-center space-x-3">
-            <Button
-              onClick={runCode}
-              disabled={isRunning}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              {isRunning ? 'Running...' : 'Run Code'}
-            </Button>
+            {/* Only show run button if user has edit permissions */}
+            {(currentUserRole === 'owner' || currentUserRole === 'editor') && (
+              <Button
+                onClick={runCode}
+                disabled={isRunning}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                {isRunning ? 'Running...' : 'Run Code'}
+              </Button>
+            )}
             
-            <Button
-              variant="outline"
-              className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
-            >
-              <Share className="h-4 w-4 mr-2" />
-              Share
-            </Button>
-            {/* Manual Save Button */}
-            <Button
-              onClick={saveCurrentFile}
-              variant="outline"
-              className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Save
-            </Button>
-            
-            <Button
-              variant="outline"
-              onClick={() => setShowCollaborators(!showCollaborators)}
-              className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Collaborators ({collaborators.length})
-            </Button>
+            {/* Only show share button if user can manage members */}
+            {canManageMembers() && (
+              <Button
+                variant="outline"
+                className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                onClick={() => setShowShareDialog(true)}
+              >
+                <Share className="h-4 w-4 mr-2" />
+                Share
+              </Button>
+            )}
+
+            {/* Save button - show for editors and owners */}
+            {(currentUserRole === 'owner' || currentUserRole === 'editor') && (
+              <Button
+                onClick={saveCurrentFile}
+                variant="outline"
+                className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Save
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -415,31 +698,6 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             </div>
           </div>
 
-          {/* Collaboration Indicators */}
-          <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-400">Active collaborators:</span>
-              <div className="flex space-x-2">
-                {collaborators.filter(c => c.isTyping || c.cursor).map((collaborator) => (
-                  <div key={collaborator.id} className="flex items-center space-x-1">
-                    <div 
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: collaborator.color }}
-                    />
-                    <span className="text-xs text-gray-300">{collaborator.name}</span>
-                    {collaborator.isTyping && (
-                      <div className="flex space-x-1">
-                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" />
-                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse delay-100" />
-                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse delay-200" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
           {/* Monaco Editor */}
           <div className="flex-1">
             {activeFile && (
@@ -459,30 +717,64 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
                   lineNumbers: 'on',
                   renderWhitespace: 'selection',
                   selectionHighlight: true,
-                  bracketPairColorization: { enabled: true }
+                  bracketPairColorization: { enabled: true },
+                  readOnly: currentUserRole === 'viewer' // Make readonly for viewers
                 }}
               />
             )}
           </div>
 
-          {/* Output Panel - Now below the editor */}
+          {/* Output Panel */}
           <div className="h-64 bg-gray-800 border-t border-gray-700">
             <OutputPanel output={output} isRunning={isRunning} />
           </div>
         </div>
 
-        {/* Chat Panel - Replaces the old output panel position */}
+        {/* Chat Panel */}
         <div className="w-80 bg-gray-800 border-l border-gray-700">
-          <ChatPanel collaborators={collaborators} />
+          <ChatPanel 
+            collaborators={chatCollaborators}
+            projectMembers={projectMembers}
+            currentUser={user}
+            isLoadingMembers={isLoadingMembers}
+            memberOperationStatus={memberOperationStatus}
+            lastRefresh={lastRefresh}
+            autoRefreshEnabled={autoRefreshEnabled}
+            onMemberClick={handleMemberClick}
+            onInviteClick={canManageMembers() ? handleInviteClick : undefined}
+            canManageMembers={canManageMembers()}
+          />
         </div>
-
-        {/* Collaborator Panel - Still toggleable */}
-        {showCollaborators && (
-          <div className="w-64 bg-gray-800 border-l border-gray-700">
-            <CollaboratorPanel collaborators={collaborators} />
-          </div>
-        )}
       </div>
+      
+      {/* Share Dialog - Enhanced with real project data */}
+      {showShareDialog && (
+        <ShareDialog
+          isOpen={showShareDialog}
+          onClose={() => setShowShareDialog(false)}
+          project={{
+            id: project.id,
+            name: project.name,
+            owner_id: project.owner_id || user?.id || ''
+          }}
+          onMemberAdded={handleMemberAdded}
+        />
+      )}
+
+      {/* Member Management Dialog */}
+      {showMemberDialog && selectedMember && (
+        <MemberManagementDialog
+          isOpen={showMemberDialog}
+          onClose={() => {
+            setShowMemberDialog(false);
+            setSelectedMember(null);
+          }}
+          member={selectedMember}
+          projectId={project.id}
+          onMemberUpdated={handleMemberUpdated}
+          onMemberRemoved={handleMemberRemoved}
+        />
+      )}
     </div>
   );
 };

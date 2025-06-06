@@ -35,7 +35,7 @@ describe('ProjectMembersApi', () => {
 
       const result = await api.listProjectMembers(
         'test-project-id',
-        { page: 1, perPage: 10 }
+        { page: 1, per_page: 10 }
       );
 
       expect(result.data?.items).toEqual(mockMembers);

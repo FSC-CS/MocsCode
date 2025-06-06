@@ -3,7 +3,9 @@ import Editor from '@monaco-editor/react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Play, Share, FileText, Settings, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useApi } from '@/contexts/ApiContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -46,8 +48,12 @@ interface EnhancedMember {
 
 const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const { toast } = useToast();
-  const { projectFilesApi, projectMembersApi } = useApi();
+  const { projectFilesApi, projectMembersApi, projectsApi } = useApi();
   const { user, dbUser } = useAuth();
+  
+  // Project renaming state
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [newProjectName, setNewProjectName] = useState(project?.name || '');
   
   // File management state
   const [openFiles, setOpenFiles] = useState<(OpenFile & { id?: string })[]>([]);
@@ -188,10 +194,54 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     });
   };
 
-  // Check if current user can manage members (owner or editor with management permissions)
-  const canManageMembers = (): boolean => {
+  // Check if current user can manage project (owner or editor with management permissions)
+  const canManageProject = (): boolean => {
     return currentUserRole === 'owner' || 
            (currentUserRole === 'editor' && project?.owner_id === user?.id);
+  };
+  
+  // Alias for backward compatibility
+  const canManageMembers = canManageProject;
+  
+  // Handle project renaming
+  const handleRenameProject = async () => {
+    if (!project?.id || !newProjectName.trim()) return;
+    
+    try {
+      const { error } = await projectsApi.updateProject(project.id, {
+        name: newProjectName.trim()
+      });
+      
+      if (error) throw error;
+      
+      // Update local project name
+      project.name = newProjectName.trim();
+      setIsRenaming(false);
+      
+      toast({
+        title: 'Success',
+        description: 'Project name updated successfully',
+      });
+    } catch (error) {
+      console.error('Failed to rename project:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update project name',
+        variant: 'destructive',
+      });
+      // Revert to original name on error
+      setNewProjectName(project.name);
+    }
+  };
+  
+  // Handle key down for renaming input
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleRenameProject();
+    } else if (e.key === 'Escape') {
+      setIsRenaming(false);
+      setNewProjectName(project.name);
+    }
   };
 
   // Handle successful member updates with optimistic updates and rollback
@@ -596,7 +646,53 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             </Button>
             
             <div className="flex items-center space-x-3">
-              <h1 className="text-lg font-semibold text-white">{project?.name}</h1>
+              {isRenaming ? (
+                <div className="flex items-center space-x-2">
+                  <Input
+                    autoFocus
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    className="h-8 w-64 bg-gray-700 text-white border-gray-600 focus-visible:ring-1 focus-visible:ring-blue-500"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-green-500 hover:bg-green-900/20 hover:text-green-400"
+                    onClick={handleRenameProject}
+                  >
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-gray-400 hover:bg-gray-700 hover:text-gray-300"
+                    onClick={() => {
+                      setIsRenaming(false);
+                      setNewProjectName(project.name);
+                    }}
+                  >
+                    <XIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center group">
+                  <h1 className="text-lg font-semibold text-white">{project?.name}</h1>
+                  {canManageProject() && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white hover:bg-gray-700"
+                      onClick={() => {
+                        setNewProjectName(project.name);
+                        setIsRenaming(true);
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )}
               <Badge className="bg-orange-100 text-orange-800">{project?.language}</Badge>
               {currentUserRole && (
                 <Badge variant="outline" className="text-gray-300 border-gray-500">

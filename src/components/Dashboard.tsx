@@ -49,6 +49,8 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [projects, setProjects] = useState<DashboardProject[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [currentDeletingId, setCurrentDeletingId] = useState<string | null>(null);
   
   const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading, isSigningOut, isReady } = useAuth();
   const { projectsApi } = useApi();
@@ -183,9 +185,50 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
     try {
       setAuthError(null);
       await signOut();
+      navigate('/'); // Redirect to landing page after successful sign-out
     } catch (error) {
       console.error('Sign out error:', error);
       setAuthError('Failed to sign out. Please try again.');
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (!user) return;
+    
+    setIsDeleting(true);
+    setCurrentDeletingId(projectId);
+    
+    try {
+      const { error } = await projectsApi.deleteProject(projectId);
+      
+      if (error) {
+        console.error('Failed to delete project:', error);
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to delete project',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Update the projects list
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      
+      toast({
+        title: 'Success',
+        description: 'Project deleted successfully',
+      });
+      
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred while deleting the project',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+      setCurrentDeletingId(null);
     }
   };
 
@@ -519,9 +562,12 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
                   key={project.id} 
                   project={project} 
                   onOpen={(project: DashboardProject) => {
-  const projectName = project.name.toLowerCase().replace(/\s+/g, '-');
-  navigate(`/editor/${project.id}/${projectName}`);
-}}
+                    const projectName = project.name.toLowerCase().replace(/\s+/g, '-');
+                    navigate(`/editor/${project.id}/${projectName}`);
+                  }}
+                  onDelete={handleDeleteProject}
+                  isDeleting={isDeleting}
+                  currentDeletingId={currentDeletingId}
                 />
               ))}
             </div>

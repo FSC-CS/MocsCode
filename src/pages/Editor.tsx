@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import CodeEditor from '@/components/CodeEditor';
 import { Loader2 } from 'lucide-react';
+import { ProjectsApi } from '@/lib/api/projects';
 
 const Editor = () => {
   const { projectId, projectName } = useParams<{ projectId: string; projectName?: string }>(); // projectName is optional, for URL only
@@ -23,6 +24,7 @@ const Editor = () => {
       
       setIsLoading(true);
       try {
+        // First get the project data
         const { data, error } = await projectsApi.getProject(projectId);
         if (error) throw error;
         
@@ -30,6 +32,11 @@ const Editor = () => {
           setError('Project not found');
           return;
         }
+        
+        // Update the project's updated_at timestamp
+        await (projectsApi as ProjectsApi).updateProject(projectId, {
+          updated_at: new Date().toISOString()
+        });
         
         setProject(data);
       } catch (err) {

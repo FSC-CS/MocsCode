@@ -1,4 +1,4 @@
-// Updated collaboration.ts - Replace your existing file content with this
+// Updated collaboration.ts - Fix function call and error handling
 
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, PaginatedResponse, PaginationParams } from './types';
@@ -21,7 +21,7 @@ export class CollaborationApi extends ApiClient {
   }
 
   /**
-   * FIXED: Join project using database function for atomic operation
+   * FIXED: Join project using corrected function call
    */
   async joinProjectByToken(
     shareToken: string,
@@ -30,7 +30,7 @@ export class CollaborationApi extends ApiClient {
     try {
       console.log('Starting project join process with token:', shareToken.substring(0, 8) + '...');
       
-      // Use database function for atomic join operation
+      // Use the fixed function with explicit parameter name
       const { data: result, error: joinError } = await this.client
         .rpc('join_project_via_token', { share_token_param: shareToken });
 
@@ -42,26 +42,30 @@ export class CollaborationApi extends ApiClient {
         };
       }
 
-      if (result?.error) {
-        console.error('Database function returned error:', result.error);
+      // Parse the JSON result
+      let parsedResult;
+      try {
+        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      } catch (parseError) {
+        console.error('Error parsing join result:', parseError);
         return {
           data: null,
-          error: new Error(result.error)
+          error: new Error('Invalid response from join operation')
         };
       }
 
-      if (!result?.success) {
-        console.error('Unexpected result from join function:', result);
+      if (!parsedResult.success) {
+        console.error('Database function returned error:', parsedResult.error);
         return {
           data: null,
-          error: new Error('Unexpected response from join operation')
+          error: new Error(parsedResult.error || 'Failed to join project')
         };
       }
 
       console.log('Successfully joined project:', {
-        projectId: result.project_id,
-        memberId: result.member_id,
-        role: result.role
+        projectId: parsedResult.project_id,
+        memberId: parsedResult.member_id,
+        role: parsedResult.role
       });
 
       // Fetch complete project and member data
@@ -69,7 +73,7 @@ export class CollaborationApi extends ApiClient {
         this.client
           .from('projects')
           .select('*')
-          .eq('id', result.project_id)
+          .eq('id', parsedResult.project_id)
           .single(),
         this.client
           .from('project_members')
@@ -83,7 +87,7 @@ export class CollaborationApi extends ApiClient {
               avatar_url
             )
           `)
-          .eq('id', result.member_id)
+          .eq('id', parsedResult.member_id)
           .single()
       ]);
 
@@ -123,7 +127,7 @@ export class CollaborationApi extends ApiClient {
   }
 
   /**
-   * IMPROVED: Better token validation with detailed logging
+   * Validate share token with better error handling
    */
   async validateShareToken(token: string): Promise<ApiResponse<ShareableLink & { project?: any }>> {
     try {

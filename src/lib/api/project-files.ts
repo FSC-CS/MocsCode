@@ -1,3 +1,5 @@
+// Updated project-files.ts - Use helper functions to avoid RLS recursion
+
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, ProjectFile, PaginatedResponse, PaginationParams, SortParams } from './types';
 
@@ -10,13 +12,15 @@ export class ProjectFilesApi extends ApiClient {
     return this.get<ProjectFile>(id);
   }
 
+  /**
+   * FIXED: Use helper function to avoid RLS recursion
+   */
   async listProjectFiles(
     projectId: string,
     parentId?: string | null,
     pagination?: PaginationParams,
     sort?: SortParams
   ): Promise<PaginatedResponse<ProjectFile>> {
-    // Debug logging for parameter validation
     console.log('listProjectFiles called with:', {
       projectId,
       parentId,
@@ -25,109 +29,220 @@ export class ProjectFilesApi extends ApiClient {
     });
 
     const { page = 1, per_page = 50 } = pagination || {};
-    const start = (page - 1) * per_page;
-    let query = this.client
-      .from(this.table)
-      .select('*', { count: 'exact' })
-      .eq('project_id', projectId);
 
-    // Only filter by parent_id if it is explicitly provided (not undefined)
-    if (parentId !== undefined) {
-      if (parentId && parentId !== "null" && parentId !== "undefined") {
-        query = query.eq('parent_id', parentId);
+    try {
+      let data: any[];
+      let error: any;
+
+      if (parentId === undefined) {
+        // Get ALL files for the project (used by file explorer)
+        const result = await this.client
+          .rpc('get_all_project_files', { p_project_id: projectId });
+        data = result.data;
+        error = result.error;
       } else {
-        query = query.is('parent_id', null);
+        // Get files for specific parent (or root if parentId is null)
+        const result = await this.client
+          .rpc('get_project_files', { 
+            p_project_id: projectId,
+            p_parent_id: parentId 
+          });
+        data = result.data;
+        error = result.error;
       }
+
+      if (error) {
+        console.error('Error loading project files:', error);
+        return {
+          data: { items: [], total: 0, page, per_page },
+          error: new Error(error.message)
+        };
+      }
+
+      const files = (data || []).map((row: any) => ({
+        id: row.id,
+        project_id: row.project_id,
+        name: row.name,
+        path: row.path,
+        content: row.content,
+        file_type: row.file_type,
+        mime_type: row.mime_type,
+        size_bytes: row.size_bytes,
+        parent_id: row.parent_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        created_by: row.created_by
+      }));
+
+      // Apply sorting if specified
+      if (sort) {
+        files.sort((a, b) => {
+          const aValue = (a as any)[sort.field];
+          const bValue = (b as any)[sort.field];
+          const comparison = aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+          return sort.direction === 'asc' ? comparison : -comparison;
+        });
+      }
+
+      // Apply pagination
+      const startIndex = (page - 1) * per_page;
+      const paginatedFiles = files.slice(startIndex, startIndex + per_page);
+
+      console.log(`Successfully loaded ${files.length} files for project ${projectId}`);
+
+      return {
+        data: {
+          items: paginatedFiles as ProjectFile[],
+          total: files.length,
+          page,
+          per_page,
+        },
+        error: null,
+      };
+    } catch (error) {
+      console.error('Unexpected error in listProjectFiles:', error);
+      return {
+        data: { items: [], total: 0, page: 1, per_page: 50 },
+        error: error instanceof Error ? error : new Error('An unexpected error occurred')
+      };
     }
-
-    // Apply sorting
-    if (sort) {
-      query = query.order(sort.field, { ascending: sort.direction === 'asc' });
-    }
-
-    // Apply pagination
-    query = query.range(start, start + per_page - 1);
-    const { data, error, count } = await query;
-
-    return {
-      data: {
-        items: (data || []) as ProjectFile[],
-        total: count || 0,
-        page,
-        per_page,
-      },
-      error: error as Error | null,
-    };
   }
 
   /**
-   * Test utility to verify content storage and retrieval in the database.
-   * Creates a test file, checks content, and deletes it.
+   * Create file using helper function
    */
-  async testContentStorage(projectId: string): Promise<void> {
-    const testContent = "console.log('Hello, World!');";
+  async createFile(data: Omit<ProjectFile, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<ProjectFile>> {
     try {
-      // Create test file
-      const { data: createData, error: createError } = await this.client
-        .from('project_files')
-        .insert([
-          {
-            project_id: projectId,
-            name: 'test-file.js',
-            path: '/test-file.js',
-            content: testContent,
-            file_type: 'file',
-            size_bytes: testContent.length,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }
-        ])
-        .select()
-        .single();
-      
-      if (createError) {
-        console.error('Test file creation failed:', createError);
-        return;
+      console.log('Creating file:', { name: data.name, project_id: data.project_id });
+
+      const { data: fileId, error } = await this.client
+        .rpc('upsert_project_file', {
+          p_file_id: null, // New file
+          p_project_id: data.project_id,
+          p_name: data.name,
+          p_path: data.path,
+          p_content: data.content || '',
+          p_file_type: data.file_type,
+          p_mime_type: data.mime_type,
+          p_parent_id: data.parent_id
+        });
+
+      if (error) {
+        console.error('File creation error:', error);
+        return { data: null, error: new Error(error.message) };
       }
-      
-      // Retrieve test file
-      const { data: retrieveData, error: retrieveError } = await this.client
-        .from('project_files')
-        .select('*')
-        .eq('id', createData.id)
-        .single();
-      
-      if (retrieveError) {
-        console.error('Test file retrieval failed:', retrieveError);
-        return;
+
+      // Fetch the created file
+      const { data: createdFile, error: fetchError } = await this.getFile(fileId);
+      if (fetchError) {
+        console.error('Error fetching created file:', fetchError);
+        return { data: null, error: fetchError };
       }
-      
-      console.log('Content storage test results:', {
-        originalContent: testContent,
-        storedContent: retrieveData.content,
-        contentMatches: testContent === retrieveData.content
-      });
-      
-      // Clean up
-      await this.client
-        .from('project_files')
-        .delete()
-        .eq('id', createData.id);
+
+      console.log('File created successfully:', { fileId, name: data.name });
+      return { data: createdFile, error: null };
+
     } catch (error) {
-      console.error('Content storage test encountered an error:', error);
+      console.error('Unexpected error in createFile:', error);
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error('An unexpected error occurred')
+      };
     }
   }
 
-  async createFile(data: Omit<ProjectFile, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<ProjectFile>> {
-    return this.create<ProjectFile>(data);
-  }
-
+  /**
+   * Update file using helper function
+   */
   async updateFile(id: string, data: Partial<ProjectFile>): Promise<ApiResponse<ProjectFile>> {
-    return this.update<ProjectFile>(id, data);
+    try {
+      console.log('Updating file:', { id, updates: Object.keys(data) });
+
+      // First get the current file to preserve fields not being updated
+      const { data: currentFile, error: fetchError } = await this.getFile(id);
+      if (fetchError || !currentFile) {
+        return { data: null, error: fetchError || new Error('File not found') };
+      }
+
+      // Use helper function for update
+      const { data: fileId, error } = await this.client
+        .rpc('upsert_project_file', {
+          p_file_id: id,
+          p_project_id: currentFile.project_id,
+          p_name: data.name || currentFile.name,
+          p_path: data.path || currentFile.path,
+          p_content: data.content !== undefined ? data.content : currentFile.content,
+          p_file_type: data.file_type || currentFile.file_type,
+          p_mime_type: data.mime_type || currentFile.mime_type,
+          p_parent_id: data.parent_id !== undefined ? data.parent_id : currentFile.parent_id
+        });
+
+      if (error) {
+        console.error('File update error:', error);
+        return { data: null, error: new Error(error.message) };
+      }
+
+      // Fetch the updated file
+      const { data: updatedFile, error: fetchUpdatedError } = await this.getFile(id);
+      if (fetchUpdatedError) {
+        console.error('Error fetching updated file:', fetchUpdatedError);
+        return { data: null, error: fetchUpdatedError };
+      }
+
+      console.log('File updated successfully:', { id, name: updatedFile?.name });
+      return { data: updatedFile, error: null };
+
+    } catch (error) {
+      console.error('Unexpected error in updateFile:', error);
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error('An unexpected error occurred')
+      };
+    }
   }
 
+  /**
+   * Delete file - simple delete since we have basic policies
+   */
   async deleteFile(id: string): Promise<ApiResponse<null>> {
-    return this.delete(id);
+    try {
+      // Check if user can edit first
+      const { data: file, error: fetchError } = await this.getFile(id);
+      if (fetchError || !file) {
+        return { data: null, error: fetchError || new Error('File not found') };
+      }
+
+      const { data: canEdit, error: permError } = await this.client
+        .rpc('can_edit_project_files', { p_project_id: file.project_id });
+
+      if (permError || !canEdit) {
+        return { 
+          data: null, 
+          error: new Error('Insufficient permissions to delete this file') 
+        };
+      }
+
+      // Delete the file
+      const { error: deleteError } = await this.client
+        .from(this.table)
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) {
+        console.error('File deletion error:', deleteError);
+        return { data: null, error: new Error(deleteError.message) };
+      }
+
+      console.log('File deleted successfully:', { id });
+      return { data: null, error: null };
+
+    } catch (error) {
+      console.error('Unexpected error in deleteFile:', error);
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error('An unexpected error occurred')
+      };
+    }
   }
 
   async getFileByPath(projectId: string, path: string): Promise<ApiResponse<ProjectFile>> {
@@ -145,7 +260,7 @@ export class ProjectFilesApi extends ApiClient {
   }
 
   async moveFile(id: string, newParentId: string | null, newPath: string): Promise<ApiResponse<ProjectFile>> {
-    return this.update<ProjectFile>(id, {
+    return this.updateFile(id, {
       parent_id: newParentId,
       path: newPath,
       updated_at: new Date().toISOString(),
@@ -157,24 +272,107 @@ export class ProjectFilesApi extends ApiClient {
     query: string,
     pagination?: PaginationParams
   ): Promise<PaginatedResponse<ProjectFile>> {
-    const { page = 1, per_page = 10 } = pagination || {};
-    const start = (page - 1) * per_page;
+    try {
+      // Use our helper function to get all files, then filter
+      const { data, error } = await this.client
+        .rpc('get_all_project_files', { p_project_id: projectId });
 
-    const { data, error, count } = await this.client
-      .from(this.table)
-      .select('*', { count: 'exact' })
-      .eq('project_id', projectId)
-      .ilike('name', `%${query}%`)
-      .range(start, start + per_page - 1);
+      if (error) {
+        return {
+          data: { items: [], total: 0, page: 1, per_page: 10 },
+          error: new Error(error.message)
+        };
+      }
 
-    return {
-      data: {
-        items: (data || []) as ProjectFile[],
-        total: count || 0,
-        page,
-        per_page,
-      },
-      error: error as Error | null,
-    };
+      // Filter files by search query
+      const filteredFiles = (data || [])
+        .filter((file: any) => 
+          file.name.toLowerCase().includes(query.toLowerCase())
+        )
+        .map((row: any) => ({
+          id: row.id,
+          project_id: row.project_id,
+          name: row.name,
+          path: row.path,
+          content: row.content,
+          file_type: row.file_type,
+          mime_type: row.mime_type,
+          size_bytes: row.size_bytes,
+          parent_id: row.parent_id,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          created_by: row.created_by
+        }));
+
+      const { page = 1, per_page = 10 } = pagination || {};
+      const startIndex = (page - 1) * per_page;
+      const paginatedFiles = filteredFiles.slice(startIndex, startIndex + per_page);
+
+      return {
+        data: {
+          items: paginatedFiles as ProjectFile[],
+          total: filteredFiles.length,
+          page,
+          per_page,
+        },
+        error: null,
+      };
+
+    } catch (error) {
+      console.error('Unexpected error in searchFiles:', error);
+      return {
+        data: { items: [], total: 0, page: 1, per_page: 10 },
+        error: error instanceof Error ? error : new Error('An unexpected error occurred')
+      };
+    }
+  }
+
+  /**
+   * Test utility - use helper function
+   */
+  async testContentStorage(projectId: string): Promise<void> {
+    const testContent = "console.log('Hello, World!');";
+    try {
+      console.log('Testing content storage...');
+
+      // Use our helper function
+      const { data: fileId, error } = await this.client
+        .rpc('upsert_project_file', {
+          p_file_id: null,
+          p_project_id: projectId,
+          p_name: 'test-file.js',
+          p_path: '/test-file.js',
+          p_content: testContent,
+          p_file_type: 'file',
+          p_mime_type: 'text/javascript',
+          p_parent_id: null
+        });
+
+      if (error) {
+        console.error('Test file creation failed:', error);
+        return;
+      }
+
+      // Retrieve test file
+      const { data: retrievedFile, error: retrieveError } = await this.getFile(fileId);
+
+      if (retrieveError) {
+        console.error('Test file retrieval failed:', retrieveError);
+        return;
+      }
+
+      console.log('Content storage test results:', {
+        originalContent: testContent,
+        storedContent: retrievedFile?.content,
+        contentMatches: testContent === retrievedFile?.content
+      });
+
+      // Clean up
+      await this.deleteFile(fileId);
+      console.log('Test file cleaned up successfully');
+
+    } catch (error) {
+      console.error('Content storage test encountered an error:', error);
+    }
   }
 }

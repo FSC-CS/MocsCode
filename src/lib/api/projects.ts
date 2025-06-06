@@ -1,4 +1,4 @@
-// Updated projects.ts - Compatible with simplified RLS policies
+// Updated projects.ts - Use helper functions to avoid RLS recursion
 
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, Project, PaginatedResponse, PaginationParams, SortParams } from './types';
@@ -8,18 +8,138 @@ export class ProjectsApi extends ApiClient {
     super(config, 'projects');
   }
 
-  async getProject(id: string): Promise<ApiResponse<Project>> {
-    return this.get<Project>(id);
+  /**
+   * FIXED: Get project using helper function to avoid RLS issues
+   */
+  async getProject(id: string): Promise<ApiResponse<Project & { user_role?: string; can_edit?: boolean }>> {
+    try {
+      const { data, error } = await this.client
+        .rpc('get_project_safe', { p_project_id: id })
+        .single();
+
+      if (error) {
+        console.error('Error getting project:', error);
+        return { data: null, error: new Error(error.message) };
+      }
+
+      if (!data) {
+        return { data: null, error: new Error('Project not found or access denied') };
+      }
+
+      return { data: data as Project & { user_role?: string; can_edit?: boolean }, error: null };
+    } catch (error) {
+      console.error('Unexpected error in getProject:', error);
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error('An unexpected error occurred')
+      };
+    }
   }
 
-  async listProjects(
-    pagination?: PaginationParams,
-    sort?: SortParams,
-    filters?: { owner_id?: string; isPublic?: boolean }
-  ): Promise<PaginatedResponse<Project>> {
-    return this.list<Project>(pagination, sort, filters);
+  /**
+   * FIXED: List projects using helper function to avoid RLS recursion
+   */
+  async listUserProjects(
+    userId: string,
+    pagination: PaginationParams = { page: 1, per_page: 50 },
+    sort?: SortParams
+  ): Promise<PaginatedResponse<Project & { user_role?: string }>> {
+    try {
+      const { page = 1, per_page = 50 } = pagination;
+      
+      console.log('Loading projects for user:', userId);
+
+      // Use helper function that bypasses RLS
+      const { data: projects, error } = await this.client
+        .rpc('get_user_projects', { p_user_id: userId });
+
+      if (error) {
+        console.error('Error loading user projects:', error);
+        return {
+          data: { items: [], total: 0, page, per_page },
+          error: new Error(error.message)
+        };
+      }
+
+      const allProjects = projects || [];
+
+      // Apply sorting if specified
+      if (sort) {
+        allProjects.sort((a, b) => {
+          const aValue = (a as any)[sort.field];
+          const bValue = (b as any)[sort.field];
+          const comparison = aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+          return sort.direction === 'asc' ? comparison : -comparison;
+        });
+      }
+
+      // Apply pagination
+      const startIndex = (page - 1) * per_page;
+      const paginatedProjects = allProjects.slice(startIndex, startIndex + per_page);
+
+      console.log(`Successfully loaded projects for user ${userId}:`, {
+        total: allProjects.length,
+        paginated: paginatedProjects.length
+      });
+
+      return {
+        data: {
+          items: paginatedProjects as (Project & { user_role?: string })[],
+          total: allProjects.length,
+          page,
+          per_page,
+        },
+        error: null,
+      };
+
+    } catch (error) {
+      console.error('Unexpected error in listUserProjects:', error);
+      return {
+        data: { items: [], total: 0, page: 1, per_page: 50 },
+        error: error instanceof Error ? error : new Error('An unexpected error occurred')
+      };
+    }
   }
 
+  /**
+   * FIXED: Check project access using helper function
+   */
+  async checkProjectAccess(
+    projectId: string, 
+    userId?: string
+  ): Promise<ApiResponse<{ can_access: boolean; user_role: string | null; is_owner: boolean; is_member: boolean }>> {
+    try {
+      const { data, error } = await this.client
+        .rpc('check_project_access', { 
+          p_project_id: projectId,
+          p_user_id: userId 
+        })
+        .single();
+
+      if (error) {
+        return { data: null, error: new Error(error.message) };
+      }
+
+      const result = data || {
+        can_access: false,
+        user_role: null,
+        is_owner: false,
+        is_member: false
+      };
+
+      return { data: result, error: null };
+    } catch (error) {
+      console.error('Error checking project access:', error);
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error('Failed to check project access')
+      };
+    }
+  }
+
+  /**
+   * Create project - this should still work with RLS
+   */
   async createProject(data: Omit<Project, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<Project>> {
     try {
       const { data: project, error } = await this.client
@@ -64,165 +184,31 @@ export class ProjectsApi extends ApiClient {
     return this.delete(id);
   }
 
-  /**
-   * NEW APPROACH: Get user projects using simplified logic
-   * This works with the new RLS policies that avoid recursion
-   */
-  async listUserProjects(
-    userId: string,
-    pagination: PaginationParams = { page: 1, per_page: 50 },
-    sort?: SortParams
+  async listProjects(
+    pagination?: PaginationParams,
+    sort?: SortParams,
+    filters?: { owner_id?: string; isPublic?: boolean }
   ): Promise<PaginatedResponse<Project>> {
-    try {
-      const { page = 1, per_page = 50 } = pagination;
-      
-      console.log('Loading projects for user:', userId);
-
-      // STEP 1: Get projects owned by the user (this will work with simplified RLS)
-      const { data: ownedProjects, error: ownedError } = await this.client
-        .from('projects')
-        .select('*')
-        .eq('owner_id', userId)
-        .order('updated_at', { ascending: false });
-
-      if (ownedError) {
-        console.error('Error loading owned projects:', ownedError);
-        return {
-          data: { items: [], total: 0, page, per_page },
-          error: new Error(ownedError.message)
-        };
-      }
-
-      // STEP 2: Get projects where user is a member (using the helper function)
-      const { data: membershipData, error: memberError } = await this.client
-        .from('project_members')
-        .select('project_id')
-        .eq('user_id', userId);
-
-      let memberProjects: any[] = [];
-      if (!memberError && membershipData && membershipData.length > 0) {
-        const ownedProjectIds = (ownedProjects || []).map(p => p.id);
-        const memberProjectIds = membershipData
-          .map(m => m.project_id)
-          .filter(id => !ownedProjectIds.includes(id)); // Exclude owned projects
-
-        if (memberProjectIds.length > 0) {
-          // Get project details for member projects
-          // This uses a separate query to avoid RLS recursion
-          const { data: memberProjectsData, error: memberProjectsError } = await this.client
-            .from('projects')
-            .select('*')
-            .in('id', memberProjectIds)
-            .order('updated_at', { ascending: false });
-
-          if (!memberProjectsError) {
-            memberProjects = memberProjectsData || [];
-          } else {
-            console.warn('Error loading member projects:', memberProjectsError);
-            // Continue without member projects rather than failing
-          }
-        }
-      }
-
-      // STEP 3: Combine and sort all projects
-      const allProjects = [
-        ...(ownedProjects || []),
-        ...memberProjects
-      ];
-
-      // Apply sorting
-      if (sort) {
-        allProjects.sort((a, b) => {
-          const aValue = (a as any)[sort.field];
-          const bValue = (b as any)[sort.field];
-          const comparison = aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-          return sort.direction === 'asc' ? comparison : -comparison;
-        });
-      }
-
-      // Apply pagination
-      const startIndex = (page - 1) * per_page;
-      const paginatedProjects = allProjects.slice(startIndex, startIndex + per_page);
-
-      console.log(`Successfully loaded projects for user ${userId}:`, {
-        owned: ownedProjects?.length || 0,
-        member: memberProjects.length,
-        total: allProjects.length,
-        paginated: paginatedProjects.length
-      });
-
-      return {
-        data: {
-          items: paginatedProjects as Project[],
-          total: allProjects.length,
-          page,
-          per_page,
-        },
-        error: null,
-      };
-
-    } catch (error) {
-      console.error('Unexpected error in listUserProjects:', error);
-      return {
-        data: { items: [], total: 0, page: 1, per_page: 50 },
-        error: error instanceof Error ? error : new Error('An unexpected error occurred')
-      };
-    }
+    return this.list<Project>(pagination, sort, filters);
   }
 
   /**
-   * Check if user has access to a specific project
-   * Uses the database function to avoid RLS issues
-   */
-  async checkProjectAccess(
-    projectId: string, 
-    userId?: string
-  ): Promise<ApiResponse<{ is_member: boolean; is_owner: boolean; role: string | null }>> {
-    try {
-      const { data, error } = await this.client
-        .rpc('check_project_membership', { 
-          p_project_id: projectId,
-          p_user_id: userId 
-        });
-
-      if (error) {
-        return { data: null, error: new Error(error.message) };
-      }
-
-      const result = data && data.length > 0 ? data[0] : {
-        is_member: false,
-        is_owner: false,
-        role: null
-      };
-
-      return { data: result, error: null };
-    } catch (error) {
-      console.error('Error checking project access:', error);
-      return {
-        data: null,
-        error: error instanceof Error ? error : new Error('Failed to check project access')
-      };
-    }
-  }
-
-  /**
-   * Get projects with membership info
-   * This safely gets project data along with the user's role
+   * Get projects with membership info using helper function
    */
   async getProjectWithMembership(
     projectId: string,
     userId: string
-  ): Promise<ApiResponse<Project & { user_role?: string; is_member: boolean }>> {
+  ): Promise<ApiResponse<Project & { user_role?: string; can_edit?: boolean; is_member: boolean }>> {
     try {
-      // Get project data
+      // Use the safe project getter
       const { data: project, error: projectError } = await this.getProject(projectId);
       if (projectError || !project) {
         return { data: null, error: projectError || new Error('Project not found') };
       }
 
-      // Check membership
-      const { data: membership, error: membershipError } = await this.checkProjectAccess(projectId, userId);
-      if (membershipError) {
+      // Check access
+      const { data: access, error: accessError } = await this.checkProjectAccess(projectId, userId);
+      if (accessError) {
         // Return project without membership info if check fails
         return { 
           data: { ...project, is_member: false }, 
@@ -233,8 +219,9 @@ export class ProjectsApi extends ApiClient {
       return {
         data: {
           ...project,
-          user_role: membership?.role || undefined,
-          is_member: membership?.is_member || false
+          user_role: access?.user_role || undefined,
+          can_edit: access?.user_role ? ['owner', 'editor'].includes(access.user_role) : false,
+          is_member: access?.is_member || false
         },
         error: null
       };

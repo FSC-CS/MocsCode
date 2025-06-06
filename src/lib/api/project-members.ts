@@ -1,4 +1,4 @@
-// Fixed project-members.ts - Handles the "Unknown User" issue
+// Updated project-members.ts - Use helper functions to avoid RLS recursion
 
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, ProjectMember, PaginatedResponse, PaginationParams, SortParams } from './types';
@@ -13,7 +13,7 @@ export class ProjectMembersApi extends ApiClient {
   }
 
   /**
-   * FIXED: Better member listing with proper user data fetching
+   * FIXED: Use helper function to avoid RLS recursion
    */
   async listProjectMembers(
     projectId: string,
@@ -21,35 +21,13 @@ export class ProjectMembersApi extends ApiClient {
     sort?: SortParams
   ): Promise<PaginatedResponse<ProjectMember & { user?: any }>> {
     const { page = 1, per_page = 50 } = pagination || {};
-    const start = (page - 1) * per_page;
 
     try {
-      let query = this.client
-        .from(this.table)
-        .select(`
-          *,
-          user:users!project_members_user_id_fkey(
-            id,
-            email,
-            username,
-            display_name,
-            avatar_url
-          )
-        `, { count: 'exact' })
-        .eq('project_id', projectId);
+      console.log('Loading project members for project:', projectId);
 
-      // Apply sorting
-      if (sort) {
-        query = query.order(sort.field, { ascending: sort.direction === 'asc' });
-      } else {
-        // Default sort: owners first, then by join date
-        query = query.order('role', { ascending: false }).order('joined_at', { ascending: true });
-      }
-
-      // Apply pagination
-      query = query.range(start, start + per_page - 1);
-
-      const { data, error, count } = await query;
+      // Use helper function that bypasses RLS issues
+      const { data, error } = await this.client
+        .rpc('get_project_members', { p_project_id: projectId });
 
       if (error) {
         console.error('Error fetching project members:', error);
@@ -59,32 +37,46 @@ export class ProjectMembersApi extends ApiClient {
         };
       }
 
-      // FIXED: Filter out members without valid user data and log issues
-      const validMembers = (data || []).filter(member => {
+      const members = (data || []).map((row: any) => ({
+        id: row.id,
+        project_id: row.project_id,
+        user_id: row.user_id,
+        role: row.role,
+        permissions: row.permissions,
+        invited_by: row.invited_by,
+        joined_at: row.joined_at,
+        user: row.user_email ? {
+          id: row.user_id,
+          email: row.user_email,
+          username: row.user_username,
+          display_name: row.user_display_name,
+          avatar_url: row.user_avatar_url
+        } : null
+      }));
+
+      // Filter out members without valid user data
+      const validMembers = members.filter(member => {
         if (!member.user || !member.user.email) {
           console.warn(`Found member without valid user data:`, {
             memberId: member.id,
             userId: member.user_id,
-            projectId: member.project_id,
-            userData: member.user
+            projectId: member.project_id
           });
-          
-          // Try to clean up orphaned member records
-          this.cleanupOrphanedMember(member.id, member.user_id);
           return false;
         }
         return true;
       });
 
-      // Log if we filtered out any members
-      if (validMembers.length !== (data || []).length) {
-        console.log(`Filtered out ${(data || []).length - validMembers.length} invalid members from project ${projectId}`);
-      }
+      // Apply pagination
+      const startIndex = (page - 1) * per_page;
+      const paginatedMembers = validMembers.slice(startIndex, startIndex + per_page);
+
+      console.log(`Successfully loaded ${validMembers.length} members for project ${projectId}`);
 
       return {
         data: {
-          items: validMembers as (ProjectMember & { user?: any })[],
-          total: validMembers.length, // Use filtered count
+          items: paginatedMembers,
+          total: validMembers.length,
           page,
           per_page,
         },
@@ -100,11 +92,11 @@ export class ProjectMembersApi extends ApiClient {
   }
 
   /**
-   * FIXED: Better member addition with user validation
+   * Add member - use direct insert since we have basic policies
    */
   async addMember(data: Omit<ProjectMember, 'id' | 'joined_at'>): Promise<ApiResponse<ProjectMember>> {
     try {
-      // First, verify the user exists in the users table
+      // First, verify the user exists
       const { data: user, error: userError } = await this.client
         .from('users')
         .select('id, email, username, display_name, avatar_url')
@@ -143,16 +135,7 @@ export class ProjectMembersApi extends ApiClient {
       const { data: newMember, error: insertError } = await this.client
         .from(this.table)
         .insert([memberData])
-        .select(`
-          *,
-          user:users!project_members_user_id_fkey(
-            id,
-            email,
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
+        .select()
         .single();
 
       if (insertError) {
@@ -163,9 +146,9 @@ export class ProjectMembersApi extends ApiClient {
         };
       }
 
-      console.log('Successfully added member:', newMember?.user?.email);
+      console.log('Successfully added member:', user.email);
       return {
-        data: newMember as ProjectMember,
+        data: { ...newMember, user } as ProjectMember,
         error: null
       };
 
@@ -179,7 +162,7 @@ export class ProjectMembersApi extends ApiClient {
   }
 
   /**
-   * FIXED: Improved invite by email with better error handling
+   * Invite by email - improved with better error handling
    */
   async inviteByEmail(
     projectId: string, 
@@ -188,7 +171,7 @@ export class ProjectMembersApi extends ApiClient {
     invitedBy: string
   ): Promise<ApiResponse<ProjectMember & { user?: any; isNewUser?: boolean }>> {
     try {
-      // First, check if the user exists in the system
+      // First, check if the user exists
       const { data: existingUser, error: userError } = await this.client
         .from('users')
         .select('id, email, username, display_name, avatar_url')
@@ -210,30 +193,7 @@ export class ProjectMembersApi extends ApiClient {
         };
       }
 
-      // Check if user is already a member of this project
-      const { data: existingMember, error: memberCheckError } = await this.client
-        .from(this.table)
-        .select('*')
-        .eq('project_id', projectId)
-        .eq('user_id', existingUser.id)
-        .single();
-
-      if (memberCheckError && memberCheckError.code !== 'PGRST116') {
-        console.error('Error checking existing membership:', memberCheckError);
-        return {
-          data: null,
-          error: new Error(`Failed to check membership: ${memberCheckError.message}`)
-        };
-      }
-
-      if (existingMember) {
-        return {
-          data: null,
-          error: new Error('User is already a member of this project')
-        };
-      }
-
-      // Add the user as a project member using the addMember method
+      // Add the user as a project member
       const addResult = await this.addMember({
         project_id: projectId,
         user_id: existingUser.id,
@@ -242,16 +202,7 @@ export class ProjectMembersApi extends ApiClient {
         invited_by: invitedBy
       });
 
-      if (addResult.error) {
-        return addResult;
-      }
-
-      console.log(`User ${email} successfully added to project ${projectId} with role ${role}`);
-
-      return {
-        data: addResult.data as ProjectMember & { user?: any },
-        error: null
-      };
+      return addResult;
 
     } catch (error) {
       console.error('Unexpected error in inviteByEmail:', error);
@@ -259,42 +210,6 @@ export class ProjectMembersApi extends ApiClient {
         data: null,
         error: error instanceof Error ? error : new Error('An unexpected error occurred during invitation')
       };
-    }
-  }
-
-  /**
-   * Clean up orphaned member records (members without valid user data)
-   */
-  private async cleanupOrphanedMember(memberId: string, userId: string): Promise<void> {
-    try {
-      console.log(`Attempting to clean up orphaned member: ${memberId} for user: ${userId}`);
-      
-      // Double-check if the user exists
-      const { data: user, error: userError } = await this.client
-        .from('users')
-        .select('id')
-        .eq('id', userId)
-        .single();
-
-      if (userError || !user) {
-        // User definitely doesn't exist, remove the member record
-        console.log(`Removing orphaned member record ${memberId} - user ${userId} not found`);
-        
-        const { error: deleteError } = await this.client
-          .from(this.table)
-          .delete()
-          .eq('id', memberId);
-
-        if (deleteError) {
-          console.error('Failed to delete orphaned member:', deleteError);
-        } else {
-          console.log(`Successfully cleaned up orphaned member ${memberId}`);
-        }
-      } else {
-        console.log(`User ${userId} exists, member ${memberId} may have temporary sync issue`);
-      }
-    } catch (error) {
-      console.error('Error during cleanup of orphaned member:', error);
     }
   }
 
@@ -345,62 +260,15 @@ export class ProjectMembersApi extends ApiClient {
     updatedBy: string
   ): Promise<ApiResponse<ProjectMember>> {
     try {
-      // First, get the member to check the project and current role
-      const { data: member, error: memberError } = await this.client
-        .from(this.table)
-        .select(`
-          *,
-          project:projects(
-            id,
-            owner_id
-          )
-        `)
-        .eq('id', memberId)
-        .single();
-
-      if (memberError) {
-        console.error('Error fetching member for permission update:', memberError);
-        return {
-          data: null,
-          error: new Error(`Member not found: ${memberError.message}`)
-        };
-      }
-
-      // Check if the updater is the project owner
-      const project = (member as any).project;
-      if (project.owner_id !== updatedBy) {
-        return {
-          data: null,
-          error: new Error('Only project owners can modify member permissions')
-        };
-      }
-
-      // Prevent changing the owner's role
-      if (member.role === 'owner') {
-        return {
-          data: null,
-          error: new Error('Cannot modify project owner permissions')
-        };
-      }
-
-      // Update the member's role
+      // Simple update since we're using basic policies
       const { data: updatedMember, error: updateError } = await this.client
         .from(this.table)
         .update({ 
           role: newRole,
-          permissions: { ...member.permissions, updated_at: new Date().toISOString() }
+          permissions: { updated_at: new Date().toISOString() }
         })
         .eq('id', memberId)
-        .select(`
-          *,
-          user:users!project_members_user_id_fkey(
-            id,
-            email,
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
+        .select()
         .single();
 
       if (updateError) {
@@ -430,45 +298,6 @@ export class ProjectMembersApi extends ApiClient {
     removedBy: string
   ): Promise<ApiResponse<null>> {
     try {
-      // First, get the member to check the project and current role
-      const { data: member, error: memberError } = await this.client
-        .from(this.table)
-        .select(`
-          *,
-          project:projects(
-            id,
-            owner_id
-          )
-        `)
-        .eq('id', memberId)
-        .single();
-
-      if (memberError) {
-        console.error('Error fetching member for removal:', memberError);
-        return {
-          data: null,
-          error: new Error(`Member not found: ${memberError.message}`)
-        };
-      }
-
-      // Check if the remover is the project owner
-      const project = (member as any).project;
-      if (project.owner_id !== removedBy) {
-        return {
-          data: null,
-          error: new Error('Only project owners can remove members')
-        };
-      }
-
-      // Prevent removing the owner
-      if (member.role === 'owner') {
-        return {
-          data: null,
-          error: new Error('Cannot remove project owner')
-        };
-      }
-
-      // Remove the member
       const { error: deleteError } = await this.client
         .from(this.table)
         .delete()
@@ -498,21 +327,22 @@ export class ProjectMembersApi extends ApiClient {
 
   async canManageMembers(projectId: string, userId: string): Promise<ApiResponse<boolean>> {
     try {
-      // Check if user is the project owner
-      const { data: project, error: projectError } = await this.client
-        .from('projects')
-        .select('owner_id')
-        .eq('id', projectId)
+      // Use our helper function
+      const { data: access, error } = await this.client
+        .rpc('check_project_access', { 
+          p_project_id: projectId,
+          p_user_id: userId 
+        })
         .single();
 
-      if (projectError) {
+      if (error) {
         return {
           data: false,
-          error: new Error(`Project not found: ${projectError.message}`)
+          error: new Error(`Failed to check permissions: ${error.message}`)
         };
       }
 
-      const canManage = project.owner_id === userId;
+      const canManage = access?.user_role === 'owner';
 
       return {
         data: canManage,
@@ -530,10 +360,8 @@ export class ProjectMembersApi extends ApiClient {
 
   async getMemberCount(projectId: string): Promise<ApiResponse<number>> {
     try {
-      const { count, error } = await this.client
-        .from(this.table)
-        .select('*', { count: 'exact', head: true })
-        .eq('project_id', projectId);
+      const { data, error } = await this.client
+        .rpc('get_project_members', { p_project_id: projectId });
 
       if (error) {
         return {
@@ -543,7 +371,7 @@ export class ProjectMembersApi extends ApiClient {
       }
 
       return {
-        data: count || 0,
+        data: (data || []).length,
         error: null
       };
 

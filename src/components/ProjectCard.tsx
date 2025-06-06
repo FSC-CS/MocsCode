@@ -21,8 +21,11 @@ interface ProjectCardProps {
   };
   onOpen: (project: any) => void;
   onDelete?: (projectId: string) => Promise<void>;
+  onLeave?: (projectId: string) => Promise<void>;
   isDeleting?: boolean;
   currentDeletingId?: string | null;
+  isLeaving?: boolean;
+  currentLeavingId?: string | null;
 }
 
 // Language badge color logic
@@ -49,8 +52,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   project, 
   onOpen, 
   onDelete,
+  onLeave,
   isDeleting = false,
-  currentDeletingId = null
+  currentDeletingId = null,
+  isLeaving = false,
+  currentLeavingId = null
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   
@@ -58,6 +64,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
     e.stopPropagation();
     if (onDelete && window.confirm(`Are you sure you want to delete "${project.name}"? This action cannot be undone.`)) {
       await onDelete(project.id);
+    }
+  };
+
+  const handleLeaveClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onLeave && window.confirm(`Are you sure you want to leave "${project.name}"?`)) {
+      await onLeave(project.id);
     }
   };
   // Prefer explicit collaborator avatars if present, fallback to initials
@@ -79,22 +92,44 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       role="button"
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpen(project); }}
     >
-      {project.is_owner && onDelete && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className={`absolute top-2 right-2 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity ${isDeleting && currentDeletingId === project.id ? 'opacity-100' : ''}`}
-          onClick={handleDeleteClick}
-          disabled={isDeleting && currentDeletingId === project.id}
-          aria-label={`Delete project ${project.name}`}
-        >
-          {isDeleting && currentDeletingId === project.id ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4 text-red-500 hover:text-red-600" />
-          )}
-        </Button>
-      )}
+      <div className="absolute top-2 right-2 flex space-x-1">
+        {onLeave && !project.is_owner && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`h-8 px-2 text-xs rounded-full opacity-0 group-hover:opacity-100 transition-opacity ${
+              isLeaving && currentLeavingId === project.id ? 'opacity-100' : ''
+            }`}
+            onClick={handleLeaveClick}
+            disabled={isLeaving && currentLeavingId === project.id}
+            aria-label={`Leave project ${project.name}`}
+          >
+            {isLeaving && currentLeavingId === project.id ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              'Leave'
+            )}
+          </Button>
+        )}
+        {project.is_owner && onDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity ${
+              isDeleting && currentDeletingId === project.id ? 'opacity-100' : ''
+            }`}
+            onClick={handleDeleteClick}
+            disabled={isDeleting && currentDeletingId === project.id}
+            aria-label={`Delete project ${project.name}`}
+          >
+            {isDeleting && currentDeletingId === project.id ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4 text-red-500 hover:text-red-600" />
+            )}
+          </Button>
+        )}
+      </div>
       <div className="flex justify-between items-start mb-4">
         <h4 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1 leading-tight line-clamp-2">{project.name}</h4>
         {project.is_owner && (

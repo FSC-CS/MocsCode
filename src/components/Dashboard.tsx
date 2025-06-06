@@ -51,9 +51,11 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
   const [projects, setProjects] = useState<DashboardProject[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentDeletingId, setCurrentDeletingId] = useState<string | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [currentLeavingId, setCurrentLeavingId] = useState<string | null>(null);
   
   const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading, isSigningOut, isReady } = useAuth();
-  const { projectsApi } = useApi();
+  const { projectsApi, projectMembersApi } = useApi();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -229,6 +231,60 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
     } finally {
       setIsDeleting(false);
       setCurrentDeletingId(null);
+    }
+  };
+
+  const handleLeaveProject = async (projectId: string) => {
+    if (!user?.id) return;
+    
+    setIsLeaving(true);
+    setCurrentLeavingId(projectId);
+    
+    try {
+      // First, get the project member ID for the current user
+      const { data: memberData, error: memberError } = await projectMembersApi.getUserRole(projectId, user.id);
+      
+      if (memberError || !memberData) {
+        console.error('Failed to find project member:', memberError);
+        toast({
+          title: 'Error',
+          description: 'Failed to find your membership in this project',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Remove the member from the project
+      const { error: removeError } = await projectMembersApi.removeMemberFromProject(memberData.id, user.id);
+      
+      if (removeError) {
+        console.error('Failed to leave project:', removeError);
+        toast({
+          title: 'Error',
+          description: removeError.message || 'Failed to leave project',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Update the projects list by removing the left project
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      
+      toast({
+        title: 'Success',
+        description: 'You have left the project',
+      });
+      
+    } catch (error) {
+      console.error('Error leaving project:', error);
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred while leaving the project',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLeaving(false);
+      setCurrentLeavingId(null);
     }
   };
 
@@ -565,9 +621,12 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
                     const projectName = project.name.toLowerCase().replace(/\s+/g, '-');
                     navigate(`/editor/${project.id}/${projectName}`);
                   }}
-                  onDelete={handleDeleteProject}
+                  onDelete={project.is_owner ? handleDeleteProject : undefined}
+                  onLeave={!project.is_owner ? handleLeaveProject : undefined}
                   isDeleting={isDeleting}
                   currentDeletingId={currentDeletingId}
+                  isLeaving={isLeaving}
+                  currentLeavingId={currentLeavingId}
                 />
               ))}
             </div>

@@ -381,19 +381,7 @@ const ChatPanel = ({
           </div>
         )}
 
-        {/* Invite Button */}
-        {canManageMembers && onInviteClick && (
-          <div className="mt-3">
-            <Button 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={onInviteClick}
-              disabled={isLoadingMembers}
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Invite Collaborator
-            </Button>
-          </div>
-        )}
+        
       </div>
 
       {/* Chat Messages */}

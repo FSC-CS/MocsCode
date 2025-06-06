@@ -623,8 +623,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             {/* Only show share button if user can manage members */}
             {canManageMembers() && (
               <Button
-                variant="outline"
-                className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={() => setShowShareDialog(true)}
               >
                 <Share className="h-4 w-4 mr-2" />
@@ -632,12 +631,13 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
               </Button>
             )}
 
+
             {/* Save button - show for editors and owners */}
             {(currentUserRole === 'owner' || currentUserRole === 'editor') && (
               <Button
                 onClick={saveCurrentFile}
                 variant="outline"
-                className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                className="border-gray-600 text-gray-600 hover:bg-gray-700 hover:text-white"
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Save

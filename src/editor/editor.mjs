@@ -33,6 +33,60 @@ import {cursorTooltip} from "./cursor-tooltip.mjs"
 // --- JSDoc Autocomplete for JavaScript ---
 import {syntaxTree} from "@codemirror/language"
 
+// --- React-friendly factory for CodeMirror ---
+/**
+ * Create a CodeMirror EditorView for React
+ * @param {Object} opts
+ * @param {HTMLElement} opts.parent - DOM node to mount editor in
+ * @param {string} opts.doc - Initial document content
+ * @param {string} opts.language - Language string (e.g. 'python', 'java', ...)
+ * @param {function} opts.onChange - Callback for document changes
+ */
+export function createEditorView({ parent, doc, language, onChange }) {
+  let langExt;
+  switch (language) {
+    case 'python': langExt = python(); break;
+    case 'java': langExt = java(); break;
+    case 'cpp': langExt = cpp(); break;
+    case 'html': langExt = html(); break;
+    case 'javascript': default: langExt = javascript(); break;
+  }
+  const state = EditorState.create({
+    doc,
+    extensions: [
+      lineNumbers(),
+      foldGutter(),
+      highlightSpecialChars(),
+      history(),
+      drawSelection(),
+      dropCursor(),
+      EditorState.allowMultipleSelections.of(true),
+      rectangularSelection(),
+      crosshairCursor(),
+      indentOnInput(),
+      syntaxHighlighting(defaultHighlightStyle),
+      bracketMatching(),
+      closeBrackets(),
+      autocompletion(),
+      langExt,
+      EditorView.updateListener.of((v) => {
+        if (v.docChanged && onChange) {
+          onChange(v.state.doc.toString());
+        }
+      }),
+      EditorView.theme({
+        "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4" },
+        ".cm-content": { fontFamily: '"Fira Code", monospace', fontSize: "14px" }
+      })
+    ]
+  });
+  const view = new EditorView({
+    state,
+    parent,
+  });
+  return view;
+}
+
 // --- Python Keyword Autocomplete ---
 const pythonKeywords = [
   // Snippet completions for control flow
@@ -72,7 +126,7 @@ const cppKeywords = [
   {label: "switch", type: "keyword", apply: "switch () {\n    case :\n        break;\n    default:\n        break;\n}", info: "C++ switch statement", boost: 100},
   // Standard keywords
   ...[
-    "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool", "break", "case", "catch", "char", "char16_t", "char32_t", "class", "compl", "const", "constexpr", "const_cast", "continue", "decltype", "default", "delete", "do", "double", "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "return", "short", "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch", "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq"
+    "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool", "break", "case", "catch", "char", "char16_t", "char32_t", "class", "compl", "const", "constexpr", "const_cast", "continue", "decltype", "default", "delete", "do", "double", "dynamic_cast", "else", "enum", "export", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "return", "short", "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch", "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq"
   ].map(word => ({label: word, type: "keyword"}))
 ];
 
@@ -99,8 +153,8 @@ const javaKeywords = [
   {label: "switch", type: "keyword", apply: "switch () {\n    case :\n        break;\n    default:\n        break;\n}", info: "Java switch statement", boost: 100},
   // Standard keywords
   ...[
-    "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
-    "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
+    "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
+    "class", "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
     "finally", "float", "goto", "implements", "import", "instanceof", "int",
     "interface", "long", "native", "new", "package", "private", "protected", "public",
     "return", "short", "static", "strictfp", "super", "synchronized", "this",
@@ -323,23 +377,25 @@ const state = EditorState.create({
   ]
 });
 
-// Create the editor view
-const editorContainer = document.getElementById('editor-container');
-if (!editorContainer) {
-  console.error('[CodeMirrorTest] #editor-container not found!');
-  // Show a visible error on the page
-  const errorDiv = document.createElement('div');
-  errorDiv.style.color = 'red';
-  errorDiv.style.fontWeight = 'bold';
-  errorDiv.textContent = '[CodeMirrorTest] Error: #editor-container not found!';
-  document.body.prepend(errorDiv);
-} else {
-  let editor = new EditorView({
-    state,
-    parent: editorContainer
-  });
-  // Attach editor to window for debugging
-  window.editor = editor;
+// Only run DOM-based initialization if not in a module/React context
+if (typeof window !== "undefined" && document.getElementById('editor-container')) {
+  const editorContainer = document.getElementById('editor-container');
+  if (!editorContainer) {
+    console.error('[CodeMirrorTest] #editor-container not found!');
+    // Show a visible error on the page
+    const errorDiv = document.createElement('div');
+    errorDiv.style.color = 'red';
+    errorDiv.style.fontWeight = 'bold';
+    errorDiv.textContent = '[CodeMirrorTest] Error: #editor-container not found!';
+    document.body.prepend(errorDiv);
+  } else {
+    let editor = new EditorView({
+      state,
+      parent: editorContainer
+    });
+    // Attach editor to window for debugging
+    window.editor = editor;
+  }
 }
 
 // Functions to dynamically change editor configuration

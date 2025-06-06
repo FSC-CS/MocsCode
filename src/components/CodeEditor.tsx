@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import Editor from '@monaco-editor/react';
+import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -49,11 +49,51 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
   const runCode = async () => {
     setIsRunning(true);
-    // Simulate code execution
-    setTimeout(() => {
-      setOutput(`> Running ${openFiles[activeFileIndex]?.name}...\nHello, CodeCollab!\n\n> Execution completed successfully.`);
+    setOutput('');
+    const file = openFiles[activeFileIndex];
+    if (!file) {
+      setOutput('No file selected.');
       setIsRunning(false);
-    }, 2000);
+      return;
+    }
+    // Judge0 language IDs
+    const langMap: { [key: string]: number } = {
+      'cpp': 54,
+      'java': 62,
+      'python': 71,
+      'javascript': 63,
+      'c': 50,
+      'csharp': 51,
+      'plaintext': 43,
+      'markdown': 60,
+      'html': 42
+    };
+    const language_id = langMap[file.language] || 43;
+    const endpoint = 'https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true';
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RapidAPI-Key': '5e11628ca4msh0cac24bb162a655p1257c7jsnde986d9f6d3a',
+          'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
+        },
+        body: JSON.stringify({
+          source_code: file.content,
+          language_id,
+        })
+      });
+      const data = await response.json();
+      let output = '';
+      if (data.stdout) output += data.stdout;
+      if (data.stderr) output += '\n[stderr]\n' + data.stderr;
+      if (data.compile_output) output += '\n[compiler]\n' + data.compile_output;
+      if (data.message) output += '\n[message]\n' + data.message;
+      setOutput(output || '[No output]');
+    } catch (err: any) {
+      setOutput('Error running code: ' + err.message);
+    }
+    setIsRunning(false);
   };
 
   const getLanguageFromFile = (filename: string) => {
@@ -262,27 +302,13 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             </div>
           </div>
 
-          {/* Monaco Editor */}
+          {/* CodeMirror Editor */}
           <div className="flex-1">
             {activeFile && (
-              <Editor
-                height="100%"
-                language={activeFile.language}
-                theme="vs-dark"
+              <CodeMirrorEditor
                 value={activeFile.content}
-                onChange={(value) => updateFileContent(value || '')}
-                onMount={handleEditorDidMount}
-                options={{
-                  minimap: { enabled: true },
-                  fontSize: 14,
-                  wordWrap: 'on',
-                  automaticLayout: true,
-                  scrollBeyondLastLine: false,
-                  lineNumbers: 'on',
-                  renderWhitespace: 'selection',
-                  selectionHighlight: true,
-                  bracketPairColorization: { enabled: true }
-                }}
+                language={activeFile.language}
+                onChange={updateFileContent}
               />
             )}
           </div>

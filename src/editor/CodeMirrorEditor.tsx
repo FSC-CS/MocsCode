@@ -32,6 +32,8 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, on
           onChange,
         });
         viewRef.current = view;
+        // Focus the editor immediately on mount so CodeMirror receives keyboard events
+        view.focus();
       });
     }
     return () => {
@@ -53,13 +55,33 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, on
     }
   }, [value]);
 
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Only handle Tab key
+      if (e.key !== 'Tab') return;
+      
+      // If the active element is inside our editor, prevent default to avoid focus loss
+      const editorElement = editorRef.current?.closest('.cm-editor');
+      if (editorElement && (editorElement === document.activeElement || editorElement.contains(document.activeElement))) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown, true); // Use capture phase
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown, true);
+    };
+  }, []);
+
   return (
-    <div
-      ref={editorRef}
-      className="cm-editor h-full w-full bg-[#1e1e1e] rounded-b-lg border border-gray-700"
-      style={{ minHeight: 0, flex: 1 }}
-      data-testid="codemirror-editor"
-    />
+    <div className="w-full h-full bg-[#1e1e1e] rounded-b-lg border border-gray-700 overflow-hidden">
+      <div
+        ref={editorRef}
+        className="cm-editor h-full w-full"
+        tabIndex={0}
+        data-testid="codemirror-editor"
+      />
+    </div>
   );
 };
 

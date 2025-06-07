@@ -68,6 +68,10 @@ export function createEditorView({ parent, doc, language, onChange }) {
       bracketMatching(),
       closeBrackets(),
       autocompletion(),
+      cursorTooltip(),
+      toggleLineWrapping(),
+      toggleHighlightActiveLine(),
+      toggleYellowBackground(),
       langExt,
       EditorView.updateListener.of((v) => {
         if (v.docChanged && onChange) {
@@ -77,6 +81,64 @@ export function createEditorView({ parent, doc, language, onChange }) {
       EditorView.theme({
         "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4" },
         ".cm-content": { fontFamily: '"Fira Code", monospace', fontSize: "14px" }
+      }),
+      // All keymaps combined
+      keymap.of([
+        // Tab handling
+        { key: 'Tab', run: indentWithTab },
+        { key: 'Shift-Tab', run: (target) => {
+          if (target.state.selection.ranges.some(r => !r.empty)) return false;
+          const { state } = target;
+          const changes = state.changeByRange(range => {
+            const line = state.doc.lineAt(range.from);
+            const before = state.doc.slice(line.from, range.from).toString();
+            const indent = /^\s*/.exec(before)[0];
+            if (!indent) return { range };
+            const drop = Math.min(
+              indent.length >= 4 && indent.startsWith('    ') ? 4 : 2,
+              indent.length
+            );
+            return {
+              changes: { from: line.from, to: line.from + drop, insert: '' },
+              range: EditorSelection.cursor(Math.max(line.from, range.from - drop))
+            };
+          });
+          target.dispatch(changes);
+          return true;
+        }},
+        // Standard keymaps
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...closeBracketsKeymap,
+        ...completionKeymap,
+        ...foldKeymap,
+        ...searchKeymap,
+        ...lintKeymap,
+        // Custom keybindings can be added here
+      ]),
+      // Ensure editor is focusable and handles keyboard events
+      EditorView.domEventHandlers({
+        keydown: (e, view) => {
+          // Prevent tab from leaving the editor
+          if (e.key === 'Tab') {
+            e.preventDefault();
+            if (e.shiftKey) {
+              // Handle Shift+Tab for outdent
+              view.dispatch({
+                selection: { anchor: view.state.selection.main.anchor - 1 },
+                scrollIntoView: true
+              });
+            } else {
+              // Handle regular Tab for indent
+              view.dispatch({
+                changes: { from: view.state.selection.main.head, insert: '  ' },
+                selection: { anchor: view.state.selection.main.head + 2 },
+                scrollIntoView: true
+              });
+            }
+            return true;
+          }
+        }
       })
     ]
   });

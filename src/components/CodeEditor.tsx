@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import CollaboratorPanel from './CollaboratorPanel';
 import OutputPanel from './OutputPanel';
 import ChatPanel from './ChatPanel';
 import SourceControlPanel from './SourceControlPanel';
+import ResizablePanel from './ResizablePanel'; // Add this import
 
 interface CodeEditorProps {
   project: any;
@@ -41,6 +42,9 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const [output, setOutput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
+  const [editorHeight, setEditorHeight] = useState(400);
+  const [fileExplorerWidth, setFileExplorerWidth] = useState(256);
+  const [chatPanelWidth, setChatPanelWidth] = useState(320);
   const editorRef = useRef(null);
 
   const handleEditorDidMount = (editor: any) => {
@@ -232,18 +236,25 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* File Explorer with Source Control */}
-        <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+        {/* Resizable File Explorer with Source Control */}
+        <ResizablePanel
+          direction="horizontal"
+          initialSize={fileExplorerWidth}
+          minSize={180}
+          maxSize={600}
+          onResize={setFileExplorerWidth}
+          className="bg-gray-800 border-r border-gray-700 flex flex-col"
+        >
           <div className="flex-1">
             <FileExplorer currentFile={activeFile?.name || ''} onFileSelect={openFile} />
           </div>
           <div className="h-64">
             <SourceControlPanel />
           </div>
-        </div>
+        </ResizablePanel>
 
         {/* Editor and Output */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
           {/* File Tabs */}
           <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
             <div className="flex items-center space-x-1 overflow-x-auto">
@@ -302,27 +313,69 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             </div>
           </div>
 
-          {/* CodeMirror Editor */}
-          <div className="flex-1">
-            {activeFile && (
-              <CodeMirrorEditor
-                value={activeFile.content}
-                language={activeFile.language}
-                onChange={updateFileContent}
-              />
-            )}
-          </div>
+          {/* Main Editor and Output Container */}
+          <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+            {/* Editor Section */}
+            <div className="overflow-hidden" style={{ height: editorHeight, minHeight: 100 }}>
+              {activeFile && (
+                <CodeMirrorEditor
+                  value={activeFile.content}
+                  language={activeFile.language}
+                  onChange={updateFileContent}
+                />
+              )}
+            </div>
 
-          {/* Output Panel - Now below the editor */}
-          <div className="h-64 bg-gray-800 border-t border-gray-700">
-            <OutputPanel output={output} isRunning={isRunning} />
+            {/* Resize Handle */}
+            <div 
+              className="h-2 w-full bg-gray-700 hover:bg-blue-500 cursor-row-resize active:bg-blue-600 relative z-10"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const startY = e.clientY;
+                const startHeight = editorHeight;
+                const container = e.currentTarget.parentElement?.getBoundingClientRect();
+                if (!container) return;
+                
+                const onMouseMove = (moveEvent: MouseEvent) => {
+                  const delta = moveEvent.clientY - startY;
+                  const newHeight = startHeight + delta;
+                  // Ensure we don't go below min height or above max height
+                  const minHeight = 100;
+                  const maxHeight = window.innerHeight - 200; // Leave some space for other UI
+                  const constrainedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+                  setEditorHeight(constrainedHeight);
+                };
+
+                const onMouseUp = () => {
+                  document.removeEventListener('mousemove', onMouseMove);
+                  document.removeEventListener('mouseup', onMouseUp);
+                };
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp, { once: true });
+              }}
+            />
+
+            {/* Output Panel */}
+            <div className="bg-gray-800 border-t border-gray-700 flex-1 min-h-[100px] overflow-auto" style={{ minHeight: 100 }}>
+              <OutputPanel output={output} isRunning={isRunning} />
+            </div>
           </div>
         </div>
 
-        {/* Chat Panel - Replaces the old output panel position */}
-        <div className="w-80 bg-gray-800 border-l border-gray-700">
+        {/* Resizable Chat Panel */}
+        <ResizablePanel
+          direction="horizontal"
+          initialSize={chatPanelWidth}
+          minSize={200}
+          maxSize={600}
+          onResize={setChatPanelWidth}
+          className="bg-gray-800 border-l border-gray-700"
+        >
           <ChatPanel collaborators={collaborators} />
-        </div>
+        </ResizablePanel>
 
         {/* Collaborator Panel - Still toggleable */}
         {showCollaborators && (

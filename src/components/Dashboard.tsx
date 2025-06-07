@@ -288,6 +288,11 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
     }
   };
 
+  // NEW: Handler for profile picture click
+  const handleProfileClick = () => {
+    navigate('/profile');
+  };
+
   useEffect(() => {
   // Reset states when auth changes
   if (!isReady) {
@@ -465,12 +470,27 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
               )}
               <div className="relative">
                 {user ? (
-                  <UserAvatar 
-                    src={user.user_metadata?.avatar_url}
-                    name={user.user_metadata?.full_name || user.email}
-                    email={user.email}
-                    size="sm"
-                  />
+                  <div 
+                    onClick={handleProfileClick}
+                    className="cursor-pointer transition-transform hover:scale-105"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleProfileClick();
+                      }
+                    }}
+                    aria-label="Go to profile"
+                  >
+                    <UserAvatar 
+                      src={user.user_metadata?.avatar_url}
+                      name={user.user_metadata?.full_name || user.email}
+                      email={user.email}
+                      size="sm"
+                      className="ring-2 ring-transparent hover:ring-blue-300 transition-all duration-200"
+                    />
+                  </div>
                 ) : (
                   <User className="h-8 w-8 text-gray-400 bg-gray-100 rounded-full p-1 hover:bg-gray-200 dark:bg-slate-800/50 dark:hover:bg-slate-700/70 transition-colors duration-200" />
                 )}

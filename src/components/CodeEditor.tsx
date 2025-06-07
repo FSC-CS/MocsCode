@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -66,6 +66,22 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const [editorHeight, setEditorHeight] = useState(400);
   const [fileExplorerWidth, setFileExplorerWidth] = useState(256);
   const [chatPanelWidth, setChatPanelWidth] = useState(320);
+  
+  // Members and collaboration state
+  const [projectMembers, setProjectMembers] = useState<EnhancedMember[]>([]);
+  const [currentUserRole, setCurrentUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [memberRefreshTrigger, setMemberRefreshTrigger] = useState(0);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showMemberDialog, setShowMemberDialog] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<EnhancedMember | null>(null);
+  const [memberOperationStatus, setMemberOperationStatus] = useState<{
+    type: 'idle' | 'loading' | 'error';
+    error?: Error | null;
+  }>({ type: 'idle' });
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef(null);
 
   // Load project members when component mounts or when refresh is triggered
@@ -94,6 +110,20 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       }
     };
   }, [autoRefreshEnabled, project?.id, user?.id, memberOperationStatus.type]);
+
+  // Transform project members to chat collaborators format
+  const collaborators = React.useMemo(() => {
+    return projectMembers
+      .filter(member => member.user_id !== user?.id) // Exclude current user
+      .map(member => ({
+        id: member.id,
+        name: member.user?.display_name || member.user?.username || 'Unknown',
+        avatar: member.user?.avatar_url || undefined,
+        email: member.user?.email,
+        role: member.role,
+        isOnline: true // You might want to implement actual online status tracking
+      }));
+  }, [projectMembers, user?.id]);
 
   // Cleanup auto-refresh on unmount
   useEffect(() => {
@@ -888,7 +918,17 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
           onResize={setChatPanelWidth}
           className="bg-gray-800 border-l border-gray-700"
         >
-          <ChatPanel collaborators={collaborators} />
+          <ChatPanel 
+            collaborators={collaborators}
+            projectMembers={projectMembers}
+            currentUser={user}
+            isLoadingMembers={isLoadingMembers}
+            memberOperationStatus={memberOperationStatus}
+            lastRefresh={lastRefresh || new Date()}
+            autoRefreshEnabled={autoRefreshEnabled}
+            onMemberClick={handleMemberClick}
+            canManageMembers={canManageProject()}
+          />
         </ResizablePanel>
 
         {/* Collaborator Panel - Still toggleable */}

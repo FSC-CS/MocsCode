@@ -3,6 +3,11 @@
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, ProjectMember, PaginatedResponse, PaginationParams, SortParams } from './types';
 
+// Type for the RPC response
+type ProjectAccess = {
+  user_role: 'owner' | 'editor' | 'viewer';
+};
+
 export class ProjectMembersApi extends ApiClient {
   constructor(config: ApiConfig) {
     super(config, 'project_members');
@@ -329,7 +334,7 @@ export class ProjectMembersApi extends ApiClient {
     try {
       // Use our helper function
       const { data: access, error } = await this.client
-        .rpc('check_project_access', { 
+        .rpc<ProjectAccess>('check_project_access', { 
           p_project_id: projectId,
           p_user_id: userId 
         })

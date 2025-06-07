@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { User as SupabaseUser } from '@supabase/supabase-js'
+import type { User, Session, User as SupabaseUser } from '@supabase/supabase-js'
 import type { User as DbUser } from '@/lib/api/types'
 import { useApi } from './ApiContext'
 import { useToast } from '@/components/ui/use-toast';
@@ -18,7 +18,10 @@ interface AuthContextType {
   isSyncing: boolean
   isReady: boolean
   signInWithGoogle: () => Promise<void>
-  signInWithEmail: (email: string, password: string) => Promise<void>
+  signInWithEmail: (email: string, password: string) => Promise<{
+    user: User | null;
+    session: Session | null;
+  }>
   signUpWithEmail: (email: string, password: string, name: string) => Promise<void>
   resetPassword: (email: string) => Promise<void>
   signOut: () => Promise<void>

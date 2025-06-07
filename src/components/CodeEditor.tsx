@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import Editor from '@monaco-editor/react';
+
+import React, { useState, useRef, useCallback } from 'react';
+import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,7 @@ import FileExplorer from './FileExplorer';
 import OutputPanel from './OutputPanel';
 import ChatPanel from './ChatPanel';
 import SourceControlPanel from './SourceControlPanel';
+import ResizablePanel from './ResizablePanel'; // Add this import
 
 interface CodeEditorProps {
   project: any;
@@ -60,27 +62,10 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [output, setOutput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
-  
-  // Collaboration state
-  const [showShareDialog, setShowShareDialog] = useState(false);
-  const [showMemberDialog, setShowMemberDialog] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<EnhancedMember | null>(null);
-  const [projectMembers, setProjectMembers] = useState<EnhancedMember[]>([]);
-  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-  const [memberRefreshTrigger, setMemberRefreshTrigger] = useState(0);
-  const [currentUserRole, setCurrentUserRole] = useState<string>('viewer');
-  
-  // Real-time member updates
-  const [memberOperationStatus, setMemberOperationStatus] = useState<{
-    type: 'idle' | 'adding' | 'updating' | 'removing';
-    memberId?: string;
-  }>({ type: 'idle' });
-  
-  // Member list refresh management
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+  const [showCollaborators, setShowCollaborators] = useState(false);
+  const [editorHeight, setEditorHeight] = useState(400);
+  const [fileExplorerWidth, setFileExplorerWidth] = useState(256);
+  const [chatPanelWidth, setChatPanelWidth] = useState(320);
   const editorRef = useRef(null);
 
   // Load project members when component mounts or when refresh is triggered
@@ -430,10 +415,51 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
   const runCode = async () => {
     setIsRunning(true);
-    setTimeout(() => {
-      setOutput(`> Running ${openFiles[activeFileIndex]?.name}...\nHello, CodeCollab!\n\n> Execution completed successfully.`);
+    setOutput('');
+    const file = openFiles[activeFileIndex];
+    if (!file) {
+      setOutput('No file selected.');
       setIsRunning(false);
-    }, 2000);
+      return;
+    }
+    // Judge0 language IDs
+    const langMap: { [key: string]: number } = {
+      'cpp': 54,
+      'java': 62,
+      'python': 71,
+      'javascript': 63,
+      'c': 50,
+      'csharp': 51,
+      'plaintext': 43,
+      'markdown': 60,
+      'html': 42
+    };
+    const language_id = langMap[file.language] || 43;
+    const endpoint = 'https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true';
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RapidAPI-Key': '5e11628ca4msh0cac24bb162a655p1257c7jsnde986d9f6d3a',
+          'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
+        },
+        body: JSON.stringify({
+          source_code: file.content,
+          language_id,
+        })
+      });
+      const data = await response.json();
+      let output = '';
+      if (data.stdout) output += data.stdout;
+      if (data.stderr) output += '\n[stderr]\n' + data.stderr;
+      if (data.compile_output) output += '\n[compiler]\n' + data.compile_output;
+      if (data.message) output += '\n[message]\n' + data.message;
+      setOutput(output || '[No output]');
+    } catch (err: any) {
+      setOutput('Error running code: ' + err.message);
+    }
+    setIsRunning(false);
   };
 
   const getLanguageFromFile = (filename: string) => {
@@ -745,8 +771,15 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* File Explorer with Source Control */}
-        <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+        {/* Resizable File Explorer with Source Control */}
+        <ResizablePanel
+          direction="horizontal"
+          initialSize={fileExplorerWidth}
+          minSize={180}
+          maxSize={600}
+          onResize={setFileExplorerWidth}
+          className="bg-gray-800 border-r border-gray-700 flex flex-col"
+        >
           <div className="flex-1">
             <FileExplorer 
               currentFile={openFiles[activeFileIndex]?.name || ''} 
@@ -757,10 +790,10 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
           <div className="h-64">
             <SourceControlPanel />
           </div>
-        </div>
+        </ResizablePanel>
 
         {/* Editor and Output */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
           {/* File Tabs */}
           <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
             <div className="flex items-center space-x-1 overflow-x-auto">
@@ -794,53 +827,76 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             </div>
           </div>
 
-          {/* Monaco Editor */}
-          <div className="flex-1">
-            {activeFile && (
-              <Editor
-                height="100%"
-                language={activeFile.language}
-                theme="vs-dark"
-                value={activeFile.content}
-                onChange={(value) => updateFileContent(value || '')}
-                onMount={handleEditorDidMount}
-                options={{
-                  minimap: { enabled: true },
-                  fontSize: 14,
-                  wordWrap: 'on',
-                  automaticLayout: true,
-                  scrollBeyondLastLine: false,
-                  lineNumbers: 'on',
-                  renderWhitespace: 'selection',
-                  selectionHighlight: true,
-                  bracketPairColorization: { enabled: true },
-                  readOnly: currentUserRole === 'viewer' // Make readonly for viewers
-                }}
-              />
-            )}
-          </div>
+          {/* Main Editor and Output Container */}
+          <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+            {/* Editor Section */}
+            <div className="overflow-hidden" style={{ height: editorHeight, minHeight: 100 }}>
+              {activeFile && (
+                <CodeMirrorEditor
+                  value={activeFile.content}
+                  language={activeFile.language}
+                  onChange={updateFileContent}
+                />
+              )}
+            </div>
 
-          {/* Output Panel */}
-          <div className="h-64 bg-gray-800 border-t border-gray-700">
-            <OutputPanel output={output} isRunning={isRunning} />
+            {/* Resize Handle */}
+            <div 
+              className="h-2 w-full bg-gray-700 hover:bg-blue-500 cursor-row-resize active:bg-blue-600 relative z-10"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const startY = e.clientY;
+                const startHeight = editorHeight;
+                const container = e.currentTarget.parentElement?.getBoundingClientRect();
+                if (!container) return;
+                
+                const onMouseMove = (moveEvent: MouseEvent) => {
+                  const delta = moveEvent.clientY - startY;
+                  const newHeight = startHeight + delta;
+                  // Ensure we don't go below min height or above max height
+                  const minHeight = 100;
+                  const maxHeight = window.innerHeight - 200; // Leave some space for other UI
+                  const constrainedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+                  setEditorHeight(constrainedHeight);
+                };
+
+                const onMouseUp = () => {
+                  document.removeEventListener('mousemove', onMouseMove);
+                  document.removeEventListener('mouseup', onMouseUp);
+                };
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp, { once: true });
+              }}
+            />
+
+            {/* Output Panel */}
+            <div className="bg-gray-800 border-t border-gray-700 flex-1 min-h-[100px] overflow-auto" style={{ minHeight: 100 }}>
+              <OutputPanel output={output} isRunning={isRunning} />
+            </div>
           </div>
         </div>
 
-        {/* Chat Panel */}
-        <div className="w-80 bg-gray-800 border-l border-gray-700">
-          <ChatPanel 
-            collaborators={chatCollaborators}
-            projectMembers={projectMembers}
-            currentUser={user}
-            isLoadingMembers={isLoadingMembers}
-            memberOperationStatus={memberOperationStatus}
-            lastRefresh={lastRefresh}
-            autoRefreshEnabled={autoRefreshEnabled}
-            onMemberClick={handleMemberClick}
-            onInviteClick={canManageMembers() ? handleInviteClick : undefined}
-            canManageMembers={canManageMembers()}
-          />
-        </div>
+        {/* Resizable Chat Panel */}
+        <ResizablePanel
+          direction="horizontal"
+          initialSize={chatPanelWidth}
+          minSize={200}
+          maxSize={600}
+          onResize={setChatPanelWidth}
+          className="bg-gray-800 border-l border-gray-700"
+        >
+          <ChatPanel collaborators={collaborators} />
+        </ResizablePanel>
+
+        {/* Collaborator Panel - Still toggleable */}
+        {showCollaborators && (
+          <div className="w-64 bg-gray-800 border-l border-gray-700">
+            <CollaboratorPanel collaborators={collaborators} />
+          </div>
+        )}
       </div>
       
       {/* Share Dialog - Enhanced with real project data */}

@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import CollaboratorPanel from '@/components/CollaboratorPanel';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings } from 'lucide-react';
@@ -78,9 +79,11 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const [showMemberDialog, setShowMemberDialog] = useState(false);
   const [selectedMember, setSelectedMember] = useState<EnhancedMember | null>(null);
   const [memberOperationStatus, setMemberOperationStatus] = useState<{
-    type: 'idle' | 'loading' | 'error';
-    error?: Error | null;
+    type: 'idle' | 'loading' | 'adding' | 'updating' | 'removing';
+    error?: Error;
+    memberId?: string;
   }>({ type: 'idle' });
+
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef(null);
 
@@ -115,14 +118,33 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const collaborators = React.useMemo(() => {
     return projectMembers
       .filter(member => member.user_id !== user?.id) // Exclude current user
-      .map(member => ({
-        id: member.id,
-        name: member.user?.display_name || member.user?.username || 'Unknown',
-        avatar: member.user?.avatar_url || undefined,
-        email: member.user?.email,
-        role: member.role,
-        isOnline: true // You might want to implement actual online status tracking
-      }));
+      .map(member => {
+        // Generate a consistent color based on user ID
+        const stringToColor = (str: string) => {
+          let hash = 0;
+          for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+          }
+          const hue = Math.abs(hash % 360);
+          return `hsl(${hue}, 70%, 60%)`;
+        };
+
+        // Helper function to determine access level based on role
+        const getAccessLevel = (role: string): 'owner' | 'edit' | 'view' => {
+          if (role === 'owner') return 'owner';
+          if (role === 'editor') return 'edit';
+          return 'view';
+        };
+
+        return {
+          id: Number(member.user_id || member.id), // Convert to number
+          name: member.user?.display_name || member.user?.username || 'Unknown',
+          color: stringToColor(member.user_id || member.id),
+          cursor: null, // Default cursor position
+          isTyping: false, // Default typing state
+          accessLevel: getAccessLevel(member.role)
+        };
+      });
   }, [projectMembers, user?.id]);
 
   // Cleanup auto-refresh on unmount
@@ -261,6 +283,8 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
   // Handle successful member updates with optimistic updates and rollback
   const handleMemberUpdated = async (updatedMember: EnhancedMember) => {
+    if (!project?.id || !updatedMember?.id) return;
+    
     setMemberOperationStatus({ type: 'updating', memberId: updatedMember.id });
     
     // Optimistic update
@@ -296,6 +320,8 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
   // Handle member removal with optimistic updates
   const handleMemberRemoved = async (removedMemberId: string) => {
+    if (!project?.id || !removedMemberId) return;
+    
     setMemberOperationStatus({ type: 'removing', memberId: removedMemberId });
     
     // Get member info for feedback
@@ -332,7 +358,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
   // Handle new member addition with enhanced feedback
   const handleMemberAdded = async (newMember: any) => {
-    setMemberOperationStatus({ type: 'adding' });
+    setMemberOperationStatus({ type: 'adding', memberId: newMember?.user_id });
     
     try {
       // Refresh the members list
@@ -934,7 +960,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
         {/* Collaborator Panel - Still toggleable */}
         {showCollaborators && (
           <div className="w-64 bg-gray-800 border-l border-gray-700">
-            <CollaboratorPanel collaborators={collaborators} />
+            <CollaboratorPanel projectId={project.id} />
           </div>
         )}
       </div>

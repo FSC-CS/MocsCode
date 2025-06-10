@@ -46,8 +46,9 @@ interface ChatPanelProps {
   currentUser: any;
   isLoadingMembers: boolean;
   memberOperationStatus: {
-    type: 'idle' | 'adding' | 'updating' | 'removing';
+    type: 'idle' | 'loading' | 'adding' | 'updating' | 'removing';
     memberId?: string;
+    error?: Error;
   };
   lastRefresh: Date;
   autoRefreshEnabled: boolean;

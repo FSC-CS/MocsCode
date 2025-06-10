@@ -1,9 +1,16 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+
+interface CollaboratorAvatar {
+  id: string;
+  initials: string;
+  color: string;
+  name?: string;
+  email?: string;
+}
 
 interface ProjectCardProps {
   project: {
@@ -14,8 +21,7 @@ interface ProjectCardProps {
     collaborators: number;
     is_owner?: boolean;
     description?: string;
-    collaborator_avatars?: { initials: string; color: string }[];
-    // fallback fields for legacy
+    collaborator_avatars?: CollaboratorAvatar[];
     initials?: string;
     color?: string;
   };
@@ -28,7 +34,6 @@ interface ProjectCardProps {
   currentLeavingId?: string | null;
 }
 
-// Language badge color logic
 const getLanguageColor = (language: string) => {
   const colors: { [key: string]: string } = {
     'Java': 'bg-orange-100 text-orange-800',
@@ -41,7 +46,6 @@ const getLanguageColor = (language: string) => {
   return colors[language] || 'bg-gray-100 text-gray-800';
 };
 
-// Avatar initials fallback
 const generateInitials = (name: string) => {
   const words = name.trim().split(' ');
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
@@ -73,13 +77,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       await onLeave(project.id);
     }
   };
-  // Prefer explicit collaborator avatars if present, fallback to initials
-  const avatars = Array.isArray(project.collaborator_avatars) && project.collaborator_avatars.length > 0
-    ? project.collaborator_avatars.slice(0, 3)
-    : [{ initials: generateInitials(project.name), color: '#3b82f6' }];
-  const extraAvatars = Array.isArray(project.collaborator_avatars) && project.collaborator_avatars.length > 3
-    ? project.collaborator_avatars.length - 3
-    : 0;
+
+  const hasCollaborators = Array.isArray(project.collaborator_avatars) && project.collaborator_avatars.length > 0;
+  const avatars = hasCollaborators ? project.collaborator_avatars.slice(0, 3) : [];
+  const extraAvatars = hasCollaborators ? Math.max(0, project.collaborator_avatars.length - 3) : 0;
 
   return (
     <Card
@@ -130,42 +131,64 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
           </Button>
         )}
       </div>
+
       <div className="flex justify-between items-start mb-4">
-        <h4 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1 leading-tight line-clamp-2">{project.name}</h4>
+        <h4 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1 leading-tight line-clamp-2">
+          {project.name}
+        </h4>
         {project.is_owner && (
           <Badge variant="secondary" className="text-xs">Owner</Badge>
         )}
       </div>
+
       {project.description && (
         <p className="text-sm text-gray-600 mb-3 line-clamp-2">{project.description}</p>
       )}
+
       <div className="space-y-3 mt-auto">
         <Badge className={`${getLanguageColor(project.language)} text-xs font-medium`}>
           {project.language}
         </Badge>
+
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className="flex -space-x-1">
-              {avatars.map((avatar, index) => (
-                <div
-                  key={index}
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white border-2 border-white"
-                  style={{ backgroundColor: avatar.color }}
-                  aria-label={`Avatar ${avatar.initials}`}
-                >
-                  {avatar.initials}
+            {hasCollaborators ? (
+              <>
+                <div className="flex -space-x-1">
+                  {avatars.map((avatar) => (
+                    <div
+                      key={avatar.id}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white border-2 border-white shadow-sm hover:shadow-md transition-shadow"
+                      style={{ 
+                        backgroundColor: avatar.color,
+                        cursor: 'help'
+                      }}
+                      title={avatar.name || `User ${avatar.initials}`}
+                      aria-label={`Avatar for ${avatar.name || avatar.email || 'user'}`}
+                    >
+                      {avatar.initials}
+                    </div>
+                  ))}
+                  {extraAvatars > 0 && (
+                    <div 
+                      className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-gray-300 border-2 border-white shadow-sm"
+                      title={`${extraAvatars} more collaborator${extraAvatars > 1 ? 's' : ''}`}
+                    >
+                      +{extraAvatars}
+                    </div>
+                  )}
                 </div>
-              ))}
-              {extraAvatars > 0 && (
-                <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-xs font-medium text-gray-600 border-2 border-white">
-                  +{extraAvatars}
-                </div>
-              )}
-            </div>
-            <span className="text-sm text-gray-500">
-              {project.collaborators} collaborator{project.collaborators !== 1 ? 's' : ''}
-            </span>
+                <span className="text-sm text-gray-500">
+                  {project.collaborators} collaborator{project.collaborators !== 1 ? 's' : ''}
+                </span>
+              </>
+            ) : (
+              <div className="text-sm text-gray-500">
+                
+              </div>
+            )}
           </div>
+
           <div className="flex items-center space-x-1">
             <Clock className="h-4 w-4 text-gray-400" />
             <span className="text-sm text-gray-500">{project.last_modified}</span>

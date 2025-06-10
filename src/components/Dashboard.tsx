@@ -49,6 +49,7 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [projects, setProjects] = useState<DashboardProject[]>([]);
+  const [projectCollaborators, setProjectCollaborators] = useState<Record<string, {id: string, email: string, username: string, display_name: string, avatar_url: string | null}[]>>({});
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentDeletingId, setCurrentDeletingId] = useState<string | null>(null);
   const [isLeaving, setIsLeaving] = useState(false);
@@ -68,15 +69,35 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
     { name: 'C#', extension: 'cs' }
   ];
 
-  const detectLanguage = (projectName: string): string => {
-    const nameLower = projectName.toLowerCase();
-    for (const lang of supportedLanguages) {
-      if (nameLower.includes(lang.name.toLowerCase())) {
-        return lang.name;
-      }
+  // Generate consistent color from string
+const stringToColor = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 70%, 80%)`;
+};
+
+// Generate user initials from user object
+const generateUserInitials = (user: { display_name?: string; username?: string; email?: string }): string => {
+  const name = user.display_name || user.username || user.email || 'U';
+  return name
+    .split(' ')
+    .map(part => part[0]?.toUpperCase() || '')
+    .slice(0, 2)
+    .join('');
+};
+
+const detectLanguage = (projectName: string): string => {
+  const nameLower = projectName.toLowerCase();
+  for (const lang of supportedLanguages) {
+    if (nameLower.includes(lang.name.toLowerCase())) {
+      return lang.name;
     }
-    return 'JavaScript'; // Default language
-  };
+  }
+  return 'JavaScript'; // Default language
+};
 
   const formatLastModified = (date: string): string => {
     const now = new Date();
@@ -313,6 +334,38 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
   // Only start loading if we haven't attempted yet or need to refresh
   if (hasAttemptedLoad) return;
 
+  const loadProjectCollaborators = async (projectId: string) => {
+    try {
+      // First get the project to find the owner
+      const { data: projectData } = await projectsApi.getProject(projectId);
+      if (!projectData) return;
+      
+      const ownerId = projectData.owner_id;
+      
+      // Then get all members and filter out the owner
+      const { data } = await projectMembersApi.listProjectMembers(projectId);
+      if (data?.items) {
+        // Filter out the owner and map the remaining members
+        const collaborators = data.items
+          .filter((item: any) => item.user_id !== ownerId)
+          .map((item: any) => ({
+            id: item.user_id,
+            email: item.user?.email || '',
+            username: item.user?.username || '',
+            display_name: item.user?.display_name || '',
+            avatar_url: item.user?.avatar_url || null
+          }));
+          
+        setProjectCollaborators(prev => ({
+          ...prev,
+          [projectId]: collaborators
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading project collaborators:', error);
+    }
+  };
+
   const loadProjects = async () => {
     setIsProjectsLoading(true);
     setHasAttemptedLoad(true);
@@ -334,18 +387,29 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
         setProjects([]);
         return;
       }
-      const dashboardProjects: DashboardProject[] = data.items.map(p => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        language: detectLanguage(p.name),
-        last_modified: p.updated_at ? formatLastModified(p.updated_at) : 'Unknown',
-        collaborators: 1,
-        is_owner: p.owner_id === user.id,
-        collaborator_avatars: [],
-        initials: p.name.substring(0, 2).toUpperCase(),
-        color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 80%)`
-      }));
+      
+      const dashboardProjects: DashboardProject[] = [];
+      
+      // First create all projects with basic info
+      for (const p of data.items) {
+        const projectData: DashboardProject = {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          language: detectLanguage(p.name),
+          last_modified: p.updated_at ? formatLastModified(p.updated_at) : 'Unknown',
+          collaborators: 1, // Will be updated after loading members
+          is_owner: p.owner_id === user.id,
+          collaborator_avatars: [], // Will be populated after loading members
+          initials: p.name.substring(0, 2).toUpperCase(),
+          color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 80%)`
+        };
+        dashboardProjects.push(projectData);
+        
+        // Load collaborators for each project
+        loadProjectCollaborators(p.id);
+      }
+      
       setProjects(dashboardProjects);
     } catch (err) {
       console.error('Failed to load projects:', err);
@@ -636,7 +700,18 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
               {filteredProjects.map((project) => (
                 <ProjectCard 
                   key={project.id} 
-                  project={project} 
+                  project={{
+                    ...project,
+                    // Use actual collaborators if available, otherwise fallback to the current data
+                    collaborators: projectCollaborators[project.id]?.length || project.collaborators,
+                    collaborator_avatars: projectCollaborators[project.id]?.map(user => ({
+                      id: user.id,
+                      initials: generateUserInitials(user),
+                      color: stringToColor(user.email || user.id),
+                      name: user.display_name || user.username || user.email || 'U',
+                      email: user.email
+                    })) || []
+                  }}
                   onOpen={(project: DashboardProject) => {
                     const projectName = project.name.toLowerCase().replace(/\s+/g, '-');
                     navigate(`/editor/${project.id}/${projectName}`);

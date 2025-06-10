@@ -1,29 +1,45 @@
-import {EditorState, Compartment} from "@codemirror/state"
-import {acceptCompletion} from "@codemirror/autocomplete"
+import { EditorState, Compartment, EditorSelection } from "@codemirror/state"
+import { 
+  autocompletion, 
+  completionKeymap, 
+  closeBrackets,
+  closeBracketsKeymap,
+  acceptCompletion 
+} from "@codemirror/autocomplete"
 import {
-  EditorView, keymap, highlightSpecialChars, drawSelection,
-  highlightActiveLine, dropCursor, rectangularSelection,
-  crosshairCursor, lineNumbers, highlightActiveLineGutter
+  EditorView, 
+  keymap, 
+  highlightSpecialChars, 
+  drawSelection,
+  highlightActiveLine, 
+  dropCursor, 
+  rectangularSelection,
+  crosshairCursor, 
+  lineNumbers, 
+  highlightActiveLineGutter
 } from "@codemirror/view"
 import {
-  defaultHighlightStyle, syntaxHighlighting, indentOnInput,
-  bracketMatching, foldGutter, foldKeymap
+  defaultHighlightStyle, 
+  syntaxHighlighting, 
+  indentOnInput,
+  bracketMatching, 
+  foldGutter, 
+  foldKeymap
 } from "@codemirror/language"
 import {
-  defaultKeymap, history, historyKeymap, indentWithTab
+  defaultKeymap, 
+  history, 
+  historyKeymap, 
+  indentWithTab
 } from "@codemirror/commands"
-import {EditorSelection} from "@codemirror/state"
 import {
-  searchKeymap, highlightSelectionMatches
+  searchKeymap, 
+  highlightSelectionMatches
 } from "@codemirror/search"
-import {
-  autocompletion, completionKeymap, closeBrackets,
-  closeBracketsKeymap
-} from "@codemirror/autocomplete"
-import {lintKeymap} from "@codemirror/lint"
+import { lintKeymap } from "@codemirror/lint"
 import {javascript, javascriptLanguage} from "@codemirror/lang-javascript"
 import {python, pythonLanguage} from "@codemirror/lang-python"
-import {html} from "@codemirror/lang-html"
+import {html, htmlLanguage} from "@codemirror/lang-html"
 import {java, javaLanguage} from "@codemirror/lang-java"
 import {cpp, cppLanguage} from "@codemirror/lang-cpp"
 import {toggleLineWrapping, toggleHighlightActiveLine, toggleYellowBackground} from "./toggle-extension.mjs"
@@ -45,11 +61,37 @@ import {syntaxTree} from "@codemirror/language"
 export function createEditorView({ parent, doc, language, onChange }) {
   let langExt;
   switch (language) {
-    case 'python': langExt = python(); break;
-    case 'java': langExt = java(); break;
-    case 'cpp': langExt = cpp(); break;
-    case 'html': langExt = html(); break;
-    case 'javascript': default: langExt = javascript(); break;
+    case 'python': 
+      langExt = [
+        python(),
+        pythonCompletions
+      ];
+      break;
+    case 'java': 
+      langExt = [
+        java(),
+        javaCompletions
+      ];
+      break;
+    case 'cpp': 
+      langExt = [
+        cpp(),
+        cppCompletions
+      ];
+      break;
+    case 'html': 
+      langExt = [
+        html(),
+        htmlCompletions
+      ];
+      break;
+    case 'javascript': 
+    default: 
+      langExt = [
+        javascript(),
+        jsDocCompletions
+      ];
+      break;
   }
   const state = EditorState.create({
     doc,
@@ -79,34 +121,145 @@ export function createEditorView({ parent, doc, language, onChange }) {
         }
       }),
       EditorView.theme({
-        "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4" },
-        ".cm-content": { fontFamily: '"Fira Code", monospace', fontSize: "14px" }
+        "&": { 
+          backgroundColor: "#1a1f2e", // Darker blue-gray background
+          color: "#e2e8f0", // Lighter text color for better contrast
+          height: "100%",
+          "&.cm-editor": { 
+            height: "100%",
+            outline: "none"
+          },
+          "& .cm-scroller": { 
+            overflow: "auto",
+            scrollbarWidth: "thin",
+            fontFamily: '"Fira Code", monospace',
+            "&::-webkit-scrollbar": {
+              width: "8px",
+              height: "8px"
+            },
+            "&::-webkit-scrollbar-track": {
+              background: "#1e293b" // Slightly lighter than editor bg
+            },
+            "&::-webkit-scrollbar-thumb": {
+              background: "#334155", // Muted blue-gray
+              borderRadius: "4px"
+            },
+            "&::-webkit-scrollbar-thumb:hover": {
+              background: "#475569" // Slightly lighter on hover
+            }
+          },
+          // Line numbers
+          "& .cm-gutters": {
+            backgroundColor: "#1a1f2e",
+            color: "#64748b", // Muted blue-gray for line numbers
+            borderRight: "1px solid #1e293b"
+          },
+          // Active line highlight
+          "& .cm-activeLine": {
+            backgroundColor: "#1e293b"
+          },
+          // Cursor
+          "&.cm-focused .cm-cursor": {
+            borderLeft: "2px solid #60a5fa" // Bright blue cursor
+          },
+          // Selection
+          "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
+            backgroundColor: "#2d3a5a" // Blue-tinted selection
+          },
+          // Matching bracket highlight
+          "&.cm-focused .cm-matchingBracket": {
+            backgroundColor: "#2d3a5a",
+            outline: "1px solid #60a5fa"
+          }
+        },
+        ".cm-content": { 
+          fontFamily: '"Fira Code", monospace', 
+          fontSize: "14px",
+          minHeight: "100%",
+          caretColor: "#60a5fa" // Cursor color
+        },
+        ".cm-lineNumbers .cm-gutterElement": {
+          padding: "0 8px 0 16px" // Better line number padding
+        },
+        ".cm-line": {
+          padding: "0 8px" // Slight horizontal padding for content
+        },
+        ".cm-scroller": {
+          overflow: "auto"
+        },
+        // Syntax highlighting
+        ".cm-keyword": { color: "#93c5fd" }, // Light blue for keywords
+        ".cm-builtin": { color: "#fca5a5" }, // Light red for built-ins
+        ".cm-string": { color: "#86efac" }, // Light green for strings
+        
+        ".cm-number": { color: "#f0abfc" }, // Light purple for numbers
+        ".cm-comment": { color: "#64748b" }, // Muted blue-gray for comments
+        
+        ".cm-def": { color: "#93c5fd" }, // Light blue for definitions
+        ".cm-variable": { color: "#e2e8f0" }, // Default text color for variables
+        ".cm-variable-2": { color: "#e2e8f0" }, // Default text color for variables
+        ".cm-type-name": { color: "#93c5fd" }, // Light blue for types
+        ".cm-property": { color: "#93c5fd" }, // Light blue for properties
+        ".cm-operator": { color: "#e2e8f0" }, // Default text color for operators
+        
+        // For Python specific
+        ".cm-python .cm-variable": { color: "#e2e8f0" },
+        ".cm-python .cm-builtin": { color: "#fca5a5" },
+        
+        // For JavaScript specific
+        ".cm-javascript .cm-variable": { color: "#e2e8f0" },
+        ".cm-javascript .cm-property": { color: "#93c5fd" },
+        
+        // For HTML specific
+        ".cm-tag": { color: "#93c5fd" },
+        ".cm-attribute": { color: "#f0abfc" },
+        
+        // For Java/C++ specific
+        ".cm-type": { color: "#93c5fd" },
+        ".cm-class-name": { color: "#93c5fd" }
       }),
       // All keymaps combined
       keymap.of([
-        // Tab handling
-        { key: 'Tab', run: indentWithTab },
-        { key: 'Shift-Tab', run: (target) => {
-          if (target.state.selection.ranges.some(r => !r.empty)) return false;
-          const { state } = target;
-          const changes = state.changeByRange(range => {
-            const line = state.doc.lineAt(range.from);
-            const before = state.doc.slice(line.from, range.from).toString();
-            const indent = /^\s*/.exec(before)[0];
-            if (!indent) return { range };
-            const drop = Math.min(
-              indent.length >= 4 && indent.startsWith('    ') ? 4 : 2,
-              indent.length
-            );
-            return {
-              changes: { from: line.from, to: line.from + drop, insert: '' },
-              range: EditorSelection.cursor(Math.max(line.from, range.from - drop))
-            };
-          });
-          target.dispatch(changes);
-          return true;
-        }},
-        // Standard keymaps
+        // IMPORTANT: Custom Tab handling should come FIRST
+        // Tab handling - ensure tab works for both indentation and completion
+        {
+          key: 'Tab',
+          run: (target) => {
+            // First try to accept the current completion
+            if (acceptCompletion(target)) return true;
+            
+            // If no completion was active, use default indentation
+            return indentWithTab(target);
+          }
+        },
+        // Shift-Tab for outdent
+        { 
+          key: 'Shift-Tab',
+          run: (target) => {
+            if (target.state.selection.ranges.some(r => !r.empty)) {
+              // If there's a selection, outdent the selection
+              const { state } = target;
+              const changes = state.changeByRange(range => {
+                const line = state.doc.lineAt(range.from);
+                const before = state.doc.slice(line.from, range.from).toString();
+                const indent = /^\s*/.exec(before)[0];
+                if (!indent) return { range };
+                const drop = Math.min(
+                  indent.length >= 4 && indent.startsWith('    ') ? 4 : 2,
+                  indent.length
+                );
+                return {
+                  changes: { from: line.from, to: line.from + drop, insert: '' },
+                  range: EditorSelection.cursor(Math.max(line.from, range.from - drop))
+                };
+              });
+              target.dispatch(changes);
+              return true;
+            }
+            return false;
+          }
+        },
+        // Standard keymaps AFTER custom handlers
         ...defaultKeymap,
         ...historyKeymap,
         ...closeBracketsKeymap,
@@ -148,6 +301,48 @@ export function createEditorView({ parent, doc, language, onChange }) {
   });
   return view;
 }
+
+// --- HTML Tag Autocomplete ---
+const htmlCompletions = htmlLanguage.data.of({
+  autocomplete: context => {
+    let word = context.matchBefore(/\w*/);
+    if (!word || (word.from == word.to && !context.explicit)) return null;
+    return {
+      from: word.from,
+      options: [
+        {label: "div", type: "tag", apply: "<div>$0</div>"},
+        {label: "span", type: "tag", apply: "<span>$0</span>"},
+        {label: "p", type: "tag", apply: "<p>$0</p>"},
+        {label: "a", type: "tag", apply: "<a href=\"$1\">$0</a>"},
+        {label: "img", type: "tag", apply: "<img src=\"$1\" alt=\"$2\">$0"},
+        {label: "ul", type: "tag", apply: "<ul>\n  <li>$0</li>\n</ul>"},
+        {label: "ol", type: "tag", apply: "<ol>\n  <li>$0</li>\n</ol>"},
+        {label: "li", type: "tag", apply: "<li>$0</li>"},
+        {label: "table", type: "tag", apply: "<table>\n  <tr><th>$1</th></tr>\n  <tr><td>$0</td></tr>\n</table>"},
+        {label: "form", type: "tag", apply: "<form action=\"$1\" method=\"$2\">\n  $0\n</form>"},
+        {label: "input", type: "tag", apply: "<input type=\"$1\" name=\"$2\">$0"},
+        {label: "button", type: "tag", apply: "<button type=\"$1\">$0</button>"},
+        {label: "select", type: "tag", apply: "<select name=\"$1\">\n  <option value=\"$2\">$0</option>\n</select>"},
+        {label: "textarea", type: "tag", apply: "<textarea name=\"$1\" rows=\"4\" cols=\"50\">$0</textarea>"},
+        {label: "label", type: "tag", apply: "<label for=\"$1\">$0</label>"},
+        {label: "h1", type: "tag", apply: "<h1>$0</h1>"},
+        {label: "h2", type: "tag", apply: "<h2>$0</h2>"},
+        {label: "h3", type: "tag", apply: "<h3>$0</h3>"},
+        {label: "header", type: "tag", apply: "<header>\n  $0\n</header>"},
+        {label: "footer", type: "tag", apply: "<footer>\n  $0\n</footer>"},
+        {label: "section", type: "tag", apply: "<section>\n  $0\n</section>"},
+        {label: "article", type: "tag", apply: "<article>\n  $0\n</article>"},
+        {label: "nav", type: "tag", apply: "<nav>\n  $0\n</nav>"},
+        {label: "main", type: "tag", apply: "<main>\n  $0\n</main>"},
+        {label: "aside", type: "tag", apply: "<aside>\n  $0\n</aside>"},
+        {label: "figure", type: "tag", apply: "<figure>\n  $0\n</figure>"},
+        {label: "figcaption", type: "tag", apply: "<figcaption>$0</figcaption>"},
+        {label: "time", type: "tag", apply: "<time datetime=\"$1\">$0</time>"},
+        {label: "mark", type: "tag", apply: "<mark>$0</mark>"}
+      ]
+    };
+  }
+});
 
 // --- Python Keyword Autocomplete ---
 const pythonKeywords = [

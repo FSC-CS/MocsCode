@@ -31,12 +31,12 @@ interface ProjectCardProps {
 // Language badge color logic
 const getLanguageColor = (language: string) => {
   const colors: { [key: string]: string } = {
-    'Java': 'bg-orange-100 text-orange-800',
-    'JavaScript': 'bg-yellow-100 text-yellow-800',
-    'Python': 'bg-blue-100 text-blue-800',
-    'C': 'bg-gray-100 text-gray-800',
-    'C++': 'bg-purple-100 text-purple-800',
-    'C#': 'bg-green-100 text-green-800'
+    'Java': 'bg-orange-100 dark:bg-orange-500/20 text-orange-800 dark:text-orange-200 border border-orange-200 dark:border-orange-500/30',
+    'JavaScript': 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-500/30',
+    'Python': 'bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-500/30',
+    'C': 'bg-gray-100 dark:bg-gray-500/20 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-500/30',
+    'C++': 'bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-500/30',
+    'C#': 'bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-500/30'
   };
   return colors[language] || 'bg-gray-100 text-gray-800';
 };
@@ -83,7 +83,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 
   return (
     <Card
-      className="p-6 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer border border-gray-200 hover:border-blue-300 flex flex-col min-h-[200px] relative group"
+      className="p-6 bg-card/90 dark:bg-card/80 text-card-foreground rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer border border-border/50 hover:border-primary/50 flex flex-col min-h-[200px] relative group backdrop-blur-sm dark:backdrop-blur-sm"
       onClick={() => onOpen(project)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

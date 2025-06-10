@@ -231,6 +231,8 @@ export class CollaborationApi extends ApiClient {
         share_type: 'link' as const
       };
 
+      console.log('linkData.permissions:', linkData.permissions, typeof linkData.permissions);
+
       const { data, error } = await this.client
         .from(this.table)
         .insert([linkData])

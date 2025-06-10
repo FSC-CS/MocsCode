@@ -55,23 +55,7 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, on
     }
   }, [value]);
 
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Only handle Tab key
-      if (e.key !== 'Tab') return;
-      
-      // If the active element is inside our editor, prevent default to avoid focus loss
-      const editorElement = editorRef.current?.closest('.cm-editor');
-      if (editorElement && (editorElement === document.activeElement || editorElement.contains(document.activeElement))) {
-        e.preventDefault();
-      }
-    };
-
-    window.addEventListener('keydown', handleGlobalKeyDown, true); // Use capture phase
-    return () => {
-      window.removeEventListener('keydown', handleGlobalKeyDown, true);
-    };
-  }, []);
+  // Removed global tab key handler - CodeMirror handles tab natively
 
   return (
     <div className="w-full h-full bg-[#1e1e1e] rounded-b-lg border border-gray-700 overflow-hidden">

@@ -4,7 +4,8 @@ import {
   completionKeymap, 
   closeBrackets,
   closeBracketsKeymap,
-  acceptCompletion 
+  acceptCompletion,
+  closeCompletion
 } from "@codemirror/autocomplete"
 import {
   EditorView, 
@@ -597,34 +598,36 @@ const state = EditorState.create({
     
     // Keymaps for various features
     keymap.of([
-      // Custom TAB handler: accept completion if active, else insert spaces/indent
+      // Tab key handling - simplified and more reliable implementation
       {
         key: "Tab",
         run: (view) => {
-          // Accept autocomplete if active
+          // First try to accept completion
           if (acceptCompletion(view)) return true;
+          
+          // If no completion, use the standard indentation behavior
           const tabSize = view.state.facet(EditorState.tabSize) || 2;
           const tabString = " ".repeat(tabSize);
           const {state} = view;
-          let changes = state.changeByRange(range => {
-            if (!range.empty) {
-              // If selection, indent selection
-              return indentWithTab(view, range) ? {range, changes: []} : {range, changes: []};
-            } else {
-              // Insert spaces at cursor
-              return {
-                changes: {from: range.from, to: range.to, insert: tabString},
-                range: EditorSelection.cursor(range.from + tabString.length)
-              };
-            }
+          
+          // Use the standard indentation behavior for selections
+          if (state.selection.ranges.some(r => !r.empty)) {
+            return indentWithTab(view);
+          }
+          
+          // For single cursor, insert spaces
+          view.dispatch({
+            changes: {from: state.selection.main.head, insert: tabString},
+            selection: {anchor: state.selection.main.head + tabString.length},
+            userEvent: "input"
           });
-          view.dispatch(changes, {userEvent: "input"});
           return true;
         },
         shift: indentWithTab
       },
+      // Filter out the default Tab handler to avoid conflicts
       ...closeBracketsKeymap,
-      ...defaultKeymap,
+      ...defaultKeymap.filter(binding => binding.key !== 'Tab'),
       ...searchKeymap,
       ...historyKeymap,
       ...foldKeymap,

@@ -1,59 +1,46 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApi } from '@/contexts/ApiContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import CodeEditor from '@/components/CodeEditor';
 import { Loader2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { ProjectsApi } from '@/lib/api/projects';
 
 const Editor = () => {
-  const { projectId, projectName } = useParams<{ projectId: string; projectName?: string }>(); // projectName is optional, for URL only
+  const { projectId } = useParams<{ projectId: string; projectName?: string }>();
   const navigate = useNavigate();
   const { projectsApi } = useApi();
   const { user, isReady } = useAuth();
   const { toast } = useToast();
-  
-  const [project, setProject] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadProject = async () => {
-      if (!projectId || !isReady || !user) return;
+  // Use React Query to fetch and cache the project data
+  const { data: project, isLoading, error } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      if (!projectId || !user) return null;
       
-      setIsLoading(true);
-      try {
-        // First get the project data
-        const { data, error } = await projectsApi.getProject(projectId);
-        if (error) throw error;
-        
-        if (!data) {
-          setError('Project not found');
-          return;
-        }
-        
-        // Update the project's updated_at timestamp
-        await (projectsApi as ProjectsApi).updateProject(projectId, {
-          updated_at: new Date().toISOString()
-        });
-        
-        setProject(data);
-      } catch (err) {
-        console.error('Failed to load project:', err);
-        setError('Failed to load project');
-        toast({
-          title: 'Error',
-          description: 'Failed to load project',
-          variant: 'destructive'
-        });
-      } finally {
-        setIsLoading(false);
+      // Get the project data
+      const { data, error: fetchError } = await projectsApi.getProject(projectId);
+      if (fetchError) throw fetchError;
+      
+      if (!data) {
+        throw new Error('Project not found');
       }
-    };
-
-    loadProject();
-  }, [projectId, projectsApi, user, isReady, toast]);
+      
+      // Update the project's updated_at timestamp in the background
+      (projectsApi as ProjectsApi).updateProject(projectId, {
+        updated_at: new Date().toISOString()
+      }).catch(console.error);
+      
+      return data;
+    },
+    enabled: !!projectId && isReady && !!user,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+    retry: 1
+  });
 
   const handleBackToDashboard = () => {
     navigate('/dashboard');
@@ -77,7 +64,7 @@ const Editor = () => {
       <div className="h-screen flex items-center justify-center bg-gray-900">
         <div className="text-center text-white">
           <h2 className="text-xl font-semibold mb-2">
-            {error || 'Project not found'}
+            {error?.message || 'Project not found'}
           </h2>
           <button
             onClick={handleBackToDashboard}

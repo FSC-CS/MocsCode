@@ -2,6 +2,7 @@
 
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, PaginatedResponse, PaginationParams } from './types';
+import { sendInvitationEmail } from '../email';
 
 export interface ShareableLink {
   id: string;
@@ -206,12 +207,24 @@ export class CollaborationApi extends ApiClient {
 
   /**
    * Generate a new shareable link for a project
+   * @param projectId ID of the project to share
+   * @param permissions Permission level for the share link
+   * @param createdBy User ID of the person creating the share
+   * @param expiresAt Optional expiration date for the link
+   * @param email Optional email address to send invitation to
+   * @param inviterName Optional name of the person sending the invitation
+   * @param projectName Optional name of the project (required if email is provided)
+   * @param baseUrl Base URL to use for the invitation link (required if email is provided)
    */
   async generateShareableLink(
     projectId: string,
     permissions: 'viewer' | 'editor',
     createdBy: string,
-    expiresAt?: Date
+    expiresAt?: Date,
+    email?: string,
+    inviterName?: string,
+    projectName?: string,
+    baseUrl?: string
   ): Promise<ApiResponse<ShareableLink>> {
     try {
       console.log('Generating shareable link for project:', projectId, 'with permissions:', permissions);
@@ -252,6 +265,23 @@ export class CollaborationApi extends ApiClient {
         permissions,
         tokenPrefix: shareToken.substring(0, 8) + '...'
       });
+
+      // Send invitation email if email and required fields are provided
+      if (email && inviterName && projectName && baseUrl) {
+        try {
+          const invitationLink = `${baseUrl}/join?token=${data.share_token}`;
+          await this.sendCollaborationEmail(
+            email,
+            inviterName,
+            projectName,
+            invitationLink
+          );
+          console.log(`Invitation email sent to ${email}`);
+        } catch (emailError) {
+          console.error('Error sending invitation email:', emailError);
+          // Don't fail the whole operation if email fails
+        }
+      }
 
       return {
         data: data as ShareableLink,
@@ -357,6 +387,42 @@ export class CollaborationApi extends ApiClient {
       return {
         data: null,
         error: error instanceof Error ? error : new Error('An unexpected error occurred while revoking share link')
+      };
+    }
+  }
+
+  /**
+   * Send an email invitation to a collaborator
+   * @param email Email address of the invitee
+   * @param inviterName Name of the person sending the invitation
+   * @param projectName Name of the project being shared
+   * @param invitationLink The link to accept the invitation
+   */
+  async sendCollaborationEmail(
+    email: string,
+    inviterName: string,
+    projectName: string,
+    invitationLink: string
+  ): Promise<ApiResponse<{ success: boolean }>> {
+    try {
+      console.log(`Sending collaboration email to ${email} for project ${projectName}`);
+      
+      const result = await sendInvitationEmail({
+        to: [email],
+        inviterName,
+        projectName,
+        invitationLink,
+      });
+
+      console.log('Email sent successfully:', result);
+      return { data: { success: true }, error: null };
+    } catch (error) {
+      console.error('Error sending collaboration email:', error);
+      return {
+        data: null,
+        error: error instanceof Error 
+          ? error 
+          : new Error('Failed to send collaboration email')
       };
     }
   }

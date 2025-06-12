@@ -42,7 +42,7 @@ const SourceControlPanel = () => {
   };
 
   return (
-    <div className="h-full bg-gray-800 border-t border-gray-700">
+    <div className="h-full bg-gray-800 border-t border-gray-700 flex flex-col">
       {/* Header */}
       <div className="p-3 border-b border-gray-700">
         <div className="flex items-center space-x-2">
@@ -65,13 +65,15 @@ const SourceControlPanel = () => {
       </div>
 
       {/* Version History */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-3">
-          <div className="flex items-center space-x-2 mb-3">
+      <div className="flex flex-col h-[calc(100%-120px)]">
+        <div className="p-3 border-b border-gray-700">
+          <div className="flex items-center space-x-2">
             <History className="h-4 w-4 text-gray-400" />
             <span className="text-sm font-medium text-gray-300">Version History</span>
           </div>
-          
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-3">
           <div className="space-y-2">
             {commits.map((commit, index) => (
               <div
@@ -89,14 +91,12 @@ const SourceControlPanel = () => {
                     </div>
                   </div>
                   {index !== 0 && (
-                    <Button
+                    <button
                       onClick={() => rollbackToCommit(commit.id)}
-                      size="sm"
-                      variant="ghost"
-                      className="text-gray-300 hover:text-white hover:bg-gray-600 p-1 h-6 w-6"
+                      className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors text-gray-300 hover:text-white hover:bg-gray-600 p-1 h-6 w-6"
                     >
                       <RotateCcw className="h-3 w-3" />
-                    </Button>
+                    </button>
                   )}
                 </div>
                 

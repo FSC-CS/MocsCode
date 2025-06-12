@@ -15,6 +15,7 @@ import MemberManagementDialog from './MemberManagementDialog';
 import FileExplorer from './FileExplorer';
 import OutputPanel from './OutputPanel';
 import ChatPanel from './ChatPanel';
+import CollaboratorPanel from './CollaboratorPanel';
 import SourceControlPanel from './SourceControlPanel';
 import ResizablePanel from './ResizablePanel'; // Add this import
 
@@ -49,6 +50,8 @@ interface EnhancedMember {
 }
 
 const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
+  // Sidebar tab state: 'chat' or 'collaborators'
+  const [activeSidebarTab, setActiveSidebarTab] = useState<'chat' | 'collaborators'>('chat');
   const { toast } = useToast();
   const { projectFilesApi, projectMembersApi, projectsApi } = useApi();
   const { user, dbUser } = useAuth();
@@ -909,34 +912,62 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
           </div>
         </div>
 
-        {/* Resizable Chat Panel */}
+        {/* Resizable Tabbed Panel for Chat/Collaborators */}
         <ResizablePanel
           direction="horizontal"
           initialSize={chatPanelWidth}
           minSize={200}
           maxSize={600}
           onResize={setChatPanelWidth}
-          className="bg-gray-800 border-l border-gray-700"
+          className="bg-gray-800 border-l border-gray-700 flex flex-col"
         >
-          <ChatPanel 
-            collaborators={collaborators}
-            projectMembers={projectMembers}
-            currentUser={user}
-            isLoadingMembers={isLoadingMembers}
-            memberOperationStatus={memberOperationStatus}
-            lastRefresh={lastRefresh || new Date()}
-            autoRefreshEnabled={autoRefreshEnabled}
-            onMemberClick={handleMemberClick}
-            canManageMembers={canManageProject()}
-          />
-        </ResizablePanel>
-
-        {/* Collaborator Panel - Still toggleable */}
-        {showCollaborators && (
-          <div className="w-64 bg-gray-800 border-l border-gray-700">
-            <CollaboratorPanel collaborators={collaborators} />
+          {/* Tab Bar */}
+          <div className="flex items-center border-b border-gray-700">
+            <button
+              className={cn(
+                'flex-1 px-4 py-2 text-sm font-medium transition-all',
+                activeSidebarTab === 'chat' ? 'bg-gray-900 text-blue-400' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              )}
+              onClick={() => setActiveSidebarTab('chat')}
+              type="button"
+            >
+              Chat
+            </button>
+            <button
+              className={cn(
+                'flex-1 px-4 py-2 text-sm font-medium transition-all',
+                activeSidebarTab === 'collaborators' ? 'bg-gray-900 text-blue-400' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              )}
+              onClick={() => setActiveSidebarTab('collaborators')}
+              type="button"
+            >
+              Collaborators
+            </button>
           </div>
-        )}
+          {/* Tab Content */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {activeSidebarTab === 'chat' ? (
+              <ChatPanel 
+                collaborators={collaborators}
+                projectMembers={projectMembers}
+                currentUser={user}
+                isLoadingMembers={isLoadingMembers}
+                memberOperationStatus={memberOperationStatus}
+                lastRefresh={lastRefresh || new Date()}
+                autoRefreshEnabled={autoRefreshEnabled}
+                onMemberClick={handleMemberClick}
+                canManageMembers={canManageProject()}
+              />
+            ) : (
+              <CollaboratorPanel 
+                projectId={project.id}
+                onMemberClick={handleMemberClick}
+                onInviteClick={() => setShowShareDialog(true)}
+                refreshTrigger={memberRefreshTrigger}
+              />
+            )}
+          </div>
+        </ResizablePanel>
       </div>
       
       {/* Share Dialog - Enhanced with real project data */}

@@ -269,7 +269,6 @@ export class ProjectMembersApi extends ApiClient {
         .from(this.table)
         .update({ 
           role: newRole,
-          permissions: { updated_at: new Date().toISOString() }
         })
         .eq('id', memberId)
         .select()

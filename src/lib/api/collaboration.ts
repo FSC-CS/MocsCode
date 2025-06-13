@@ -267,6 +267,8 @@ export class CollaborationApi extends ApiClient {
         .eq('is_active', true)
         .single();
 
+      console.log('RESULT:', data);
+
       if (error) {
         if (error.code === 'PGRST116') { // No rows returned
           console.log('Share token not found or inactive');
@@ -303,7 +305,6 @@ export class CollaborationApi extends ApiClient {
 
       console.log('Share token validated successfully:', {
         projectId: shareLink.project_id,
-        permissions: shareLink.permissions,
         hasExpiry: !!shareLink.expires_at
       });
 

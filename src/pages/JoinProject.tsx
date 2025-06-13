@@ -89,7 +89,7 @@ const JoinProject = () => {
       
       toast({
         title: 'Successfully Joined Project!',
-        description: `You now have ${shareLink.role} access to "${shareLink.project_name}"`,
+        description: `You now have ${shareLink.role} access to "${shareLink.project.name}"`,
         duration: 5000
       });
 
@@ -227,6 +227,7 @@ const JoinProject = () => {
 
   // Ready to join state
   if (joinStep === 'ready' && shareLink) {
+    console.log('SHARELINK:', shareLink);
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Card className="w-full max-w-md p-8">
@@ -240,7 +241,7 @@ const JoinProject = () => {
 
           {/* Project Info */}
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <h3 className="font-medium text-gray-900 mb-2">{shareLink.project?.name}</h3>
+            <h3 className="font-medium text-gray-900 mb-2">{shareLink.project.name}</h3>
             {shareLink.project?.description && (
               <p className="text-sm text-gray-600 mb-3">{shareLink.project.description}</p>
             )}
@@ -267,27 +268,16 @@ const JoinProject = () => {
           <div className="space-y-3">
             <Button 
               onClick={joinProject} 
-              disabled={joinStep === 'joining'}
               className="w-full"
             >
-              {joinStep === 'joining' ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Joining Project...
-                </>
-              ) : (
-                <>
-                  <Users className="h-4 w-4 mr-2" />
-                  Join Project
-                </>
-              )}
+              <Users className="h-4 w-4 mr-2" />
+              Join Project
             </Button>
             
             <Button 
               onClick={() => navigate('/dashboard')} 
               variant="outline" 
               className="w-full"
-              disabled={joinStep === 'joining'}
             >
               Go to Dashboard
             </Button>

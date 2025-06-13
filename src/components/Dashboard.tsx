@@ -347,7 +347,7 @@ const detectLanguage = (projectName: string): string => {
       if (data?.items) {
         // Filter out the owner and map the remaining members
         const collaborators = data.items
-          .filter((item: any) => item.user_id !== ownerId)
+          .filter((item: any) => item.user_id !== user.id)
           .map((item: any) => ({
             id: item.user_id,
             email: item.user?.email || '',

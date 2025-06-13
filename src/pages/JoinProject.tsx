@@ -9,6 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, CheckCircle, XCircle, Users, Eye, Edit, AlertTriangle, RefreshCw } from 'lucide-react';
 
+type JoinStep = 'validating' | 'ready' | 'joining' | 'success' | 'error';
+
 const JoinProject = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
@@ -16,10 +18,11 @@ const JoinProject = () => {
   const { user, isReady } = useAuth();
   const { toast } = useToast();
 
+  const [isJoining, setIsJoining] = useState(false);
   const [isValidating, setIsValidating] = useState(true);
   const [shareLink, setShareLink] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [joinStep, setJoinStep] = useState<'validating' | 'ready' | 'joining' | 'success' | 'error'>('validating');
+  const [joinStep, setJoinStep] = useState<JoinStep>('validating');
 
   useEffect(() => {
     if (token && isReady) {
@@ -64,6 +67,7 @@ const JoinProject = () => {
 
     try {
       setJoinStep('joining');
+      setIsJoining(true);
       
       const { data, error } = await collaborationApi.joinProjectByToken(token, user.id);
       
@@ -85,7 +89,7 @@ const JoinProject = () => {
       
       toast({
         title: 'Successfully Joined Project!',
-        description: `You now have ${shareLink.permissions} access to "${shareLink.project?.name}"`,
+        description: `You now have ${shareLink.role} access to "${shareLink.project_name}"`,
         duration: 5000
       });
 
@@ -115,16 +119,24 @@ const JoinProject = () => {
     validateToken();
   };
 
+  const normalizePermission = (permission: string): 'viewer' | 'editor' => {
+    if (!permission) return 'viewer';
+    const normalized = permission.toString().trim().toLowerCase();
+    return normalized === 'editor' ? 'editor' : 'viewer';
+  };
+
   const getPermissionIcon = (permission: string) => {
-    return permission === 'editor' ? <Edit className="h-5 w-5" /> : <Eye className="h-5 w-5" />;
+    return normalizePermission(permission) === 'editor' 
+      ? <Edit className="h-5 w-5" /> 
+      : <Eye className="h-5 w-5" />;
   };
 
   const getPermissionText = (permission: string) => {
-    return permission === 'editor' ? 'Edit Access' : 'View Access';
+    return normalizePermission(permission) === 'editor' ? 'Edit Access' : 'View Access';
   };
 
   const getPermissionDescription = (permission: string) => {
-    return permission === 'editor' 
+    return normalizePermission(permission) === 'editor' 
       ? 'You can view, edit, and collaborate on this project'
       : 'You can view and comment on this project';
   };
@@ -176,11 +188,11 @@ const JoinProject = () => {
           </p>
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
             <div className="flex items-center justify-center space-x-2 text-green-800">
-              {getPermissionIcon(shareLink.permissions)}
-              <span className="font-medium">{getPermissionText(shareLink.permissions)}</span>
+              {getPermissionIcon(shareLink.role)}
+              <span className="font-medium">{getPermissionText(shareLink.role)}</span>
             </div>
             <p className="text-sm text-green-700 mt-1">
-              {getPermissionDescription(shareLink.permissions)}
+              {getPermissionDescription(shareLink.role)}
             </p>
           </div>
           <p className="text-sm text-gray-500">Redirecting to project...</p>
@@ -234,11 +246,11 @@ const JoinProject = () => {
             )}
             
             <div className="flex items-center space-x-2 text-sm">
-              {getPermissionIcon(shareLink.permissions)}
-              <span className="font-medium">{getPermissionText(shareLink.permissions)}</span>
+              {getPermissionIcon(shareLink.role)}
+              <span className="font-medium">{getPermissionText(shareLink.role)}</span>
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              {getPermissionDescription(shareLink.permissions)}
+              {getPermissionDescription(shareLink.role)}
             </p>
 
             {shareLink.expires_at && (

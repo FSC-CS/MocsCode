@@ -118,68 +118,74 @@ const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, project, onM
     }
   };
 
-  const handleEmailInvite = async () => {
-    if (!user) return;
+  // Updated handleEmailInvite function in ShareDialog.tsx
 
-    // Validate form
-    try {
-      emailInviteSchema.parse(emailForm);
-      setEmailErrors({});
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const newErrors: Record<string, string> = {};
-        error.errors.forEach(err => {
-          if (err.path[0]) {
-            newErrors[err.path[0] as string] = err.message;
-          }
-        });
-        setEmailErrors(newErrors);
-        return;
-      }
-    }
+const handleEmailInvite = async () => {
+  if (!user) return;
 
-    setIsInviting(true);
-    try {
-      const { data, error } = await projectMembersApi.inviteByEmail(
-        project.id,
-        emailForm.email,
-        emailForm.role,
-        user.id
-      );
-
-      if (error) {
-        toast({
-          title: 'Invitation Failed',
-          description: error.message,
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      toast({
-        title: 'Invitation Sent',
-        description: `${emailForm.email} has been invited to the project with ${emailForm.role} access.`
+  // Validate form
+  try {
+    emailInviteSchema.parse(emailForm);
+    setEmailErrors({});
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const newErrors: Record<string, string> = {};
+      error.errors.forEach(err => {
+        if (err.path[0]) {
+          newErrors[err.path[0] as string] = err.message;
+        }
       });
+      setEmailErrors(newErrors);
+      return;
+    }
+  }
 
-      // Reset form
-      setEmailForm({ email: '', role: 'viewer', message: '' });
-      
-      // Notify parent component
-      if (onMemberAdded && data) {
-        onMemberAdded(data);
-      }
+  setIsInviting(true);
+  try {
+    // Calculate expiration date if needed
+    const expiresAt = undefined; // You can add expiration logic here if needed
+    
+    const { data, error } = await collaborationApi.sendEmailInvitation(
+      project.id,
+      emailForm.email,
+      emailForm.role,
+      project.name,
+      emailForm.message || undefined,
+      expiresAt
+    );
 
-    } catch (error) {
-      console.error('Error sending invitation:', error);
+    if (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to send invitation. Please try again.',
+        title: 'Invitation Failed',
+        description: error.message,
         variant: 'destructive'
       });
-    } finally {
-      setIsInviting(false);
+      return;
     }
-  };
+
+    toast({
+      title: 'Invitation Sent! 📧',
+      description: `${emailForm.email} has been sent an invitation email with ${emailForm.role} access.`,
+      duration: 5000
+    });
+
+    // Reset form
+    setEmailForm({ email: '', role: 'viewer', message: '' });
+    
+    // Reload existing links to show the newly created one
+    await loadExistingLinks();
+
+  } catch (error) {
+    console.error('Error sending invitation:', error);
+    toast({
+      title: 'Error',
+      description: 'Failed to send invitation. Please try again.',
+      variant: 'destructive'
+    });
+  } finally {
+    setIsInviting(false);
+  }
+};
 
   // Share link handlers
   const handleLinkInputChange = (field: keyof ShareLinkForm, value: string) => {

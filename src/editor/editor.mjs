@@ -59,7 +59,7 @@ import {syntaxTree} from "@codemirror/language"
  * @param {string} opts.language - Language string (e.g. 'python', 'java', ...)
  * @param {function} opts.onChange - Callback for document changes
  */
-export function createEditorView({ parent, doc, language, onChange }) {
+export function createEditorView({ parent, doc, language, onChange, tabSize = 4, autocomplete = true }) {
   let langExt;
   switch (language) {
     case 'python': 
@@ -300,11 +300,24 @@ export function createEditorView({ parent, doc, language, onChange }) {
     state,
     parent,
   });
+
+  // Set tab size and autocomplete based on options
+  if (typeof tabSize === 'number') {
+    if (typeof window.setTabSize === 'function') {
+      window.setTabSize(tabSize);
+    }
+  }
+  if (typeof autocomplete === 'boolean') {
+    if (typeof window.setAutocompleteEnabled === 'function') {
+      window.setAutocompleteEnabled(autocomplete);
+    }
+  }
   return view;
 }
 
 // --- HTML Tag Autocomplete ---
 const htmlCompletions = htmlLanguage.data.of({
+  // ... (rest of the code remains the same)
   autocomplete: context => {
     let word = context.matchBefore(/\w*/);
     if (!word || (word.from == word.to && !context.explicit)) return null;
@@ -463,6 +476,9 @@ const tabSizeCompartment = new Compartment()
 const themeCompartment = new Compartment()
 const readOnlyCompartment = new Compartment()
 const autocompleteCompartment = new Compartment()
+
+// Export compartments for external use
+export { tabSizeCompartment, autocompleteCompartment };
 
 // Custom themes
 const lightTheme = EditorView.theme({
@@ -693,6 +709,21 @@ function setAutocompleteEnabled(enabled) {
     effects: autocompleteCompartment.reconfigure(enabled ? autocompletion() : [])
   });
 }
+
+// Dynamically update tab size and autocomplete for a given EditorView
+export function updateEditorSettings(view, { tabSize, autocomplete }) {
+  const effects = [];
+  if (typeof tabSize === 'number') {
+    effects.push(tabSizeCompartment.reconfigure(EditorState.tabSize.of(tabSize)));
+  }
+  if (typeof autocomplete === 'boolean') {
+    effects.push(autocompleteCompartment.reconfigure(autocomplete ? autocompletion() : []));
+  }
+  if (effects.length > 0) {
+    view.dispatch({ effects });
+  }
+}
+
 window.setAutocompleteEnabled = setAutocompleteEnabled;
 // Ensure global is updated for dropdown
 window.setTabSize = setTabSize;

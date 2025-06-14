@@ -4,13 +4,21 @@ import React, { useEffect, useRef } from "react";
 // We'll assume editor.bundle.js exposes a global window.CodeMirrorEditorAPI for integration
 // If not, you can adjust this import to use your modularized .mjs files directly
 
+// Dynamically import updateEditorSettings for live config changes
+let updateEditorSettings: any = null;
+import("./editor.mjs").then((mod) => {
+  updateEditorSettings = mod.updateEditorSettings;
+});
+
 interface CodeMirrorEditorProps {
   value: string;
   language: string;
   onChange: (value: string) => void;
+  tabSize?: number; // Number of spaces for tab (default 4)
+  autocomplete?: boolean; // Enable/disable autocomplete (default true)
 }
 
-const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, onChange }) => {
+const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, onChange, tabSize = 4, autocomplete = true }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<any>(null);
 
@@ -30,6 +38,8 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, on
           doc: value,
           language,
           onChange,
+          tabSize,
+          autocomplete,
         });
         viewRef.current = view;
         // Focus the editor immediately on mount so CodeMirror receives keyboard events
@@ -54,6 +64,13 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, on
       });
     }
   }, [value]);
+
+  // Live update tabSize and autocomplete settings
+  useEffect(() => {
+    if (viewRef.current && updateEditorSettings) {
+      updateEditorSettings(viewRef.current, { tabSize, autocomplete });
+    }
+  }, [tabSize, autocomplete]);
 
   // Removed global tab key handler - CodeMirror handles tab natively
 

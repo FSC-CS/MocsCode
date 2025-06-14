@@ -91,6 +91,7 @@ const ChatPanel = ({
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentRoom, setCurrentRoom] = useState('general');
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+  const [isConnected, setIsConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Handle tab visibility changes
@@ -99,50 +100,85 @@ const ChatPanel = ({
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        // Tab became visible, ensure we're connected
-        if (socket.disconnected) {
+        // Only reconnect if actually disconnected
+        if (socket.disconnected && !isConnected) {
+          console.log('Tab visible and socket disconnected, reconnecting...');
           socket.connect();
         }
       }
+      // Don't force disconnect when tab becomes hidden
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [socket]);
+  }, [socket, isConnected]);
 
   // Initialize socket connection
   useEffect(() => {
     if (!currentUser) return;
+
+    // Create a single socket instance if it doesn't exist
+    let newSocket: Socket;
+    let disconnectTimer: NodeJS.Timeout;
     
-    const newSocket = io('http://localhost:3500', {
-      withCredentials: true,
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: Infinity, // Keep trying to reconnect
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-      autoConnect: true,
-      forceNew: true,
-      closeOnBeforeunload: false // Prevent socket from closing on page unload
-    });
-    
-    setSocket(newSocket);
+    if (!socket) {
+      newSocket = io('http://localhost:3500', {
+        withCredentials: true,
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
+        autoConnect: true,
+        forceNew: false,
+        closeOnBeforeunload: false,
+        rememberUpgrade: true,
+        upgrade: true,
+        // Add a unique connection ID to help with debugging
+        query: {
+          userId: currentUser.id,
+          username: currentUser.username || 'Anonymous',
+          clientType: 'web'
+        }
+      });
+      
+      setSocket(newSocket);
+    } else {
+      newSocket = socket;
+    }
 
     // Join the general room when connected
     const onConnect = () => {
       console.log('Connected to socket server');
-      newSocket.emit('enterRoom', { 
-        name: currentUser.username || 'Anonymous',
-        room: 'general',
-        userId: currentUser.id
-      });
+      setIsConnected(true);
+      if (currentUser) {
+        // Check if we're already in a room by looking at the socket's rooms
+        // The socket is always in a room with its own ID, so we need to check for other rooms
+        const rooms = Object.keys(newSocket.rooms || {});
+        const isInRoom = rooms.some(room => room !== newSocket.id);
+        
+        if (!isInRoom) {
+          newSocket.emit('enterRoom', { 
+            name: currentUser.email || currentUser.username || 'Anonymous',
+            room: 'general',
+            userId: currentUser.id,
+            email: currentUser.email
+          });
+        }
+      }
     };
 
     // Handle connection
     newSocket.on('connect', onConnect);
+    
+    // Handle disconnection
+    newSocket.on('disconnect', (reason) => {
+      console.log('Disconnected from socket server:', reason);
+      setIsConnected(false);
+    });
 
     // Handle reconnection attempts
     newSocket.on('reconnect_attempt', (attempt) => {
@@ -159,15 +195,43 @@ const ChatPanel = ({
     };
     newSocket.on('connect_error', onConnectError);
 
-    // Cleanup on unmount
-    return () => {
-      newSocket.off('connect', onConnect);
-      newSocket.off('connect_error', onConnectError);
-      if (newSocket.connected) {
-        newSocket.disconnect();
+    // Cleanup function for when the component unmounts
+    const cleanup = () => {
+      if (!newSocket) return;
+      
+      // Only cleanup if we're the last tab
+      const isLastTab = !window.localStorage.getItem('socket:disconnecting');
+      
+      if (isLastTab) {
+        window.localStorage.setItem('socket:disconnecting', 'true');
+        
+        // Clean up listeners
+        newSocket.off('connect');
+        newSocket.off('disconnect');
+        newSocket.off('connect_error', onConnectError);
+        
+        // Disconnect after a delay to allow other tabs to take over
+        disconnectTimer = setTimeout(() => {
+          if (window.localStorage.getItem('socket:disconnecting')) {
+            newSocket.disconnect();
+            window.localStorage.removeItem('socket:disconnecting');
+          }
+        }, 1000);
       }
     };
-  }, [currentUser]);
+    
+    // Set up cleanup on window unload
+    window.addEventListener('beforeunload', cleanup);
+    
+    // Return cleanup function
+    return () => {
+      window.removeEventListener('beforeunload', cleanup);
+      if (disconnectTimer) {
+        clearTimeout(disconnectTimer);
+      }
+      cleanup();
+    };
+  }, [socket, currentUser]);
 
   // Generate a unique ID for messages
   const generateMessageId = () => {
@@ -259,12 +323,13 @@ const ChatPanel = ({
       
       socket.emit('message', {
         id: newMessage.id,
-        user: newMessage.user,
+        user: currentUser.email || currentUser.username || 'Unknown',
         userId: newMessage.userId,
         text: newMessage.message,
         timestamp: newMessage.timestamp,
         color: newMessage.color,
-        room: newMessage.room
+        room: newMessage.room,
+        email: currentUser.email
       });
       
       setMessages(prev => [...prev, newMessage]);
@@ -332,14 +397,26 @@ const ChatPanel = ({
     return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
   };
 
-  const getAvatarColor = (member: EnhancedMember): string => {
+  const getAvatarColor = (member: Partial<EnhancedMember>): string => {
     const colors = [
       '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD',
       '#D4A5A5', '#9B97B2', '#E8F7EE', '#B8F3FF', '#D5A6BD'
     ];
-    const userId = member.user_id || member.id;
-    const index = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
-    return colors[index];
+    
+    // Handle cases where member might be undefined or null
+    if (!member) return colors[0];
+    
+    // Use user_id, id, or fallback to a default value
+    const id = member.user_id || member.id || 'default';
+    
+    // Ensure we have a valid string to work with
+    if (typeof id !== 'string') return colors[0];
+    
+    // Calculate a stable index based on the ID
+    const index = id.split('')
+      .reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+      
+    return colors[Math.abs(index)];
   };
 
   const handleMemberClick = (member: EnhancedMember) => {
@@ -363,17 +440,24 @@ const ChatPanel = ({
         <h2 className="text-lg font-semibold flex items-center">
           <Users className="h-5 w-5 mr-2" />
           Chat Room
+          <div className="flex items-center ml-4 space-x-2">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className="text-xs text-gray-400">
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
         </h2>
         <div className="flex items-center space-x-2">
           <span className="text-sm text-gray-400">
             {projectMembers.length} {projectMembers.length === 1 ? 'member' : 'members'}
           </span>
           {canManageMembers && onInviteClick && (
-            <button 
+            <button
               onClick={onInviteClick}
-              className="px-3 py-1 text-xs border border-gray-600 text-gray-300 hover:bg-gray-600 rounded-md flex items-center"
+              className="ml-2 h-8 px-3 text-sm font-medium rounded-md border border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors flex items-center"
+              disabled={memberOperationStatus.type === 'adding'}
             >
-              <UserPlus className="h-3 w-3 mr-1" />
+              <UserPlus className="h-3.5 w-3.5 mr-1.5" />
               Invite
             </button>
           )}
@@ -405,21 +489,18 @@ const ChatPanel = ({
                       autoFocus
                     />
                     <div className="flex space-x-2">
-                      <Button 
-                        size="sm" 
+                      <button
                         onClick={() => saveEdit(msg.id)}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="px-3 py-1 text-sm rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
                       >
                         Save
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
+                      </button>
+                      <button
                         onClick={cancelEdit}
-                        className="border-gray-600 hover:bg-gray-700"
+                        className="px-3 py-1 text-sm rounded-md border border-gray-600 hover:bg-gray-700 text-gray-200 transition-colors"
                       >
                         Cancel
-                      </Button>
+                      </button>
                     </div>
                   </div>
                 ) : (
@@ -437,7 +518,7 @@ const ChatPanel = ({
                           </button>
                           <button 
                             onClick={() => deleteMessage(msg.id)}
-                            className="text-gray-300 hover:text-red-400"
+                            className="text-red-400 hover:bg-red-900/50 hover:text-red-300 h-8 w-8 p-0 flex items-center justify-center rounded-md"
                           >
                             <Trash className="h-3 w-3" />
                           </button>

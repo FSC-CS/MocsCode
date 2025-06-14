@@ -543,9 +543,9 @@ const handleEmailInvite = async () => {
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center space-x-2 mb-1">
-                              <Badge className={getPermissionColor(link.permissions)}>
-                                {getPermissionIcon(link.permissions)}
-                                <span className="ml-1 capitalize">{link.permissions}</span>
+                              <Badge className={getPermissionColor(link.role)}>
+                                {getPermissionIcon(link.role)}
+                                <span className="ml-1 capitalize">{link.role}</span>
                               </Badge>
                               
                               {isLinkExpired(link.expires_at) && (
@@ -561,7 +561,7 @@ const handleEmailInvite = async () => {
                               <span>{formatExpirationDate(link.expires_at)}</span>
                             </div>
                             
-                            <div className="text-xs text-gray-400 mt-1 font-mono truncate">
+                            <div className="text-xs text-gray-400 mt-1 font-mono truncate max-w-[500px]">
                               {`${window.location.origin}/join/${link.share_token}`}
                             </div>
                           </div>

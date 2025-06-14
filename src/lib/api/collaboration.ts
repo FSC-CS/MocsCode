@@ -7,7 +7,7 @@ export interface ShareableLink {
   id: string;
   project_id: string;
   share_token: string;
-  permissions: 'viewer' | 'editor';
+  role: 'viewer' | 'editor';
   expires_at?: string;
   created_by: string;
   created_at: string;

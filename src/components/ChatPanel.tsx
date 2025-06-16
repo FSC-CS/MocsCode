@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Send, User, Edit, Trash, Loader2, UserPlus, Users, AlertCircle } from 'lucide-react';
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
+import io from 'socket.io-client';
 
 // Type definitions for socket.io events
 type SocketMessage = {
@@ -63,7 +64,6 @@ interface ChatPanelProps {
     type: 'idle' | 'adding' | 'updating' | 'removing' | 'error';
     error?: Error;
     memberId?: string;
-    error?: Error;
   };
   onInviteClick?: () => void;
   onMemberClick?: (member: EnhancedMember) => void;

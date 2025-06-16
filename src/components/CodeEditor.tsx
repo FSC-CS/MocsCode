@@ -19,7 +19,6 @@ import MemberManagementDialog from './MemberManagementDialog';
 import FileExplorer from './FileExplorer';
 import OutputPanel from './OutputPanel';
 import ChatPanel from './ChatPanel';
-import CollaboratorPanel from './CollaboratorPanel';
 import SourceControlPanel from './SourceControlPanel';
 import ResizablePanel from './ResizablePanel'; // Add this import
 

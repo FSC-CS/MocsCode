@@ -1,4 +1,7 @@
 import { EditorState, Compartment, EditorSelection } from "@codemirror/state"
+
+// Compartment for dynamic tab size configuration
+const tabSizeCompartment = new Compartment();
 import { 
   autocompletion, 
   completionKeymap, 
@@ -94,6 +97,10 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
       ];
       break;
   }
+
+  // Configure autocomplete extension based on the parameter
+  const autocompleteExt = autocomplete ? [autocompletion()] : [];
+
   const state = EditorState.create({
     doc,
     extensions: [
@@ -110,12 +117,13 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
       syntaxHighlighting(defaultHighlightStyle),
       bracketMatching(),
       closeBrackets(),
-      autocompletion(),
+      ...autocompleteExt, // Use the configured autocomplete
       cursorTooltip(),
       toggleLineWrapping(),
       toggleHighlightActiveLine(),
       toggleYellowBackground(),
-      langExt,
+      ...langExt, // Language extensions first
+      tabSizeCompartment.of(EditorState.tabSize.of(tabSize)), // Tab size compartment after language
       EditorView.updateListener.of((v) => {
         if (v.docChanged && onChange) {
           onChange(v.state.doc.toString());
@@ -123,8 +131,8 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
       }),
       EditorView.theme({
         "&": { 
-          backgroundColor: "#1a1f2e", // Darker blue-gray background
-          color: "#e2e8f0", // Lighter text color for better contrast
+          backgroundColor: "#1a1f2e",
+          color: "#e2e8f0",
           height: "100%",
           "&.cm-editor": { 
             height: "100%",
@@ -139,35 +147,30 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
               height: "8px"
             },
             "&::-webkit-scrollbar-track": {
-              background: "#1e293b" // Slightly lighter than editor bg
+              background: "#1e293b"
             },
             "&::-webkit-scrollbar-thumb": {
-              background: "#334155", // Muted blue-gray
+              background: "#334155",
               borderRadius: "4px"
             },
             "&::-webkit-scrollbar-thumb:hover": {
-              background: "#475569" // Slightly lighter on hover
+              background: "#475569"
             }
           },
-          // Line numbers
           "& .cm-gutters": {
             backgroundColor: "#1a1f2e",
-            color: "#64748b", // Muted blue-gray for line numbers
+            color: "#64748b",
             borderRight: "1px solid #1e293b"
           },
-          // Active line highlight
           "& .cm-activeLine": {
             backgroundColor: "#1e293b"
           },
-          // Cursor
           "&.cm-focused .cm-cursor": {
-            borderLeft: "2px solid #60a5fa" // Bright blue cursor
+            borderLeft: "2px solid #60a5fa"
           },
-          // Selection
           "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-            backgroundColor: "#2d3a5a" // Blue-tinted selection
+            backgroundColor: "#2d3a5a"
           },
-          // Matching bracket highlight
           "&.cm-focused .cm-matchingBracket": {
             backgroundColor: "#2d3a5a",
             outline: "1px solid #60a5fa"
@@ -177,141 +180,85 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
           fontFamily: '"Fira Code", monospace', 
           fontSize: "14px",
           minHeight: "100%",
-          caretColor: "#60a5fa" // Cursor color
+          caretColor: "#60a5fa"
         },
         ".cm-lineNumbers .cm-gutterElement": {
-          padding: "0 8px 0 16px" // Better line number padding
+          padding: "0 8px 0 16px"
         },
         ".cm-line": {
-          padding: "0 8px" // Slight horizontal padding for content
+          padding: "0 8px"
         },
         ".cm-scroller": {
           overflow: "auto"
         },
-        // Syntax highlighting
-        ".cm-keyword": { color: "#93c5fd" }, // Light blue for keywords
-        ".cm-builtin": { color: "#fca5a5" }, // Light red for built-ins
-        ".cm-string": { color: "#86efac" }, // Light green for strings
-        
-        ".cm-number": { color: "#f0abfc" }, // Light purple for numbers
-        ".cm-comment": { color: "#64748b" }, // Muted blue-gray for comments
-        
-        ".cm-def": { color: "#93c5fd" }, // Light blue for definitions
-        ".cm-variable": { color: "#e2e8f0" }, // Default text color for variables
-        ".cm-variable-2": { color: "#e2e8f0" }, // Default text color for variables
-        ".cm-type-name": { color: "#93c5fd" }, // Light blue for types
-        ".cm-property": { color: "#93c5fd" }, // Light blue for properties
-        ".cm-operator": { color: "#e2e8f0" }, // Default text color for operators
-        
-        // For Python specific
+        ".cm-keyword": { color: "#93c5fd" },
+        ".cm-builtin": { color: "#fca5a5" },
+        ".cm-string": { color: "#86efac" },
+        ".cm-number": { color: "#f0abfc" },
+        ".cm-comment": { color: "#64748b" },
+        ".cm-def": { color: "#93c5fd" },
+        ".cm-variable": { color: "#e2e8f0" },
+        ".cm-variable-2": { color: "#e2e8f0" },
+        ".cm-type-name": { color: "#93c5fd" },
+        ".cm-property": { color: "#93c5fd" },
+        ".cm-operator": { color: "#e2e8f0" },
         ".cm-python .cm-variable": { color: "#e2e8f0" },
         ".cm-python .cm-builtin": { color: "#fca5a5" },
-        
-        // For JavaScript specific
         ".cm-javascript .cm-variable": { color: "#e2e8f0" },
         ".cm-javascript .cm-property": { color: "#93c5fd" },
-        
-        // For HTML specific
         ".cm-tag": { color: "#93c5fd" },
         ".cm-attribute": { color: "#f0abfc" },
-        
-        // For Java/C++ specific
         ".cm-type": { color: "#93c5fd" },
         ".cm-class-name": { color: "#93c5fd" }
       }),
-      // All keymaps combined
       keymap.of([
-        // IMPORTANT: Custom Tab handling should come FIRST
-        // Tab handling - ensure tab works for both indentation and completion
         {
           key: 'Tab',
-          run: (target) => {
-            // First try to accept the current completion
-            if (acceptCompletion(target)) return true;
+          run: (view) => {
+            if (acceptCompletion(view)) return true;
             
-            // If no completion was active, use default indentation
-            return indentWithTab(target);
-          }
-        },
-        // Shift-Tab for outdent
-        { 
-          key: 'Shift-Tab',
-          run: (target) => {
-            if (target.state.selection.ranges.some(r => !r.empty)) {
-              // If there's a selection, outdent the selection
-              const { state } = target;
-              const changes = state.changeByRange(range => {
-                const line = state.doc.lineAt(range.from);
-                const before = state.doc.slice(line.from, range.from).toString();
-                const indent = /^\s*/.exec(before)[0];
-                if (!indent) return { range };
-                const drop = Math.min(
-                  indent.length >= 4 && indent.startsWith('    ') ? 4 : 2,
-                  indent.length
-                );
-                return {
-                  changes: { from: line.from, to: line.from + drop, insert: '' },
-                  range: EditorSelection.cursor(Math.max(line.from, range.from - drop))
-                };
-              });
-              target.dispatch(changes);
-              return true;
-            }
-            return false;
-          }
-        },
-        // Standard keymaps AFTER custom handlers
-        ...defaultKeymap,
-        ...historyKeymap,
-        ...closeBracketsKeymap,
-        ...completionKeymap,
-        ...foldKeymap,
-        ...searchKeymap,
-        ...lintKeymap,
-        // Custom keybindings can be added here
-      ]),
-      // Ensure editor is focusable and handles keyboard events
-      EditorView.domEventHandlers({
-        keydown: (e, view) => {
-          // Prevent tab from leaving the editor
-          if (e.key === 'Tab') {
-            e.preventDefault();
-            if (e.shiftKey) {
-              // Handle Shift+Tab for outdent
-              view.dispatch({
-                selection: { anchor: view.state.selection.main.anchor - 1 },
-                scrollIntoView: true
-              });
-            } else {
-              // Handle regular Tab for indent
-              view.dispatch({
-                changes: { from: view.state.selection.main.head, insert: '  ' },
-                selection: { anchor: view.state.selection.main.head + 2 },
-                scrollIntoView: true
-              });
-            }
+            const tabSize = view.state.tabSize;
+            const spaces = ' '.repeat(tabSize);
+            const cursorPosition = view.state.selection.main.from;
+            
+            view.dispatch({
+              changes: { 
+                from: cursorPosition, 
+                insert: spaces 
+              },
+              selection: { 
+                anchor: cursorPosition + tabSize 
+              }
+            });
+            
             return true;
           }
-        }
-      })
+        },
+        {
+          key: "Shift-Tab", 
+          run: (view) => {
+            return indentWithTab.shift(view);
+          }
+        },
+        ...closeBracketsKeymap,
+        ...defaultKeymap.filter(binding => binding.key !== 'Tab'),
+        ...searchKeymap,
+        ...historyKeymap,
+        ...foldKeymap,
+        ...completionKeymap,
+        ...lintKeymap
+      ]),
     ]
   });
+  
   const view = new EditorView({
     state,
     parent,
   });
 
-  // Set tab size and autocomplete based on options
-  if (typeof tabSize === 'number') {
-    if (typeof window.setTabSize === 'function') {
-      window.setTabSize(tabSize);
-    }
-  }
-  if (typeof autocomplete === 'boolean') {
-    if (typeof window.setAutocompleteEnabled === 'function') {
-      window.setAutocompleteEnabled(autocomplete);
-    }
-  }
+  // Remove the problematic calls to window.setTabSize and window.setAutocompleteEnabled
+  // The configuration is now handled directly in the state creation above
+  
   return view;
 }
 
@@ -472,13 +419,12 @@ const jsDocCompletions = javascriptLanguage.data.of({
 
 // Create compartments for dynamic configuration
 const languageCompartment = new Compartment()
-const tabSizeCompartment = new Compartment()
 const themeCompartment = new Compartment()
 const readOnlyCompartment = new Compartment()
 const autocompleteCompartment = new Compartment()
 
 // Export compartments for external use
-export { tabSizeCompartment, autocompleteCompartment };
+export { autocompleteCompartment };
 
 // Custom themes
 const lightTheme = EditorView.theme({
@@ -614,34 +560,41 @@ const state = EditorState.create({
     
     // Keymaps for various features
     keymap.of([
-      // Tab key handling - simplified and more reliable implementation
       {
-        key: "Tab",
+        key: 'Tab',
         run: (view) => {
-          // First try to accept completion
+          // First, check if autocomplete is available and accept it
           if (acceptCompletion(view)) return true;
           
-          // If no completion, use the standard indentation behavior
-          const tabSize = view.state.facet(EditorState.tabSize) || 2;
-          const tabString = " ".repeat(tabSize);
-          const {state} = view;
+          // Get current tab size from the editor state
+          const tabSize = view.state.tabSize;
           
-          // Use the standard indentation behavior for selections
-          if (state.selection.ranges.some(r => !r.empty)) {
-            return indentWithTab(view);
-          }
+          // Create a string of spaces equal to tab size
+          const spaces = ' '.repeat(tabSize);
           
-          // For single cursor, insert spaces
+          // Get the current cursor position
+          const cursorPosition = view.state.selection.main.from;
+          
+          // Insert spaces at cursor position and move cursor forward
           view.dispatch({
-            changes: {from: state.selection.main.head, insert: tabString},
-            selection: {anchor: state.selection.main.head + tabString.length},
-            userEvent: "input"
+            changes: { 
+              from: cursorPosition, 
+              insert: spaces 
+            },
+            selection: { 
+              anchor: cursorPosition + tabSize 
+            }
           });
-          return true;
-        },
-        shift: indentWithTab
+          
+          return true; // Indicate we handled the key
+        }
       },
-      // Filter out the default Tab handler to avoid conflicts
+      {
+        key: "Shift-Tab", 
+        run: (view) => {
+          return indentWithTab.shift(view);
+        }
+      },
       ...closeBracketsKeymap,
       ...defaultKeymap.filter(binding => binding.key !== 'Tab'),
       ...searchKeymap,
@@ -698,10 +651,16 @@ function setLanguage(language) {
   }
 }
 
-function setTabSize(size) {
-  editor.dispatch({
-    effects: tabSizeCompartment.reconfigure(EditorState.tabSize.of(size))
+// Dynamically update tab size for a given EditorView
+function updateTabSize(view, newSize) {
+  view.dispatch({
+    effects: tabSizeCompartment.reconfigure(EditorState.tabSize.of(newSize))
   });
+}
+
+// For legacy global usage
+function setTabSize(size) {
+  updateTabSize(editor, size);
 }
 // Autocomplete toggle
 function setAutocompleteEnabled(enabled) {
@@ -723,6 +682,9 @@ export function updateEditorSettings(view, { tabSize, autocomplete }) {
     view.dispatch({ effects });
   }
 }
+
+// Export updateTabSize for external usage
+export { updateTabSize };
 
 window.setAutocompleteEnabled = setAutocompleteEnabled;
 // Ensure global is updated for dropdown

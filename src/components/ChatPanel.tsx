@@ -63,6 +63,7 @@ interface ChatPanelProps {
     type: 'idle' | 'adding' | 'updating' | 'removing' | 'error';
     error?: Error;
     memberId?: string;
+    error?: Error;
   };
   onInviteClick?: () => void;
   onMemberClick?: (member: EnhancedMember) => void;

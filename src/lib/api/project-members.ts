@@ -47,7 +47,6 @@ export class ProjectMembersApi extends ApiClient {
         project_id: row.project_id,
         user_id: row.user_id,
         role: row.role,
-        permissions: row.permissions,
         invited_by: row.invited_by,
         joined_at: row.joined_at,
         user: row.user_email ? {
@@ -270,7 +269,6 @@ export class ProjectMembersApi extends ApiClient {
         .from(this.table)
         .update({ 
           role: newRole,
-          permissions: { updated_at: new Date().toISOString() }
         })
         .eq('id', memberId)
         .select()
@@ -334,7 +332,7 @@ export class ProjectMembersApi extends ApiClient {
     try {
       // Use our helper function
       const { data: access, error } = await this.client
-        .rpc<ProjectAccess>('check_project_access', { 
+        .rpc<{ user_role: 'owner' | 'editor' | 'viewer' }>('check_project_access', { 
           p_project_id: projectId,
           p_user_id: userId 
         })

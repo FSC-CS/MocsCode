@@ -1,4 +1,4 @@
-// Updated collaboration.ts - Fix function call and error handling
+// lib/api/collaboration.ts - Updated to use Edge Function
 
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, PaginatedResponse, PaginationParams } from './types';
@@ -7,7 +7,7 @@ export interface ShareableLink {
   id: string;
   project_id: string;
   share_token: string;
-  permissions: 'viewer' | 'editor';
+  role: 'viewer' | 'editor';
   expires_at?: string;
   created_by: string;
   created_at: string;
@@ -21,7 +21,125 @@ export class CollaborationApi extends ApiClient {
   }
 
   /**
-   * FIXED: Join project using corrected function call
+   * Send invitation by email using Supabase Edge Function
+   * This is the main method for sending email invitations
+   */
+  async sendEmailInvitation(
+    projectId: string,
+    email: string,
+    permissions: 'viewer' | 'editor',
+    projectName: string,
+    message?: string,
+    expiresAt?: Date
+  ): Promise<ApiResponse<{ shareLink: ShareableLink; emailSent: boolean }>> {
+    try {
+      console.log(`Sending email invitation to ${email} for project ${projectName}`);
+
+      // Get the current session to include in the request
+      const { data: { session } } = await this.client.auth.getSession();
+      
+      if (!session) {
+        return {
+          data: null,
+          error: new Error('Not authenticated')
+        };
+      }
+
+      // Prepare the request payload
+      const payload = {
+        projectId,
+        email,
+        permissions,
+        message,
+        expiresAt: expiresAt?.toISOString()
+      };
+
+      console.log('Sending request to Edge Function with payload:', JSON.stringify(payload, null, 2));
+      
+      try {
+        const response = await fetch(`${this.client.functions.url}/send-invitation-email`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+
+        const responseText = await response.text();
+        let data;
+        
+        try {
+          data = responseText ? JSON.parse(responseText) : null;
+        } catch (e) {
+          console.error('Failed to parse response as JSON:', responseText);
+          throw new Error(`Invalid JSON response: ${responseText}`);
+        }
+
+        if (!response.ok) {
+          const errorDetails = {
+            status: response.status,
+            statusText: response.statusText,
+            url: response.url,
+            headers: Object.fromEntries(response.headers.entries()),
+            data: data,
+            responseText: responseText
+          };
+          console.error('Edge Function returned error:', JSON.stringify(errorDetails, null, 2));
+          
+          // Try to extract a meaningful error message
+          let errorMessage = `Request failed with status ${response.status}`;
+          if (data?.error?.message) {
+            errorMessage = data.error.message;
+          } else if (typeof data === 'string') {
+            errorMessage = data;
+          } else if (data && typeof data === 'object') {
+            errorMessage = JSON.stringify(data);
+          }
+          
+          return {
+            data: null,
+            error: new Error(errorMessage)
+          };
+        }
+
+        return { data, error: null };
+      } catch (error) {
+        console.error('Error calling Edge Function:', error);
+        return {
+          data: null,
+          error: error instanceof Error ? error : new Error('Failed to send email invitation')
+        };
+      }
+
+      if (!data.success) {
+        return {
+          data: null,
+          error: new Error(data.error || 'Failed to send email invitation')
+        };
+      }
+
+      console.log('Email invitation sent successfully');
+
+      return {
+        data: {
+          shareLink: data.shareLink,
+          emailSent: true
+        },
+        error: null
+      };
+
+    } catch (error) {
+      console.error('Error sending email invitation:', error);
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error('Failed to send email invitation')
+      };
+    }
+  }
+
+  /**
+   * Join project using corrected function call
    */
   async joinProjectByToken(
     shareToken: string,
@@ -146,9 +264,10 @@ export class CollaborationApi extends ApiClient {
           )
         `)
         .eq('share_token', token)
-        .eq('share_type', 'link')
         .eq('is_active', true)
         .single();
+
+      console.log('RESULT:', data);
 
       if (error) {
         if (error.code === 'PGRST116') { // No rows returned
@@ -186,7 +305,6 @@ export class CollaborationApi extends ApiClient {
 
       console.log('Share token validated successfully:', {
         projectId: shareLink.project_id,
-        permissions: shareLink.permissions,
         hasExpiry: !!shareLink.expires_at
       });
 
@@ -205,7 +323,7 @@ export class CollaborationApi extends ApiClient {
   }
 
   /**
-   * Generate a new shareable link for a project
+   * Generate a new shareable link for a project (without email)
    */
   async generateShareableLink(
     projectId: string,
@@ -217,18 +335,26 @@ export class CollaborationApi extends ApiClient {
       console.log('Generating shareable link for project:', projectId, 'with permissions:', permissions);
 
       // Generate a cryptographically secure token
-      const shareToken = this.generateSecureToken();
-      const now = new Date().toISOString();
+      const { data: tokenResult, error: tokenError } = await this.client
+        .rpc('generate_secure_token');
+
+      if (tokenError || !tokenResult) {
+        return {
+          data: null,
+          error: new Error('Failed to generate secure token')
+        };
+      }
+
+      const shareToken = tokenResult;
 
       const linkData = {
         project_id: projectId,
         share_token: shareToken,
-        permissions,
+        role: permissions, // Note: using 'role' to match your schema
         expires_at: expiresAt?.toISOString(),
         created_by: createdBy,
-        created_at: now,
-        is_active: true,
-        share_type: 'link' as const
+        created_at: new Date().toISOString(),
+        is_active: true
       };
 
       const { data, error } = await this.client
@@ -283,7 +409,6 @@ export class CollaborationApi extends ApiClient {
         .from(this.table)
         .select('*', { count: 'exact' })
         .eq('project_id', projectId)
-        .eq('share_type', 'link')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .range(start, start + per_page - 1);
@@ -356,27 +481,6 @@ export class CollaborationApi extends ApiClient {
         data: null,
         error: error instanceof Error ? error : new Error('An unexpected error occurred while revoking share link')
       };
-    }
-  }
-
-  /**
-   * Generate a cryptographically secure token for share links
-   */
-  private generateSecureToken(): string {
-    // Generate a secure random token
-    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-      // Browser environment
-      const array = new Uint8Array(32);
-      crypto.getRandomValues(array);
-      return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-    } else {
-      // Fallback for older browsers
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-      let result = '';
-      for (let i = 0; i < 64; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return result;
     }
   }
 }

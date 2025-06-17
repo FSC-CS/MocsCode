@@ -21,32 +21,43 @@ interface CodeMirrorEditorProps {
 const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, onChange, tabSize = 4, autocomplete = true }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<any>(null);
+  // --- Fix: sessionRef and latestOnChangeRef ---
+  const sessionRef = useRef(0);
+  const latestOnChangeRef = useRef(onChange);
+
+  // Always keep latest onChange in the ref
+  useEffect(() => {
+    latestOnChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
-    let view: any;
+    let cancelled = false;
+    const thisSession = ++sessionRef.current;
+
     if (editorRef.current) {
-      // Dynamically import the editor logic
       import("./editor.mjs").then((mod) => {
-        // Initialize CodeMirror using your logic
-        // mod.createEditorView should be a function you expose for React integration
+        if (cancelled || thisSession !== sessionRef.current) return;
+        // Wrap onChange so it always uses the latest handler
+        const safeOnChange = (val: string) => {
+          latestOnChangeRef.current(val);
+        };
         if (viewRef.current) {
-          // If an editor already exists, destroy it
           viewRef.current.destroy();
         }
-        view = mod.createEditorView({
+        const view = mod.createEditorView({
           parent: editorRef.current,
           doc: value,
           language,
-          onChange,
+          onChange: safeOnChange,
           tabSize,
           autocomplete,
         });
         viewRef.current = view;
-        // Focus the editor immediately on mount so CodeMirror receives keyboard events
         view.focus();
       });
     }
     return () => {
+      cancelled = true;
       if (viewRef.current) {
         viewRef.current.destroy();
         viewRef.current = null;

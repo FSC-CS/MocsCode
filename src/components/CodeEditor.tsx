@@ -609,8 +609,6 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   };
 
   const closeFile = (index: number) => {
-    if (openFiles.length === 1) return;
-    
     const newOpenFiles = openFiles.filter((_, i) => i !== index);
     setOpenFiles(newOpenFiles);
     
@@ -915,7 +913,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
                 >
                   <FileText className="h-3 w-3 flex-shrink-0" />
                   <span className="truncate">{file.name}</span>
-                  {openFiles.length > 1 && (
+                  {openFiles.length > 0 && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -937,15 +935,27 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
           <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
             {/* Editor Section */}
             <div className="overflow-hidden" style={{ height: editorHeight, minHeight: 100 }}>
-              {activeFile && (
-                <CodeMirrorEditor
-                  value={activeFile.content}
-                  language={activeFile.language}
-                  onChange={updateFileContent}
-                  tabSize={tabSize}
-                  autocomplete={autocomplete}
-                />
-              )}
+              {openFiles.length === 0 ? (
+  <div className="flex flex-col items-center justify-center h-full w-full text-center select-none">
+    <div className="mx-auto max-w-md p-8 rounded-lg bg-gray-900/80 border border-gray-700 shadow-lg">
+      <h2 className="text-2xl font-bold mb-2 text-blue-400">Welcome to the Code Editor</h2>
+      <p className="text-gray-300 mb-4">To get started, open or create a file from the file explorer panel on the left.</p>
+      <div className="flex justify-center">
+        <FileText className="h-10 w-10 text-blue-400" />
+      </div>
+    </div>
+  </div>
+) : (
+  activeFile && (
+    <CodeMirrorEditor
+      value={activeFile.content}
+      language={activeFile.language}
+      onChange={updateFileContent}
+      tabSize={tabSize}
+      autocomplete={autocomplete}
+    />
+  )
+)}
             </div>
 
             {/* Resize Handle */}

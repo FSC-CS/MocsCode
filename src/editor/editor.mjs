@@ -2,6 +2,7 @@ import { EditorState, Compartment, EditorSelection } from "@codemirror/state"
 
 // Compartment for dynamic tab size configuration
 const tabSizeCompartment = new Compartment();
+const autocompleteCompartment = new Compartment();
 import { 
   autocompletion, 
   completionKeymap, 
@@ -99,13 +100,23 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
   }
 
   // Configure autocomplete extension based on the parameter
-  const autocompleteExt = autocomplete ? [autocompletion()] : [];
+  const autocompleteExt = autocomplete ? [
+    autocompleteCompartment.of(autocompletion({ override: [
+      jsDocCompletions,
+      javascriptCompletions,
+      htmlCompletions,
+      pythonCompletions,
+      cppCompletions,
+      javaCompletions
+    ]}))
+  ] : [];
 
   const state = EditorState.create({
     doc,
     extensions: [
       lineNumbers(),
       foldGutter(),
+      ...autocompleteExt,
       highlightSpecialChars(),
       history(),
       drawSelection(),
@@ -117,7 +128,6 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
       syntaxHighlighting(defaultHighlightStyle),
       bracketMatching(),
       closeBrackets(),
-      ...autocompleteExt, // Use the configured autocomplete
       cursorTooltip(),
       toggleLineWrapping(),
       toggleHighlightActiveLine(),
@@ -262,9 +272,31 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
   return view;
 }
 
+// --- JavaScript Completions ---
+const javascriptCompletions = javascriptLanguage.data.of({
+  autocomplete: context => {
+    let word = context.matchBefore(/\w*/);
+    if (!word || (word.from == word.to && !context.explicit)) return null;
+    return {
+      from: word.from,
+      options: [
+        {label: "function", type: "keyword", apply: "function ${1:name}(${2:params}) {\n  ${0}\n}"},
+        {label: "const", type: "keyword", apply: "const ${1:name} = ${2:value};"},
+        {label: "let", type: "keyword", apply: "let ${1:name} = ${2:value};"},
+        {label: "if", type: "keyword", apply: "if (${1:condition}) {\n  ${0}\n}"},
+        {label: "for", type: "keyword", apply: "for (let ${1:i} = 0; ${1:i} < ${2:length}; ${1:i}++) {\n  ${0}\n}"},
+        {label: "while", type: "keyword", apply: "while (${1:condition}) {\n  ${0}\n}"},
+        {label: "return", type: "keyword", apply: "return ${1:value};"},
+        {label: "console.log", type: "function", apply: "console.log(${1:value});"},
+        {label: "import", type: "keyword", apply: "import { ${1:module} } from '${2:module}';"},
+        {label: "export", type: "keyword", apply: "export ${1:const|let|function} ${2:name};"}
+      ]
+    };
+  }
+});
+
 // --- HTML Tag Autocomplete ---
 const htmlCompletions = htmlLanguage.data.of({
-  // ... (rest of the code remains the same)
   autocomplete: context => {
     let word = context.matchBefore(/\w*/);
     if (!word || (word.from == word.to && !context.explicit)) return null;
@@ -421,10 +453,9 @@ const jsDocCompletions = javascriptLanguage.data.of({
 const languageCompartment = new Compartment()
 const themeCompartment = new Compartment()
 const readOnlyCompartment = new Compartment()
-const autocompleteCompartment = new Compartment()
 
 // Export compartments for external use
-export { autocompleteCompartment };
+export { autocompleteCompartment, javascriptCompletions, htmlCompletions, pythonCompletions, cppCompletions, javaCompletions, jsDocCompletions };
 
 // Custom themes
 const lightTheme = EditorView.theme({
@@ -530,11 +561,14 @@ const state = EditorState.create({
     closeBrackets(),
     
     // Autocompletion (toggled via compartment)
-    autocompleteCompartment.of(autocompletion()),
-    jsDocCompletions,
-    javaCompletions,
-    pythonCompletions,
-    cppCompletions,
+    autocompleteCompartment.of(autocompletion({ override: [
+      jsDocCompletions,
+      javascriptCompletions,
+      htmlCompletions,
+      pythonCompletions,
+      cppCompletions,
+      javaCompletions
+    ]})),
     
     // Line highlighting
     highlightActiveLine(),
@@ -664,8 +698,22 @@ function setTabSize(size) {
 }
 // Autocomplete toggle
 function setAutocompleteEnabled(enabled) {
+  if (!editor) {
+    console.error('Editor not initialized');
+    return;
+  }
+  
   editor.dispatch({
-    effects: autocompleteCompartment.reconfigure(enabled ? autocompletion() : [])
+    effects: autocompleteCompartment.reconfigure(
+      enabled ? autocompletion({ override: [
+        jsDocCompletions,
+        javascriptCompletions,
+        htmlCompletions,
+        pythonCompletions,
+        cppCompletions,
+        javaCompletions
+      ]}) : []
+    )
   });
 }
 

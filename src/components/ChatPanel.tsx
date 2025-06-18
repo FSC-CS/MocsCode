@@ -6,8 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Send, User, Edit, Trash, Loader2, UserPlus, Users, AlertCircle } from 'lucide-react';
 import { Socket } from 'socket.io-client';
 import io from 'socket.io-client';
+import { ChatMessageApi, ChatRoomApi } from '@/lib/api/chat';
+import { supabase } from '@/lib/supabase';
+import { ApiConfig, ChatMessage } from '@/lib/api/types';
 
-// Type definitions for socket.io events
 type SocketMessage = {
   id: string;
   user: string;
@@ -90,12 +92,130 @@ const ChatPanel = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [currentRoom, setCurrentRoom] = useState('general');
+  const [currentRoom, setCurrentRoom] = useState('General Discussion');
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [isConnected, setIsConnected] = useState(false);
+  const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Handle tab visibility changes
+  // Chat API instances
+  const chatApi = React.useMemo(() => new ChatMessageApi({ client: supabase }), []);
+  const chatRoomApi = React.useMemo(() => new ChatRoomApi({ client: supabase }), []);
+
+  // Fetch messages from Supabase on mount and room change
+  // NOTE: projectId must be available in scope (from props or context)
+  useEffect(() => {
+    let mounted = true;
+    async function fetchMessages() {
+      setLoading(true);
+      // You may need to get projectId from props, context, or another source
+      // For this example, we assume it's available as a prop
+      if (!projectMembers || projectMembers.length === 0) {
+        setLoading(false);
+        return;
+      }
+      // Try to infer projectId from projectMembers
+      const projectId = projectMembers[0]?.project_id;
+      const res = await chatApi.listByRoomNameAndProject(
+        currentRoom,
+        projectId,
+        chatRoomApi,
+        { page: 1, per_page: 50 },
+        { field: 'created_at', direction: 'asc' }
+      );
+      if (mounted && res && res.data) {
+  // Normalize messages for UI compatibility
+  setMessages(
+    res.data.items.map(msg => ({
+      ...msg,
+      timestamp: msg.created_at,
+      message: msg.content,
+      user: msg.user_id, // fallback if user field missing
+    }))
+  );
+}
+      setLoading(false);
+    }
+    if (currentRoom) fetchMessages();
+    return () => { mounted = false; };
+  }, [currentRoom, chatApi, chatRoomApi, projectMembers]);
+
+  // Send a message to Supabase
+  const sendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!message.trim() || !currentUser) return;
+    setLoading(true);
+    // Infer projectId from projectMembers
+    const projectId = projectMembers[0]?.project_id;
+    // Resolve room id by name and project
+    const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, projectId);
+    if (!roomId) {
+      setLoading(false);
+      return;
+    }
+    const res = await chatApi.create<ChatMessage>({
+      room_id: roomId,
+      user_id: currentUser.id,
+      content: message,
+      message_type: 'text',
+      metadata: null,
+      reply_to_id: null,
+      is_deleted: false,
+    });
+    if (res.data) {
+      // Use local info to avoid UI fallback issues
+      setMessages((msgs) => [
+      ...msgs,
+      {
+        id: res.data.id,
+        user: currentUser.id, // for projectMembers lookup
+        userId: currentUser.id,
+        message: message, // use local message text
+        timestamp: new Date().toISOString(),
+        isOwn: true,
+        color: currentUser.color || '#4ECDC4', // fallback color if available
+        room: currentRoom,
+      }
+    ]);
+    }
+    setMessage('');
+    setLoading(false);
+  };
+
+  // Edit a message in Supabase
+  const saveEdit = async (messageId: string) => {
+    setLoading(true);
+    const msg = messages.find((m) => m.id === messageId);
+    if (!msg) return;
+    const res = await chatApi.update<ChatMessage>(messageId, { content: editText });
+    if (res.data) setMessages((msgs) => msgs.map((m) => m.id === messageId ? { ...m, content: editText } : m));
+    setEditingId(null);
+    setEditText('');
+    setLoading(false);
+  };
+
+  // Soft-delete a message in Supabase
+  const deleteMessage = async (messageId: string) => {
+    setLoading(true);
+    await chatApi.softDelete(messageId, currentUser?.id || '');
+    setMessages((msgs) => msgs.filter((m) => m.id !== messageId));
+    setLoading(false);
+  };
+
+  // Start editing
+  const startEditing = (messageId: string, currentText: string) => {
+    setEditingId(messageId);
+    setEditText(currentText);
+  };
+
+  // Cancel editing
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditText('');
+  };
+
+  // Handle typing (keep as-is for now)
+
   useEffect(() => {
     if (!socket) return;
 
@@ -261,7 +381,7 @@ const ChatPanel = ({
           timestamp: new Date().toISOString(),
           color: msg.color,
           isOwn: msg.userId === currentUser.id,
-          room: msg.room || 'general'
+          room: msg.room || 'General Discussion'
         }];
       });
     };
@@ -306,39 +426,6 @@ const ChatPanel = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const sendMessage = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    
-    if (message.trim() && socket && currentUser) {
-      const messageId = generateMessageId();
-      const newMessage: ChatMessage = {
-        id: messageId,
-        user: currentUser.username || 'Unknown',
-        userId: currentUser.id || '',
-        message: message.trim(),
-        timestamp: new Date().toISOString(),
-        color: getAvatarColor({ user_id: currentUser.id } as any),
-        room: currentRoom,
-        isOwn: true
-      };
-      
-      socket.emit('message', {
-        id: newMessage.id,
-        user: currentUser.email || currentUser.username || 'Unknown',
-        userId: newMessage.userId,
-        text: newMessage.message,
-        timestamp: newMessage.timestamp,
-        color: newMessage.color,
-        room: newMessage.room,
-        email: currentUser.email
-      });
-      
-      setMessages(prev => [...prev, newMessage]);
-      setMessage('');
-      setIsTyping(false);
-    }
-  };
-
   const handleTyping = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
     if (socket && currentUser) {
@@ -347,28 +434,6 @@ const ChatPanel = ({
         socket.emit('activity', currentUser.username || 'Anonymous');
       }
     }
-  };
-
-  const startEditing = (messageId: string, currentText: string) => {
-    setEditingId(messageId);
-    setEditText(currentText);
-  };
-
-  const saveEdit = (messageId: string) => {
-    setMessages(messages.map(msg => 
-      msg.id === messageId ? { ...msg, message: editText } : msg
-    ));
-    setEditingId(null);
-    setEditText('');
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditText('');
-  };
-
-  const deleteMessage = (messageId: string) => {
-    setMessages(messages.filter(msg => msg.id !== messageId));
   };
 
   const getAccessLevelText = (level: string) => {
@@ -477,7 +542,10 @@ const ChatPanel = ({
             >
               {!msg.isOwn && (
                 <div className="font-semibold text-sm" style={{ color: msg.color }}>
-                  {msg.user}
+                  {(() => {
+  const member = projectMembers.find(m => m.user_id === msg.user || m.user_id === msg.userId || m.user?.id === msg.user || m.user?.id === msg.userId);
+  return member ? getDisplayName(member) : (msg.user || msg.userId || 'Unknown');
+})()}
                 </div>
               )}
               <div className="text-sm">

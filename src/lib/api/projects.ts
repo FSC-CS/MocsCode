@@ -150,7 +150,6 @@ export class ProjectsApi extends ApiClient {
             description: data.description,
             owner_id: data.owner_id,
             is_public: data.is_public,
-            template_id: data.template_id
           }
         ])
         .select()

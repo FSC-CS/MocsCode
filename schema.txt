@@ -130,7 +130,6 @@ CREATE TABLE public.projects (
   description text,
   owner_id uuid NOT NULL,
   is_public boolean DEFAULT false,
-  template_id uuid,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT projects_pkey PRIMARY KEY (id),

@@ -22,7 +22,6 @@ export type Project = {
   description?: string;
   owner_id: string;  // Match database column name
   is_public: boolean;  // Match database column name
-  template_id?: string;
   created_at: string;
   updated_at: string;
 };
@@ -90,3 +89,24 @@ export type PaginatedResponse<T> = ApiResponse<{
   per_page: number;
 }>;
 
+// === Chat feature types for chat API integration ===
+export type ChatRoom = {
+  id: string;
+  project_id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  room_id: string;
+  user_id: string;
+  content: string;
+  message_type: string;
+  metadata: Record<string, any> | null;
+  reply_to_id?: string | null;
+  created_at: string;
+  updated_by?: string | null;
+  is_deleted: boolean;
+};

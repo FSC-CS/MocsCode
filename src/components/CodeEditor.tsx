@@ -7,6 +7,7 @@ import CollaboratorPanel from '@/components/CollaboratorPanel';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings } from 'lucide-react';
+import { FaSave } from 'react-icons/fa';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -865,7 +866,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
                 variant="outline"
                 className="border-gray-600 text-gray-600 hover:bg-gray-700 hover:text-white"
               >
-                <Check className="h-4 w-4 mr-2" />
+                <FaSave className="h-4 w-4 mr-2" />
                 Save
               </Button>
             )}

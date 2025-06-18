@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { User, Crown, Eye, Edit, Loader2, AlertCircle, UserPlus } from 'lucide-react';
+import { User, Crown, Eye, Edit, Loader2, AlertCircle, UserPlus, Wifi } from 'lucide-react';
 import { useApi } from '@/contexts/ApiContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { ProjectMember } from '@/lib/api/types';
+import { presenceService } from '@/lib/presence';
 
 interface EnhancedCollaborator extends ProjectMember {
   user?: {
@@ -39,18 +40,50 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
   const { toast } = useToast();
 
   // State management
-  const [collaborators, setCollaborators] = useState<EnhancedCollaborator[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [memberCount, setMemberCount] = useState(0);
-  const [canManageMembers, setCanManageMembers] = useState(false);
+  const [collaborators, setCollaborators] = React.useState<EnhancedCollaborator[]>([]);
+  const [isLoading, setIsLoading] = React.useState<boolean>(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [onlineUsers, setOnlineUsers] = React.useState<Set<string>>(new Set());
+  const [canManageMembers, setCanManageMembers] = React.useState<boolean>(false);
+
+  // Initialize presence service when component mounts
+  React.useEffect(() => {
+    if (!user?.id) return;
+    
+    // Initialize presence service
+    presenceService.initialize(user.id, projectId);
+    
+    // Clean up on unmount or when user/project changes
+    return () => {
+      // Only clean up if this is the last component using the service
+      // In a real app, you'd have more sophisticated cleanup logic
+      setTimeout(() => {
+        presenceService.cleanup();
+      }, 1000); // Small delay to handle rapid re-renders
+    };
+  }, [user?.id, projectId]);
 
   // Load collaborators when component mounts or projectId changes
   useEffect(() => {
-    if (projectId && user) {
-      loadCollaborators();
-      checkManagementPermissions();
-    }
+    let isMounted = true;
+    let unsubscribe: (() => void) | null = null;
+
+    const loadData = async () => {
+      if (!projectId || !user) return;
+      
+      await loadCollaborators();
+      await checkManagementPermissions();
+    };
+
+    loadData();
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [projectId, user]);
 
   // Refresh when refreshTrigger prop changes (e.g., after adding new member)
@@ -58,7 +91,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
     if (refreshTrigger && projectId && user) {
       loadCollaborators();
     }
-  }, [refreshTrigger]);
+  }, [refreshTrigger, projectId, user]);
 
   const loadCollaborators = async () => {
     if (!user || !projectId) return;
@@ -79,35 +112,59 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
         toast({
           title: 'Error',
           description: 'Failed to load project collaborators',
-          variant: 'destructive'
+          variant: 'destructive' as const
         });
         return;
       }
 
       const members = data?.items || [];
       
-      // Transform members to include mock real-time data for now
-      // In a real implementation, this would come from a WebSocket or real-time service
-      const enhancedMembers: EnhancedCollaborator[] = members.map(member => ({
-        ...member,
-        isOnline: Math.random() > 0.3, // Mock online status
-        cursor: Math.random() > 0.7 ? { 
-          line: Math.floor(Math.random() * 50) + 1, 
-          column: Math.floor(Math.random() * 80) + 1 
-        } : null,
-        isTyping: Math.random() > 0.8 // Mock typing status
-      }));
+      // Transform members to include real-time data
+      const enhancedMembers: EnhancedCollaborator[] = members.map(member => {
+        const isOnline = presenceService.isUserOnline(member.user_id);
+        if (isOnline) {
+          setOnlineUsers(prev => new Set(prev).add(member.user_id));
+        }
+        
+        return {
+          ...member,
+          isOnline, // For backward compatibility
+          cursor: Math.random() > 0.7 ? { 
+            line: Math.floor(Math.random() * 50) + 1, 
+            column: Math.floor(Math.random() * 80) + 1 
+          } : null,
+          isTyping: Math.random() > 0.8 // Mock typing status
+        };
+      });
 
       setCollaborators(enhancedMembers);
-      setMemberCount(data?.total || 0);
-
+      
+      // Subscribe to presence updates
+      const unsubscribe = presenceService.subscribe((userId, isOnline) => {
+        setOnlineUsers(prev => {
+          const newSet = new Set(prev);
+          if (isOnline) {
+            newSet.add(userId);
+          } else {
+            newSet.delete(userId);
+          }
+          return newSet;
+        });
+      });
+      
+      // Return cleanup function
+      return () => {
+        if (unsubscribe) {
+          unsubscribe();
+        }
+      };
     } catch (error) {
       console.error('Unexpected error loading collaborators:', error);
       setError('An unexpected error occurred');
       toast({
         title: 'Error',
         description: 'An unexpected error occurred while loading collaborators',
-        variant: 'destructive'
+        variant: 'destructive' as const
       });
     } finally {
       setIsLoading(false);
@@ -220,7 +277,10 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
           <h3 className="text-sm font-medium text-gray-300">
             Collaborators
             {!isLoading && (
-              <span className="ml-2 text-xs text-gray-500">({memberCount})</span>
+              <div className="flex items-center ml-2">
+              <Wifi className="h-3 w-3 text-green-400 mr-1" />
+              <span className="text-xs text-green-400">{onlineUsers.size} online</span>
+            </div>
             )}
           </h3>
           {isLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
@@ -360,7 +420,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
                     )}
                   </div>
                   {/* Online indicator */}
-                  {collaborator.isOnline && (
+                  {onlineUsers.has(collaborator.user_id) && (
                     <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-gray-800 rounded-full" />
                   )}
                 </div>

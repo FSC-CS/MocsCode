@@ -1,4 +1,7 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { EditorView } from "@codemirror/view";
+import { history } from "@codemirror/commands";
+import { UndoRedoControls } from "./UndoRedoControls";
 
 // Import your CodeMirror logic from the .mjs bundle
 // We'll assume editor.bundle.js exposes a global window.CodeMirrorEditorAPI for integration
@@ -6,8 +9,10 @@ import React, { useEffect, useRef } from "react";
 
 // Dynamically import updateEditorSettings for live config changes
 let updateEditorSettings: any = null;
+let editorModule: any = null;
 import("./editor.mjs").then((mod) => {
   updateEditorSettings = mod.updateEditorSettings;
+  editorModule = mod;
 });
 
 interface CodeMirrorEditorProps {
@@ -20,7 +25,8 @@ interface CodeMirrorEditorProps {
 
 const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, onChange, tabSize = 4, autocomplete = true }) => {
   const editorRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<any>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const [editorView, setEditorView] = useState<EditorView | null>(null);
 
   useEffect(() => {
     let view: any;
@@ -33,17 +39,26 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, on
           // If an editor already exists, destroy it
           viewRef.current.destroy();
         }
-        view = mod.createEditorView({
+        // Create editor with history extension
+        const extensions = [
+          history(), // Add history extension for undo/redo
+          // Add other extensions here if needed
+        ];
+        
+        const editorView = mod.createEditorView({
           parent: editorRef.current,
           doc: value,
           language,
           onChange,
           tabSize,
           autocomplete,
+          extensions, // Add the extensions
         });
-        viewRef.current = view;
+        
+        viewRef.current = editorView;
+        setEditorView(editorView);
         // Focus the editor immediately on mount so CodeMirror receives keyboard events
-        view.focus();
+        editorView.focus();
       });
     }
     return () => {
@@ -75,13 +90,9 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ value, language, on
   // Removed global tab key handler - CodeMirror handles tab natively
 
   return (
-    <div className="w-full h-full bg-[#1e1e1e] rounded-b-lg border border-gray-700 overflow-hidden">
-      <div
-        ref={editorRef}
-        className="cm-editor h-full w-full"
-        tabIndex={0}
-        data-testid="codemirror-editor"
-      />
+    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+      <div ref={editorRef} style={{ height: '100%', width: '100%' }} />
+      {editorView && <UndoRedoControls view={editorView} />}
     </div>
   );
 };

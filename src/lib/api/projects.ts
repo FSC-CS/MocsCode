@@ -49,16 +49,44 @@ export class ProjectsApi extends ApiClient {
       
       console.log('Loading projects for user:', userId);
 
-      // Use helper function that bypasses RLS
-      const { data: projects, error } = await this.client
-        .rpc('get_user_projects', { p_user_id: userId });
+      let projects = [];
+      let error = null;
 
+      // First try the RPC function
+      try {
+        const result = await this.client.rpc('get_user_projects', { p_user_id: userId });
+        projects = result.data || [];
+        error = result.error;
+      } catch (rpcError) {
+        console.warn('RPC function failed, falling back to direct query:', rpcError);
+        error = rpcError;
+      }
+
+      // If RPC failed, try a direct query as fallback
       if (error) {
-        console.error('Error loading user projects:', error);
-        return {
-          data: { items: [], total: 0, page, per_page },
-          error: new Error(error.message)
-        };
+        console.warn('RPC get_user_projects failed, falling back to direct query');
+        const { data, error: queryError } = await this.client
+          .from('projects')
+          .select('*')
+          .or(`owner_id.eq.${userId},id.in.(
+            select project_id from project_members where user_id = '${userId}'
+          )`);
+          
+        if (queryError) {
+          console.error('Error loading user projects (fallback query):', queryError);
+          return {
+            data: { items: [], total: 0, page, per_page },
+            error: new Error('Failed to load projects')
+          };
+        }
+        
+        projects = data || [];
+        
+        // Add user role information
+        projects = projects.map(project => ({
+          ...project,
+          user_role: project.owner_id === userId ? 'owner' : 'member'
+        }));
       }
 
       const allProjects = projects || [];

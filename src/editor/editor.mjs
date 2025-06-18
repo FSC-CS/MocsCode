@@ -50,6 +50,7 @@ import {cpp, cppLanguage} from "@codemirror/lang-cpp"
 import {toggleLineWrapping, toggleHighlightActiveLine, toggleYellowBackground} from "./toggle-extension.mjs"
 import {createAutoLanguageExtension} from "./auto-language.mjs"
 import {cursorTooltip} from "./cursor-tooltip.mjs"
+import {rangeHighlighting} from "./range-highlighting.mjs"
 
 // --- JSDoc Autocomplete for JavaScript ---
 import {syntaxTree} from "@codemirror/language"
@@ -132,6 +133,7 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
       toggleLineWrapping(),
       toggleHighlightActiveLine(),
       toggleYellowBackground(),
+      rangeHighlighting(),
       ...langExt, // Language extensions first
       tabSizeCompartment.of(EditorState.tabSize.of(tabSize)), // Tab size compartment after language
       EditorView.updateListener.of((v) => {

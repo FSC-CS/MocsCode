@@ -8,15 +8,14 @@ import { Socket } from 'socket.io-client';
 import io from 'socket.io-client';
 import { ChatMessageApi, ChatRoomApi } from '@/lib/api/chat';
 import { supabase } from '@/lib/supabase';
-import { ApiConfig, ChatMessage } from '@/lib/api/types'; // Fixed: Added ChatMessage import
+import { ApiConfig, ChatMessage } from '@/lib/api/types';
 
 type SocketMessage = {
   id: string;
   user: string;
   username: string;
-  text: string;
+  content: string;
   timestamp: string;
-  color: string;
   room: string;
 };
 
@@ -24,13 +23,12 @@ type SocketMessage = {
 type UIMessage = {
   id: string;
   user: string;
-  message: string;
-  content?: string;
+  username: string; // Display name for the message
+  content: string;
   timestamp: string;
+  room: string;
   color: string;
   isOwn: boolean;
-  room: string;
-  username?: string; // Display name for the message
   isPending?: boolean; // Optimistic update pending
   isFailed?: boolean; // Failed to send
 };
@@ -97,7 +95,7 @@ const ChatPanel = ({
   const [isTyping, setIsTyping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [socket, setSocket] = useState<typeof Socket | null>(null);
   const [currentRoom, setCurrentRoom] = useState('General Discussion');
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [isConnected, setIsConnected] = useState(false);
@@ -118,26 +116,23 @@ const ChatPanel = ({
       try {
         // Get projectId from props or infer from projectMembers
         const resolvedProjectId = projectId || projectMembers?.[0]?.project_id;
+
+        // Get room id using project id and room name
+        const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, resolvedProjectId);
         
         if (!resolvedProjectId || !projectMembers || projectMembers.length === 0) {
           setLoading(false);
           return;
         }
 
-        const res = await chatApi.listByRoomNameAndProject(
-          currentRoom,
-          resolvedProjectId,
-          chatRoomApi,
-          { page: 1, per_page: 50 },
-          { field: 'created_at', direction: 'asc' }
-        );
+        const res = await chatApi.listByRoom(roomId);
         
         if (mounted && res?.data?.items) {
           // Normalize messages for UI compatibility
           const normalizedMessages: UIMessage[] = res.data.items.map(msg => ({
             id: msg.id,
             user: msg.user_id,
-            message: msg.content || '', // Use content from database
+            username: msg.user.display_name,
             content: msg.content,
             timestamp: msg.created_at,
             color: getAvatarColor({ user_id: msg.user_id }), // Generate color based on user
@@ -180,8 +175,8 @@ const ChatPanel = ({
         return;
       }
 
-      // Resolve room id by name and project
       const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, resolvedProjectId);
+
       
       if (!roomId) {
         console.error('Could not resolve room ID');
@@ -204,11 +199,11 @@ const ChatPanel = ({
         const newMessage: UIMessage = {
           id: res.data.id,
           user: currentUser.id,
-          message: message,
+          username: currentUser.display_name,
           content: message,
           timestamp: new Date().toISOString(),
           isOwn: true,
-          color: currentUser.color || getAvatarColor({ user_id: currentUser.id }),
+          color: getAvatarColor({ user_id: currentUser.id }),
           room: currentRoom,
         };
         
@@ -219,10 +214,9 @@ const ChatPanel = ({
           socket.emit('message', {
             id: res.data.id,
             user: currentUser.id,
-            username: currentUser.display_name || currentUser.username || currentUser.email,
-            text: message,
+            username: currentUser.display_name,
+            content: message,
             timestamp: new Date().toISOString(),
-            color: currentUser.color || getAvatarColor({ user_id: currentUser.id }),
             room: currentRoom,
           });
         }
@@ -272,7 +266,7 @@ const ChatPanel = ({
     setLoading(true);
     
     try {
-      await chatApi.softDelete(messageId, currentUser?.id || '');
+      await chatApi.softDelete(messageId);
       setMessages((msgs) => msgs.filter((m) => m.id !== messageId));
     } catch (error) {
       console.error('Error deleting message:', error);
@@ -319,12 +313,11 @@ const ChatPanel = ({
     if (!currentUser) return;
 
     // Create a single socket instance if it doesn't exist
-    let newSocket: Socket;
+    let newSocket: typeof Socket;
     let disconnectTimer: NodeJS.Timeout;
     
     if (!socket) {
       newSocket = io('http://localhost:3500', {
-        withCredentials: true,
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 5,
@@ -333,7 +326,6 @@ const ChatPanel = ({
         timeout: 20000,
         autoConnect: true,
         forceNew: false,
-        closeOnBeforeunload: false,
         rememberUpgrade: true,
         upgrade: true,
         // Add a unique connection ID to help with debugging
@@ -356,8 +348,8 @@ const ChatPanel = ({
       if (currentUser) {
         // Check if we're already in a room by looking at the socket's rooms
         // The socket is always in a room with its own ID, so we need to check for other rooms
-        const rooms = Object.keys(newSocket.rooms || {});
-        const isInRoom = rooms.some(room => room !== newSocket.id);
+        const room = Object.keys(newSocket.rooms || {});
+        const isInRoom = room.some(room => room !== newSocket.id);
         
         if (!isInRoom) {
           newSocket.emit('enterRoom', { 
@@ -457,10 +449,9 @@ const ChatPanel = ({
         const newMessage: UIMessage = {
           id: messageId,
           user: msg.user,
-          message: msg.text,
-          content: msg.text,
+          content: msg.content,
           timestamp: msg.timestamp || new Date().toISOString(),
-          color: msg.color,
+          color: getAvatarColor({ user_id: msg.user }),
           isOwn: false,
           room: msg.room || 'General Discussion',
           username: msg.username,
@@ -676,13 +667,13 @@ const ChatPanel = ({
                   </div>
                 ) : (
                   <div>
-                    <p>{msg.message || msg.content}</p>
+                    <p>{msg.content}</p>
                     <div className="text-xs text-gray-400 mt-1 flex justify-between items-center">
                       <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
                       {msg.isOwn && (
                         <div className="flex space-x-1">
                           <button 
-                            onClick={() => startEditing(msg.id, msg.message || msg.content || '')}
+                            onClick={() => startEditing(msg.id, msg.content || '')}
                             className="text-gray-300 hover:text-white p-1 rounded"
                             disabled={loading}
                           >

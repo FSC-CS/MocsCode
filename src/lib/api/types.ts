@@ -20,8 +20,8 @@ export type Project = {
   id: string;
   name: string;
   description?: string;
-  owner_id: string;  // Match database column name
-  is_public: boolean;  // Match database column name
+  owner_id: string;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -102,11 +102,12 @@ export type ChatMessage = {
   id: string;
   room_id: string;
   user_id: string;
+  username?: string;
   content: string;
   message_type: string;
   metadata: Record<string, any> | null;
   reply_to_id?: string | null;
   created_at: string;
-  updated_by?: string | null;
+  updated_at: string;
   is_deleted: boolean;
 };

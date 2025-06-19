@@ -8,9 +8,6 @@ export class ProjectsApi extends ApiClient {
     super(config, 'projects');
   }
 
-  /**
-   * FIXED: Get project using helper function to avoid RLS issues
-   */
   async getProject(id: string): Promise<ApiResponse<Project & { user_role?: string; can_edit?: boolean }>> {
     try {
       const { data, error } = await this.client
@@ -125,7 +122,6 @@ export class ProjectsApi extends ApiClient {
         user_role: '',
         is_owner: false,
         is_member: false,
-        ...(data || {})
       };
 
       return { data: result, error: null };

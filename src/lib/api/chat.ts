@@ -34,41 +34,49 @@ export class ChatRoomApi extends ApiClient {
 
 // Chat Messages API
 export class ChatMessageApi extends ApiClient {
+
   constructor(config: ApiConfig) {
     super(config, 'chat_messages');
   }
 
-  // List messages by room, with pagination and sorting, only non-deleted
+  // List messages by room with joined user display_name
   async listByRoom(
     room_id: string,
     pagination?: PaginationParams,
     sort?: SortParams
-  ): Promise<PaginatedResponse<ChatMessage>> {
-    return this.list<ChatMessage>(
-      pagination,
-      sort,
-      { room_id, is_deleted: false } as FilterParams
-    );
+  ): Promise<PaginatedResponse<ChatMessage & { user: { display_name: string } }>> {
+    let query = this.client
+      .from('chat_messages')
+      .select(`*, user:user_id(display_name)`)
+      .eq('room_id', room_id)
+      .eq('is_deleted', false);
+
+    // Apply sorting if provided
+    if (sort) {
+      query = query.order(sort.field, { ascending: sort.direction === 'asc' });
+    }
+    // Apply pagination if provided
+    if (pagination) {
+      const { page, per_page } = pagination;
+      const from = (page - 1) * per_page;
+      const to = from + per_page - 1;
+      query = query.range(from, to);
+    }
+
+    const { data, error, count } = await query;
+    return {
+      data: {
+        items: data || [],
+        total: count ?? data?.length ?? 0,
+        page: pagination?.page ?? 1,
+        per_page: pagination?.per_page ?? (data?.length ?? 0)
+      },
+      error
+    };
   }
 
   // Soft delete a message
   async softDelete(id: string): Promise<ApiResponse<ChatMessage>> {
     return this.update<ChatMessage>(id, { is_deleted: true , updated_at: new Date().toISOString() });
-  }
-
-  // List messages by room name and project id
-  async listByRoomNameAndProject(
-    roomName: string,
-    projectId: string,
-    chatRoomApi: ChatRoomApi,
-    pagination?: PaginationParams,
-    sort?: SortParams
-  ): Promise<PaginatedResponse<ChatMessage> | null> {
-    const { data: roomId, error } = await chatRoomApi.getRoomIdByNameAndProject(roomName, projectId);
-    if (error || !roomId) {
-      // Optionally, handle or log error
-      return null;
-    }
-    return this.listByRoom(roomId, pagination, sort);
   }
 }

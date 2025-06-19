@@ -8,28 +8,32 @@ import { Socket } from 'socket.io-client';
 import io from 'socket.io-client';
 import { ChatMessageApi, ChatRoomApi } from '@/lib/api/chat';
 import { supabase } from '@/lib/supabase';
-import { ApiConfig, ChatMessage } from '@/lib/api/types';
+import { ApiConfig, ChatMessage } from '@/lib/api/types'; // Fixed: Added ChatMessage import
 
 type SocketMessage = {
   id: string;
   user: string;
-  userId: string;
+  username: string;
   text: string;
   timestamp: string;
   color: string;
   room: string;
 };
 
-interface ChatMessage {
+// Unified message type for UI
+type UIMessage = {
   id: string;
   user: string;
-  userId: string;
   message: string;
+  content?: string;
   timestamp: string;
   color: string;
-  isOwn?: boolean;
+  isOwn: boolean;
   room: string;
-}
+  username?: string; // Display name for the message
+  isPending?: boolean; // Optimistic update pending
+  isFailed?: boolean; // Failed to send
+};
 
 interface Collaborator {
   id: number;
@@ -72,6 +76,7 @@ interface ChatPanelProps {
   onMemberRoleChange?: (memberId: string, newRole: 'owner' | 'editor' | 'viewer') => void;
   onRemoveMember?: (memberId: string) => void;
   canManageMembers?: boolean;
+  projectId?: string; // Added to make projectId available
 }
 
 const ChatPanel = ({
@@ -85,8 +90,9 @@ const ChatPanel = ({
   onMemberRoleChange,
   onRemoveMember,
   canManageMembers = false,
+  projectId, // Added projectId prop
 }: ChatPanelProps) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<UIMessage[]>([]); // Fixed: Changed from ChatMessag[] to UIMessage[]
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -103,103 +109,176 @@ const ChatPanel = ({
   const chatRoomApi = React.useMemo(() => new ChatRoomApi({ client: supabase }), []);
 
   // Fetch messages from Supabase on mount and room change
-  // NOTE: projectId must be available in scope (from props or context)
   useEffect(() => {
     let mounted = true;
+    
     async function fetchMessages() {
       setLoading(true);
-      // You may need to get projectId from props, context, or another source
-      // For this example, we assume it's available as a prop
-      if (!projectMembers || projectMembers.length === 0) {
+      
+      try {
+        // Get projectId from props or infer from projectMembers
+        const resolvedProjectId = projectId || projectMembers?.[0]?.project_id;
+        
+        if (!resolvedProjectId || !projectMembers || projectMembers.length === 0) {
+          setLoading(false);
+          return;
+        }
+
+        const res = await chatApi.listByRoomNameAndProject(
+          currentRoom,
+          resolvedProjectId,
+          chatRoomApi,
+          { page: 1, per_page: 50 },
+          { field: 'created_at', direction: 'asc' }
+        );
+        
+        if (mounted && res?.data?.items) {
+          // Normalize messages for UI compatibility
+          const normalizedMessages: UIMessage[] = res.data.items.map(msg => ({
+            id: msg.id,
+            user: msg.user_id,
+            message: msg.content || '', // Use content from database
+            content: msg.content,
+            timestamp: msg.created_at,
+            color: getAvatarColor({ user_id: msg.user_id }), // Generate color based on user
+            isOwn: msg.user_id === currentUser?.id,
+            room: currentRoom,
+          }));
+          
+          setMessages(normalizedMessages);
+        }
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+      } finally {
         setLoading(false);
-        return;
       }
-      // Try to infer projectId from projectMembers
-      const projectId = projectMembers[0]?.project_id;
-      const res = await chatApi.listByRoomNameAndProject(
-        currentRoom,
-        projectId,
-        chatRoomApi,
-        { page: 1, per_page: 50 },
-        { field: 'created_at', direction: 'asc' }
-      );
-      if (mounted && res && res.data) {
-  // Normalize messages for UI compatibility
-  setMessages(
-    res.data.items.map(msg => ({
-      ...msg,
-      timestamp: msg.created_at,
-      message: msg.content,
-      user: msg.user_id, // fallback if user field missing
-    }))
-  );
-}
-      setLoading(false);
     }
-    if (currentRoom) fetchMessages();
-    return () => { mounted = false; };
-  }, [currentRoom, chatApi, chatRoomApi, projectMembers]);
+    
+    if (currentRoom) {
+      fetchMessages();
+    }
+    
+    return () => { 
+      mounted = false; 
+    };
+  }, [currentRoom, chatApi, chatRoomApi, projectMembers, projectId, currentUser?.id]);
 
   // Send a message to Supabase
   const sendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!message.trim() || !currentUser) return;
+    
     setLoading(true);
-    // Infer projectId from projectMembers
-    const projectId = projectMembers[0]?.project_id;
-    // Resolve room id by name and project
-    const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, projectId);
-    if (!roomId) {
-      setLoading(false);
-      return;
-    }
-    const res = await chatApi.create<ChatMessage>({
-      room_id: roomId,
-      user_id: currentUser.id,
-      content: message,
-      message_type: 'text',
-      metadata: null,
-      reply_to_id: null,
-      is_deleted: false,
-    });
-    if (res.data) {
-      // Use local info to avoid UI fallback issues
-      setMessages((msgs) => [
-      ...msgs,
-      {
-        id: res.data.id,
-        user: currentUser.id, // for projectMembers lookup
-        userId: currentUser.id,
-        message: message, // use local message text
-        timestamp: new Date().toISOString(),
-        isOwn: true,
-        color: currentUser.color || '#4ECDC4', // fallback color if available
-        room: currentRoom,
+    
+    try {
+      // Get projectId from props or infer from projectMembers
+      const resolvedProjectId = projectId || projectMembers?.[0]?.project_id;
+      
+      if (!resolvedProjectId) {
+        console.error('No project ID available');
+        setLoading(false);
+        return;
       }
-    ]);
+
+      // Resolve room id by name and project
+      const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, resolvedProjectId);
+      
+      if (!roomId) {
+        console.error('Could not resolve room ID');
+        setLoading(false);
+        return;
+      }
+
+      const res = await chatApi.create<ChatMessage>({
+        room_id: roomId,
+        user_id: currentUser.id,
+        content: message,
+        message_type: 'text',
+        metadata: null,
+        reply_to_id: null,
+        is_deleted: false,
+      });
+
+      if (res?.data) {
+        // Add message to local state immediately for better UX
+        const newMessage: UIMessage = {
+          id: res.data.id,
+          user: currentUser.id,
+          message: message,
+          content: message,
+          timestamp: new Date().toISOString(),
+          isOwn: true,
+          color: currentUser.color || getAvatarColor({ user_id: currentUser.id }),
+          room: currentRoom,
+        };
+        
+        setMessages((msgs) => [...msgs, newMessage]);
+        
+        // Also emit to socket for real-time updates to other users
+        if (socket && isConnected) {
+          socket.emit('message', {
+            id: res.data.id,
+            user: currentUser.id,
+            username: currentUser.display_name || currentUser.username || currentUser.email,
+            text: message,
+            timestamp: new Date().toISOString(),
+            color: currentUser.color || getAvatarColor({ user_id: currentUser.id }),
+            room: currentRoom,
+          });
+        }
+      }
+      
+      setMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setLoading(false);
     }
-    setMessage('');
-    setLoading(false);
   };
 
   // Edit a message in Supabase
   const saveEdit = async (messageId: string) => {
+    if (!editText.trim()) return;
+    
     setLoading(true);
-    const msg = messages.find((m) => m.id === messageId);
-    if (!msg) return;
-    const res = await chatApi.update<ChatMessage>(messageId, { content: editText });
-    if (res.data) setMessages((msgs) => msgs.map((m) => m.id === messageId ? { ...m, content: editText } : m));
-    setEditingId(null);
-    setEditText('');
-    setLoading(false);
+    
+    try {
+      const msg = messages.find((m) => m.id === messageId);
+      if (!msg) return;
+
+      const res = await chatApi.update<ChatMessage>(messageId, { content: editText });
+      
+      if (res?.data) {
+        setMessages((msgs) => 
+          msgs.map((m) => 
+            m.id === messageId 
+              ? { ...m, message: editText, content: editText } 
+              : m
+          )
+        );
+      }
+      
+      setEditingId(null);
+      setEditText('');
+    } catch (error) {
+      console.error('Error updating message:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Soft-delete a message in Supabase
   const deleteMessage = async (messageId: string) => {
     setLoading(true);
-    await chatApi.softDelete(messageId, currentUser?.id || '');
-    setMessages((msgs) => msgs.filter((m) => m.id !== messageId));
-    setLoading(false);
+    
+    try {
+      await chatApi.softDelete(messageId, currentUser?.id || '');
+      setMessages((msgs) => msgs.filter((m) => m.id !== messageId));
+    } catch (error) {
+      console.error('Error deleting message:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Start editing
@@ -214,8 +293,7 @@ const ChatPanel = ({
     setEditText('');
   };
 
-  // Handle typing (keep as-is for now)
-
+  // Handle visibility change for socket reconnection
   useEffect(() => {
     if (!socket) return;
 
@@ -260,7 +338,7 @@ const ChatPanel = ({
         upgrade: true,
         // Add a unique connection ID to help with debugging
         query: {
-          userId: currentUser.id,
+          user: currentUser.id,
           username: currentUser.username || 'Anonymous',
           clientType: 'web'
         }
@@ -283,9 +361,9 @@ const ChatPanel = ({
         
         if (!isInRoom) {
           newSocket.emit('enterRoom', { 
-            name: currentUser.email || currentUser.username || 'Anonymous',
+            name: currentUser.username || 'Anonymous',
             room: 'general',
-            userId: currentUser.id,
+            user: currentUser.id,
             email: currentUser.email
           });
         }
@@ -364,6 +442,9 @@ const ChatPanel = ({
     if (!socket || !currentUser) return;
 
     const handleMessage = (msg: SocketMessage) => {
+      // Don't add our own messages from socket (they're already added when sending)
+      if (msg.user === currentUser.id) return;
+      
       // Use the server-provided ID if available, otherwise generate a new one
       const messageId = msg.id || generateMessageId();
       
@@ -373,16 +454,19 @@ const ChatPanel = ({
           return prev;
         }
         
-        return [...prev, {
+        const newMessage: UIMessage = {
           id: messageId,
           user: msg.user,
-          userId: msg.userId,
           message: msg.text,
-          timestamp: new Date().toISOString(),
+          content: msg.text,
+          timestamp: msg.timestamp || new Date().toISOString(),
           color: msg.color,
-          isOwn: msg.userId === currentUser.id,
-          room: msg.room || 'General Discussion'
-        }];
+          isOwn: false,
+          room: msg.room || 'General Discussion',
+          username: msg.username,
+        };
+        
+        return [...prev, newMessage];
       });
     };
 
@@ -392,6 +476,9 @@ const ChatPanel = ({
     };
 
     const handleActivity = (username: string) => {
+      // Don't show typing indicator for current user
+      if (username === (currentUser.username || currentUser.email)) return;
+      
       // Handle typing indicators
       setTypingUsers(prev => {
         const newTypingUsers = new Set(prev);
@@ -428,10 +515,15 @@ const ChatPanel = ({
 
   const handleTyping = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
-    if (socket && currentUser) {
+    if (socket && currentUser && isConnected) {
       if (!isTyping) {
         setIsTyping(true);
-        socket.emit('activity', currentUser.username || 'Anonymous');
+        socket.emit('activity', currentUser.username || currentUser.email || 'Anonymous');
+        
+        // Reset typing state after a delay
+        setTimeout(() => {
+          setIsTyping(false);
+        }, 1500);
       }
     }
   };
@@ -532,6 +624,13 @@ const ChatPanel = ({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {loading && messages.length === 0 && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            <span className="ml-2 text-gray-400">Loading messages...</span>
+          </div>
+        )}
+        
         {messages.map((msg) => (
           <div 
             key={msg.id} 
@@ -543,9 +642,11 @@ const ChatPanel = ({
               {!msg.isOwn && (
                 <div className="font-semibold text-sm" style={{ color: msg.color }}>
                   {(() => {
-  const member = projectMembers.find(m => m.user_id === msg.user || m.user_id === msg.userId || m.user?.id === msg.user || m.user?.id === msg.userId);
-  return member ? getDisplayName(member) : (msg.user || msg.userId || 'Unknown');
-})()}
+                    const member = projectMembers.find(m => 
+                      m.user_id === msg.user
+                    );
+                    return member ? getDisplayName(member) : (msg.user || 'Unknown');
+                  })()}
                 </div>
               )}
               <div className="text-sm">
@@ -561,8 +662,9 @@ const ChatPanel = ({
                       <button
                         onClick={() => saveEdit(msg.id)}
                         className="px-3 py-1 text-sm rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                        disabled={loading}
                       >
-                        Save
+                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                       </button>
                       <button
                         onClick={cancelEdit}
@@ -574,22 +676,24 @@ const ChatPanel = ({
                   </div>
                 ) : (
                   <div>
-                    <p>{msg.message}</p>
+                    <p>{msg.message || msg.content}</p>
                     <div className="text-xs text-gray-400 mt-1 flex justify-between items-center">
                       <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
                       {msg.isOwn && (
                         <div className="flex space-x-1">
                           <button 
-                            onClick={() => startEditing(msg.id, msg.message)}
-                            className="text-gray-300 hover:text-white"
+                            onClick={() => startEditing(msg.id, msg.message || msg.content || '')}
+                            className="text-gray-300 hover:text-white p-1 rounded"
+                            disabled={loading}
                           >
                             <Edit className="h-3 w-3" />
                           </button>
                           <button 
                             onClick={() => deleteMessage(msg.id)}
-                            className="text-red-400 hover:bg-red-900/50 hover:text-red-300 h-8 w-8 p-0 flex items-center justify-center rounded-md"
+                            className="text-red-400 hover:bg-red-900/50 hover:text-red-300 h-6 w-6 p-1 flex items-center justify-center rounded"
+                            disabled={loading}
                           >
-                            <Trash className="h-3 w-3" />
+                            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash className="h-3 w-3" />}
                           </button>
                         </div>
                       )}
@@ -600,6 +704,7 @@ const ChatPanel = ({
             </div>
           </div>
         ))}
+        
         {typingUsers.size > 0 && (
           <div className="text-xs text-gray-400 italic">
             {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
@@ -623,13 +728,14 @@ const ChatPanel = ({
                 sendMessage(e);
               }
             }}
+            disabled={loading || !isConnected}
           />
           <Button 
             type="submit" 
             className="bg-blue-600 hover:bg-blue-700"
-            disabled={!message.trim()}
+            disabled={!message.trim() || loading || !isConnected}
           >
-            <Send className="h-4 w-4" />
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </form>
       </div>

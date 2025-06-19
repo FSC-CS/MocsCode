@@ -52,8 +52,8 @@ export class ChatMessageApi extends ApiClient {
   }
 
   // Soft delete a message
-  async softDelete(id: string, updated_by: string): Promise<ApiResponse<ChatMessage>> {
-    return this.update<ChatMessage>(id, { is_deleted: true, updated_by });
+  async softDelete(id: string): Promise<ApiResponse<ChatMessage>> {
+    return this.update<ChatMessage>(id, { is_deleted: true , updated_at: new Date().toISOString() });
   }
 
   // List messages by room name and project id

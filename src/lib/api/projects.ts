@@ -120,11 +120,12 @@ export class ProjectsApi extends ApiClient {
         return { data: null, error: new Error(error.message) };
       }
 
-      const result = data || {
+      const result = {
         can_access: false,
-        user_role: null,
+        user_role: '',
         is_owner: false,
-        is_member: false
+        is_member: false,
+        ...(data || {})
       };
 
       return { data: result, error: null };

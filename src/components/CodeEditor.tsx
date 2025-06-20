@@ -1,5 +1,6 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { presenceService } from '@/lib/presence';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -59,6 +60,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Sidebar tab state: 'chat' or 'collaborators'
   const [activeSidebarTab, setActiveSidebarTab] = useState<'chat' | 'collaborators'>('chat');
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { projectFilesApi, projectMembersApi, projectsApi } = useApi();
   const { user, dbUser } = useAuth();
@@ -88,7 +90,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const [showMemberDialog, setShowMemberDialog] = useState(false);
   const [selectedMember, setSelectedMember] = useState<EnhancedMember | null>(null);
   const [memberOperationStatus, setMemberOperationStatus] = useState<{
-    type: 'idle' | 'loading' | 'adding' | 'updating' | 'removing';
+    type: 'idle' | 'adding' | 'updating' | 'removing' | 'error';
     error?: Error;
     memberId?: string;
   }>({ type: 'idle' });
@@ -96,10 +98,40 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef(null);
 
-  // Load project members when component mounts or when refresh is triggered
+  // Initialize presence service and load project members when component mounts or when project/user changes
   useEffect(() => {
     if (project?.id && user?.id) {
+      // Initialize presence service with current user and project
+      presenceService.initialize(user.id, project.id);
+      
+      // Load project members
       loadProjectMembers();
+      
+      // Subscribe to presence updates
+      const unsubscribe = presenceService.subscribe((userId, isOnline) => {
+        setOnlineUsers(prev => {
+          const newSet = new Set(prev);
+          if (isOnline) {
+            newSet.add(userId);
+          } else {
+            newSet.delete(userId);
+          }
+          return newSet;
+        });
+      });
+      
+      // Initial online users
+      const initialOnlineUsers = new Set<string>();
+      if (presenceService.isUserOnline(user.id)) {
+        initialOnlineUsers.add(user.id);
+      }
+      setOnlineUsers(initialOnlineUsers);
+      
+      // Cleanup on unmount
+      return () => {
+        unsubscribe();
+        presenceService.cleanup();
+      };
     }
   }, [project?.id, user?.id, memberRefreshTrigger]);
 
@@ -706,6 +738,43 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     }
   };
 
+  // Initialize presence service when component mounts
+  useEffect(() => {
+    if (!user?.id || !project?.id) return;
+
+    console.log('Initializing presence service for user:', user.id, 'project:', project.id);
+    
+    // Initialize presence service
+    presenceService.initialize(user.id, project.id);
+    
+    // Subscribe to presence updates
+    const unsubscribe = presenceService.subscribe((userId, isOnline) => {
+      console.log(`[CodeEditor] Presence update - User ${userId} is ${isOnline ? 'online' : 'offline'}`);
+      
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        if (isOnline) {
+          newSet.add(userId);
+        } else {
+          newSet.delete(userId);
+        }
+        console.log('Updated online users in CodeEditor:', Array.from(newSet));
+        return newSet;
+      });
+    });
+
+    // Initial state
+    setOnlineUsers(new Set(presenceService.getOnlineUsers()));
+
+    // Clean up on unmount
+    return () => {
+      console.log('Cleaning up presence service in CodeEditor');
+      unsubscribe();
+      // Don't clean up the entire presence service here as it's a singleton
+      // The service will handle cleanup when the page is unloaded
+    };
+  }, [user?.id, project?.id]);
+
   // Transform project members to chat collaborators format
   const chatCollaborators = projectMembers
     .filter(member => member.user_id !== user?.id) // Exclude current user
@@ -1028,9 +1097,8 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
                 currentUser={user}
                 isLoadingMembers={isLoadingMembers}
                 memberOperationStatus={memberOperationStatus}
-                lastRefresh={lastRefresh || new Date()}
-                autoRefreshEnabled={autoRefreshEnabled}
                 onMemberClick={handleMemberClick}
+                onInviteClick={() => setShowShareDialog(true)}
                 canManageMembers={canManageProject()}
               />
             ) : (
@@ -1039,6 +1107,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
                 onMemberClick={handleMemberClick}
                 onInviteClick={() => setShowShareDialog(true)}
                 refreshTrigger={memberRefreshTrigger}
+                onlineUsers={onlineUsers}
               />
             )}
           </div>

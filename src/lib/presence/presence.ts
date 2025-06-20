@@ -31,9 +31,17 @@ class PresenceService {
   }
 
   public initialize(userId: string, projectId: string): void {
+    // Clean up previous instance if any
+    if (this.userId && this.userId !== userId) {
+      this.cleanup();
+    }
+    
     this.userId = userId;
     this.projectId = projectId;
     this.connect();
+    
+    // Immediately mark current user as online
+    this.updatePresence(userId, true);
   }
 
   private connect(): void {
@@ -93,6 +101,9 @@ class PresenceService {
       timestamp: Date.now()
     };
     
+    // Update presence map for the current user
+    this.updatePresence(this.userId, isOnline);
+    
     // In a real app, send via WebSocket
     console.log('[Presence] Sending presence:', message);
   }
@@ -130,6 +141,12 @@ class PresenceService {
   }
 
   public cleanup(): void {
+    // Notify that we're going offline before cleaning up
+    if (this.userId) {
+      this.updatePresence(this.userId, false);
+    }
+    
+    // Clear intervals and timeouts
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
@@ -140,18 +157,20 @@ class PresenceService {
       this.reconnectTimeout = null;
     }
     
-    // Notify that we're going offline
-    if (this.isConnected && this.userId) {
-      this.notifyPresence(false);
-    }
-    
+    // Close socket if it exists
     if (this.socket) {
       this.socket.close();
       this.socket = null;
     }
     
+    // Reset connection state
     this.isConnected = false;
-    this.presenceMap.clear();
+    
+    // Don't clear the entire presence map here as other users might still be online
+    // Only remove the current user from the map
+    if (this.userId) {
+      this.presenceMap.delete(this.userId);
+    }
   }
 }
 

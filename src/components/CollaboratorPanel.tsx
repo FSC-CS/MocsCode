@@ -27,13 +27,15 @@ interface CollaboratorPanelProps {
   onMemberClick?: (member: EnhancedCollaborator) => void;
   onInviteClick?: () => void;
   refreshTrigger?: number; // Optional prop to trigger refresh from parent
+  onlineUsers?: Set<string>; // Track online users from parent
 }
 
 const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({ 
   projectId, 
   onMemberClick, 
   onInviteClick,
-  refreshTrigger 
+  refreshTrigger,
+  onlineUsers
 }) => {
   const { projectMembersApi } = useApi();
   const { user, dbUser } = useAuth();
@@ -43,30 +45,23 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
   const [collaborators, setCollaborators] = React.useState<EnhancedCollaborator[]>([]);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [onlineUsers, setOnlineUsers] = React.useState<Set<string>>(new Set());
   const [canManageMembers, setCanManageMembers] = React.useState<boolean>(false);
 
-  // Initialize presence service when component mounts
+  // Update collaborator online status when onlineUsers prop changes
   React.useEffect(() => {
-    if (!user?.id) return;
+    if (!onlineUsers) return;
     
-    // Initialize presence service
-    presenceService.initialize(user.id, projectId);
-    
-    // Clean up on unmount or when user/project changes
-    return () => {
-      // Only clean up if this is the last component using the service
-      // In a real app, you'd have more sophisticated cleanup logic
-      setTimeout(() => {
-        presenceService.cleanup();
-      }, 1000); // Small delay to handle rapid re-renders
-    };
-  }, [user?.id, projectId]);
+    setCollaborators(prev => 
+      prev.map(collab => ({
+        ...collab,
+        isOnline: collab.user_id ? onlineUsers.has(collab.user_id) : false
+      }))
+    );
+  }, [onlineUsers]);
 
   // Load collaborators when component mounts or projectId changes
   useEffect(() => {
     let isMounted = true;
-    let unsubscribe: (() => void) | null = null;
 
     const loadData = async () => {
       if (!projectId || !user) return;
@@ -80,9 +75,6 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
     // Cleanup function
     return () => {
       isMounted = false;
-      if (unsubscribe) {
-        unsubscribe();
-      }
     };
   }, [projectId, user]);
 
@@ -122,42 +114,19 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
       // Transform members to include real-time data
       const enhancedMembers: EnhancedCollaborator[] = members.map(member => {
         const isOnline = presenceService.isUserOnline(member.user_id);
-        if (isOnline) {
-          setOnlineUsers(prev => new Set(prev).add(member.user_id));
-        }
         
         return {
           ...member,
-          isOnline, // For backward compatibility
-          cursor: Math.random() > 0.7 ? { 
-            line: Math.floor(Math.random() * 50) + 1, 
-            column: Math.floor(Math.random() * 80) + 1 
-          } : null,
-          isTyping: Math.random() > 0.8 // Mock typing status
+          isOnline,
+          cursor: null, // Will be updated via presence updates
+          isTyping: false // Will be updated via presence updates
         };
       });
 
       setCollaborators(enhancedMembers);
       
-      // Subscribe to presence updates
-      const unsubscribe = presenceService.subscribe((userId, isOnline) => {
-        setOnlineUsers(prev => {
-          const newSet = new Set(prev);
-          if (isOnline) {
-            newSet.add(userId);
-          } else {
-            newSet.delete(userId);
-          }
-          return newSet;
-        });
-      });
-      
-      // Return cleanup function
-      return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
-      };
+      // The current user's online status is now managed by the parent component
+      // via the onlineUsers prop
     } catch (error) {
       console.error('Unexpected error loading collaborators:', error);
       setError('An unexpected error occurred');

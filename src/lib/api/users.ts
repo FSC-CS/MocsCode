@@ -19,14 +19,19 @@ export class UsersApi extends ApiClient {
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<ApiResponse<User>> {
-    return this.update<User>(id, data);
+    console.log('[DEBUG] updateUser called with:', { id, data });
+const result = await this.update<User>(id, data);
+if (result.error) {
+  console.error('[DEBUG] Supabase update error:', result.error, { id, data });
+}
+return result;
   }
 
-  async getUserByUsername(username: string): Promise<ApiResponse<User>> {
+  async getUserByName(name: string): Promise<ApiResponse<User>> {
     const { data, error } = await this.client
       .from(this.table)
       .select('*')
-      .eq('username', username)
+      .eq('name', name)
       .single();
 
     return {

@@ -12,8 +12,7 @@ interface EnhancedCollaborator extends ProjectMember {
   user?: {
     id: string;
     email: string;
-    username: string;
-    display_name?: string;
+    name: string;
     avatar_url?: string;
   };
   isOnline?: boolean;
@@ -139,7 +138,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
 
   const getDisplayName = (member: EnhancedCollaborator): string => {
     if (!member.user) return 'Unknown User';
-    return member.user.display_name || member.user.username || member.user.email.split('@')[0];
+    return member.user.name || member.user.email.split('@')[0];
   };
 
   const getInitials = (member: EnhancedCollaborator): string => {

@@ -47,8 +47,7 @@ interface EnhancedMember {
   user?: {
     id: string;
     email: string;
-    username: string;
-    display_name?: string;
+    name: string;
     avatar_url?: string;
   };
 }
@@ -148,7 +147,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
         return {
           id: Number(member.user_id || member.id), // Convert to number
-          name: member.user?.display_name || member.user?.username || 'Unknown',
+          name: member.user?.name || member.user?.email.split('@')[0] || 'Unknown',
           color: stringToColor(member.user_id || member.id),
           cursor: null, // Default cursor position
           isTyping: false, // Default typing state
@@ -312,7 +311,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       
       toast({
         title: 'Success',
-        description: `${updatedMember.user?.display_name || 'Member'} permissions updated successfully`,
+        description: `${updatedMember.user?.name || 'Member'} permissions updated successfully`,
         duration: 3000
       });
     } catch (error) {
@@ -350,7 +349,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       
       toast({
         title: 'Success',
-        description: `${removedMember?.user?.display_name || 'Member'} removed from project`,
+        description: `${removedMember?.user?.name || 'Member'} removed from project`,
         duration: 3000
       });
     } catch (error) {
@@ -710,7 +709,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     .filter(member => member.user_id !== user?.id) // Exclude current user
     .map(member => ({
       id: parseInt(member.id.slice(-8), 16), // Convert UUID to number for mock compatibility
-      name: member.user?.display_name || member.user?.username || member.user?.email?.split('@')[0] || 'Unknown',
+      name: member.user?.name || member.user?.email?.split('@')[0] || 'Unknown',
       color: '#3B82F6',
       cursor: null as { line: number; column: number } | null,
       isTyping: false,
@@ -1043,6 +1042,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
                 autoRefreshEnabled={autoRefreshEnabled}
                 onMemberClick={handleMemberClick}
                 canManageMembers={canManageProject()}
+                projectId={project.id}
               />
             ) : (
               <CollaboratorPanel 

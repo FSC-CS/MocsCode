@@ -8,8 +8,7 @@ export type ApiConfig = {
 export type User = {
   id: string;
   email: string;
-  username: string;
-  display_name?: string;
+  name: string;
   avatar_url?: string;
   created_at: string;
   updated_at: string;
@@ -102,7 +101,6 @@ export type ChatMessage = {
   id: string;
   room_id: string;
   user_id: string;
-  username?: string;
   content: string;
   message_type: string;
   metadata: Record<string, any> | null;

@@ -6,7 +6,6 @@ import { toast } from '@/components/ui/use-toast';
 export interface OAuthUserData {
   id: string;
   email: string;
-  display_name?: string;
   avatar_url?: string;
 }
 
@@ -20,13 +19,12 @@ export class AuthApi extends ApiClient {
 
 
 async createUser(userData: OAuthUserData): Promise<ApiResponse<User>> {
-    const username = await this.generateUniqueUsername(userData.email.split('@')[0]);
+    const name = await this.generateUniqueName(userData.email.split('@')[0]);
     const now = new Date().toISOString();
 
     const user: Omit<User, 'id'> = {
       email: userData.email,
-      username,
-      display_name: userData.display_name || username,
+      name, // use generated unique name
       avatar_url: userData.avatar_url,
       created_at: now,
       updated_at: now,
@@ -34,13 +32,14 @@ async createUser(userData: OAuthUserData): Promise<ApiResponse<User>> {
     };
 
     const payload = { ...user, id: userData.id };
-    const { data, error } = await this.client
-      .from(this.table)
-      .insert([payload])
-      .select()
-      .single();
-
-    if (error) {
+    console.log('[DEBUG] Attempting to insert user payload:', payload);
+const { data, error } = await this.client
+  .from(this.table)
+  .insert([payload])
+  .select()
+  .single();
+if (error) {
+  console.error('[DEBUG] Supabase insert error:', error, { payload });
       console.error('Error inserting user:', error, { payload });
       toast({
         title: 'User Creation Error',
@@ -75,24 +74,24 @@ async createUser(userData: OAuthUserData): Promise<ApiResponse<User>> {
     });
   }
 
-  async generateUniqueUsername(baseUsername: string): Promise<string> {
-    let username = baseUsername.toLowerCase().replace(/[^a-z0-9]/g, '');
+  async generateUniqueName(baseName: string): Promise<string> {
+    let name = baseName.toLowerCase().replace(/[^a-z0-9]/g, '');
     let counter = 0;
     let isUnique = false;
 
     while (!isUnique) {
-      const testUsername = counter === 0 ? username : `${username}${counter}`;
-      const { data } = await this.usersApi.getUserByUsername(testUsername);
+      const testName = counter === 0 ? name : `${name}${counter}`;
+      const { data } = await this.usersApi.getUserByName(testName);
       
       if (!data) {
-        username = testUsername;
+        name = testName;
         isUnique = true;
       } else {
         counter++;
       }
     }
 
-    return username;
+    return name;
   }
 
   /**
@@ -117,8 +116,8 @@ async createUser(userData: OAuthUserData): Promise<ApiResponse<User>> {
 
   try {
     while (attempt < maxAttempts) {
-    const session = await this.usersApi.client.auth.getSession();
-    const { data, error } = await this.usersApi.getUser(oAuthData.id);
+    const session = await this.client.auth.getSession();
+    const { data, error } = await this.client.from('users').select('*').eq('id', oAuthData.id).single();
     if (data) {
       user = data;
       break;
@@ -139,9 +138,6 @@ async createUser(userData: OAuthUserData): Promise<ApiResponse<User>> {
     console.error('OAuth sync failed:', error, { lastError });
     return { data: null, error };
   }
-
-  // Optionally, update last_active_at, display_name, avatar_url if RLS allows UPDATE
-  // await this.usersApi.updateUser(user.id, { ... });
 
   return { data: user, error: null };
 }

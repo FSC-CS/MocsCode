@@ -12,8 +12,8 @@ import { ApiConfig, ChatMessage } from '@/lib/api/types';
 
 type SocketMessage = {
   id: string;
+  user_id: string;
   user: string;
-  username: string;
   content: string;
   timestamp: string;
   room: string;
@@ -22,8 +22,7 @@ type SocketMessage = {
 // Unified message type for UI
 type UIMessage = {
   id: string;
-  user: string;
-  username: string; // Display name for the message
+  user: string; // Display name for message
   content: string;
   timestamp: string;
   room: string;
@@ -53,8 +52,7 @@ interface EnhancedMember {
   user?: {
     id: string;
     email: string;
-    username: string;
-    display_name?: string;
+    name: string;
     avatar_url?: string;
   };
 }
@@ -114,13 +112,13 @@ const ChatPanel = ({
       setLoading(true);
       
       try {
-        // Get projectId from props or infer from projectMembers
-        const resolvedProjectId = projectId || projectMembers?.[0]?.project_id;
+        // Get projectId from ChatPanel prop
+        console.log('Resolved project ID:', projectId);
 
         // Get room id using project id and room name
-        const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, resolvedProjectId);
+        const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, projectId);
         
-        if (!resolvedProjectId || !projectMembers || projectMembers.length === 0) {
+        if (!projectId || !projectMembers || projectMembers.length === 0) {
           setLoading(false);
           return;
         }
@@ -131,8 +129,7 @@ const ChatPanel = ({
           // Normalize messages for UI compatibility
           const normalizedMessages: UIMessage[] = res.data.items.map(msg => ({
             id: msg.id,
-            user: msg.user_id,
-            username: msg.user.display_name,
+            user: msg.user.name,
             content: msg.content,
             timestamp: msg.created_at,
             color: getAvatarColor({ user_id: msg.user_id }), // Generate color based on user
@@ -166,16 +163,14 @@ const ChatPanel = ({
     setLoading(true);
     
     try {
-      // Get projectId from props or infer from projectMembers
-      const resolvedProjectId = projectId || projectMembers?.[0]?.project_id;
-      
-      if (!resolvedProjectId) {
+      // Get projectId from ChatPanel prop      
+      if (!projectId) {
         console.error('No project ID available');
         setLoading(false);
         return;
       }
 
-      const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, resolvedProjectId);
+      const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, projectId);
 
       
       if (!roomId) {
@@ -198,8 +193,7 @@ const ChatPanel = ({
         // Add message to local state immediately for better UX
         const newMessage: UIMessage = {
           id: res.data.id,
-          user: currentUser.id,
-          username: currentUser.display_name,
+          user: currentUser.name,
           content: message,
           timestamp: new Date().toISOString(),
           isOwn: true,
@@ -213,8 +207,8 @@ const ChatPanel = ({
         if (socket && isConnected) {
           socket.emit('message', {
             id: res.data.id,
-            user: currentUser.id,
-            username: currentUser.display_name,
+            user_id: currentUser.id,
+            user: currentUser.name,
             content: message,
             timestamp: new Date().toISOString(),
             room: currentRoom,
@@ -331,7 +325,7 @@ const ChatPanel = ({
         // Add a unique connection ID to help with debugging
         query: {
           user: currentUser.id,
-          username: currentUser.username || 'Anonymous',
+          username: currentUser.name || 'Anonymous',
           clientType: 'web'
         }
       });
@@ -353,7 +347,7 @@ const ChatPanel = ({
         
         if (!isInRoom) {
           newSocket.emit('enterRoom', { 
-            name: currentUser.username || 'Anonymous',
+            name: currentUser.name || 'Anonymous',
             room: 'general',
             user: currentUser.id,
             email: currentUser.email
@@ -450,11 +444,10 @@ const ChatPanel = ({
           id: messageId,
           user: msg.user,
           content: msg.content,
-          timestamp: msg.timestamp || new Date().toISOString(),
+          timestamp: msg.timestamp,
           color: getAvatarColor({ user_id: msg.user }),
           isOwn: false,
-          room: msg.room || 'General Discussion',
-          username: msg.username,
+          room: msg.room,
         };
         
         return [...prev, newMessage];
@@ -538,7 +531,7 @@ const ChatPanel = ({
   };
 
   const getDisplayName = (member: EnhancedMember): string => {
-    return member.user?.display_name || member.user?.username || `User ${member.user_id.substring(0, 6)}`;
+    return member.user?.name || `User ${member.user_id.substring(0, 6)}`;
   };
 
   const getInitials = (member: EnhancedMember): string => {

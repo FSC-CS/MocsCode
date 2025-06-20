@@ -45,8 +45,7 @@ interface EnhancedMember extends ProjectMember {
   user?: {
     id: string;
     email: string;
-    username: string;
-    display_name?: string;
+    name: string;
     avatar_url?: string;
   };
 }
@@ -205,7 +204,7 @@ const MemberManagementDialog: React.FC<MemberManagementDialogProps> = ({
   // Helper functions
   const getDisplayName = (member: EnhancedMember): string => {
     if (!member.user) return 'Unknown User';
-    return member.user.display_name || member.user.username || member.user.email.split('@')[0];
+    return member.user.name || member.user.email.split('@')[0];
   };
 
   const getInitials = (member: EnhancedMember): string => {

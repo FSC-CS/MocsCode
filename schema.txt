@@ -1,181 +1,119 @@
--- WARNING: This schema is for context only and is not meant to be run.
--- Table order and constraints may not be valid for execution.
-
-CREATE TABLE public.active_sessions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  project_id uuid NOT NULL,
-  file_id uuid,
-  cursor_position jsonb,
-  selection_range jsonb,
-  last_activity timestamp with time zone DEFAULT now(),
-  session_token character varying NOT NULL UNIQUE,
-  CONSTRAINT active_sessions_pkey PRIMARY KEY (id),
-  CONSTRAINT active_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
-  CONSTRAINT active_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
-  CONSTRAINT active_sessions_file_id_fkey FOREIGN KEY (file_id) REFERENCES public.project_files(id)
-);
-CREATE TABLE public.chat_messages (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  room_id uuid NOT NULL,
-  user_id uuid NOT NULL,
-  content text NOT NULL,
-  message_type character varying DEFAULT 'text'::character varying,
-  metadata jsonb DEFAULT '{}'::jsonb,
-  reply_to_id uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  is_deleted boolean DEFAULT false,
-  CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
-  CONSTRAINT chat_messages_reply_to_id_fkey FOREIGN KEY (reply_to_id) REFERENCES public.chat_messages(id),
-  CONSTRAINT chat_messages_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.chat_rooms(id),
-  CONSTRAINT chat_messages_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
-);
-CREATE TABLE public.chat_rooms (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL,
-  name character varying DEFAULT 'General'::character varying,
-  room_type character varying DEFAULT 'project'::character varying,
-  file_id uuid,
-  created_by uuid NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT chat_rooms_pkey PRIMARY KEY (id),
-  CONSTRAINT chat_rooms_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
-  CONSTRAINT chat_rooms_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
-  CONSTRAINT chat_rooms_file_id_fkey FOREIGN KEY (file_id) REFERENCES public.project_files(id)
-);
-CREATE TABLE public.file_operations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  file_id uuid NOT NULL,
-  user_id uuid NOT NULL,
-  operation_type character varying NOT NULL,
-  position jsonb NOT NULL,
-  content text,
-  length integer,
-  timestamp timestamp with time zone DEFAULT now(),
-  operation_id character varying NOT NULL,
-  CONSTRAINT file_operations_pkey PRIMARY KEY (id),
-  CONSTRAINT file_operations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
-  CONSTRAINT file_operations_file_id_fkey FOREIGN KEY (file_id) REFERENCES public.project_files(id)
-);
-CREATE TABLE public.file_versions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  project_version_id uuid NOT NULL,
-  file_id uuid NOT NULL,
-  content text,
-  content_hash character varying,
-  change_type character varying NOT NULL,
-  old_path text,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT file_versions_pkey PRIMARY KEY (id),
-  CONSTRAINT file_versions_file_id_fkey FOREIGN KEY (file_id) REFERENCES public.project_files(id),
-  CONSTRAINT file_versions_project_version_id_fkey FOREIGN KEY (project_version_id) REFERENCES public.project_versions(id)
-);
-CREATE TABLE public.project_files (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL,
-  name character varying NOT NULL,
-  path text NOT NULL,
-  content text,
-  file_type character varying,
-  mime_type character varying,
-  size_bytes bigint DEFAULT 0,
-  parent_id uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  created_by uuid,
-  CONSTRAINT project_files_pkey PRIMARY KEY (id),
-  CONSTRAINT project_files_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
-  CONSTRAINT project_files_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.project_files(id),
-  CONSTRAINT project_files_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
-);
-CREATE TABLE public.project_members (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL,
-  user_id uuid NOT NULL,
-  role character varying NOT NULL DEFAULT 'viewer'::character varying,
-  joined_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT project_members_pkey PRIMARY KEY (id),
-  CONSTRAINT project_members_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.users(id),
-  CONSTRAINT project_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
-  CONSTRAINT project_members_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
-);
-CREATE TABLE public.project_tags (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL,
-  name character varying NOT NULL,
-  color character varying DEFAULT '#6366f1'::character varying,
-  CONSTRAINT project_tags_pkey PRIMARY KEY (id),
-  CONSTRAINT project_tags_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
-);
-CREATE TABLE public.project_versions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL,
-  version_number integer NOT NULL,
-  commit_hash character varying NOT NULL UNIQUE,
-  commit_message text,
-  author_id uuid NOT NULL,
-  parent_version_id uuid,
-  is_main_branch boolean DEFAULT true,
-  branch_name character varying DEFAULT 'main'::character varying,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT project_versions_pkey PRIMARY KEY (id),
-  CONSTRAINT project_versions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
-  CONSTRAINT project_versions_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.users(id),
-  CONSTRAINT project_versions_parent_version_id_fkey FOREIGN KEY (parent_version_id) REFERENCES public.project_versions(id)
-);
-CREATE TABLE public.projects (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name character varying NOT NULL,
-  description text,
-  owner_id uuid NOT NULL,
-  is_public boolean DEFAULT false,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT projects_pkey PRIMARY KEY (id),
-  CONSTRAINT projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id),
-  CONSTRAINT projects_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.projects(id)
-);
-CREATE TABLE public.sharing_permissions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL,
-  role text NOT NULL DEFAULT 'viewer',
-  share_token character varying UNIQUE,
-  expires_at timestamp with time zone,
-  created_by uuid NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  is_active boolean DEFAULT true,
-  CONSTRAINT sharing_permissions_pkey PRIMARY KEY (id),
-  CONSTRAINT sharing_permissions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
-  CONSTRAINT sharing_permissions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
-);
-CREATE TABLE public.trigger_log (
-  id integer NOT NULL DEFAULT nextval('trigger_log_id_seq'::regclass),
-  event_type text,
-  user_id uuid,
-  user_email text,
-  raw_data jsonb,
-  created_at timestamp with time zone DEFAULT now(),
-  error_message text,
-  CONSTRAINT trigger_log_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.user_preferences (
-  user_id uuid NOT NULL,
-  theme character varying DEFAULT 'dark'::character varying,
-  editor_settings jsonb DEFAULT '{}'::jsonb,
-  notification_settings jsonb DEFAULT '{}'::jsonb,
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT user_preferences_pkey PRIMARY KEY (user_id),
-  CONSTRAINT user_preferences_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
-);
-CREATE TABLE public.users (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  email character varying NOT NULL UNIQUE,
-  username character varying NOT NULL UNIQUE,
-  display_name character varying,
-  avatar_url text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  last_active_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT users_pkey PRIMARY KEY (id)
-);
+| table_name          | column_name           | data_type                | is_nullable |
+| ------------------- | --------------------- | ------------------------ | ----------- |
+| active_sessions     | id                    | uuid                     | NO          |
+| active_sessions     | user_id               | uuid                     | NO          |
+| active_sessions     | project_id            | uuid                     | NO          |
+| active_sessions     | file_id               | uuid                     | YES         |
+| active_sessions     | cursor_position       | jsonb                    | YES         |
+| active_sessions     | selection_range       | jsonb                    | YES         |
+| active_sessions     | last_activity         | timestamp with time zone | YES         |
+| active_sessions     | session_token         | character varying        | NO          |
+| chat_messages       | id                    | uuid                     | NO          |
+| chat_messages       | room_id               | uuid                     | NO          |
+| chat_messages       | user_id               | uuid                     | NO          |
+| chat_messages       | content               | text                     | NO          |
+| chat_messages       | message_type          | character varying        | YES         |
+| chat_messages       | metadata              | jsonb                    | YES         |
+| chat_messages       | reply_to_id           | uuid                     | YES         |
+| chat_messages       | created_at            | timestamp with time zone | YES         |
+| chat_messages       | updated_at            | timestamp with time zone | YES         |
+| chat_messages       | is_deleted            | boolean                  | YES         |
+| chat_rooms          | id                    | uuid                     | NO          |
+| chat_rooms          | project_id            | uuid                     | NO          |
+| chat_rooms          | name                  | character varying        | YES         |
+| chat_rooms          | created_by            | uuid                     | NO          |
+| chat_rooms          | created_at            | timestamp with time zone | YES         |
+| email_invitations   | id                    | uuid                     | NO          |
+| email_invitations   | project_id            | uuid                     | NO          |
+| email_invitations   | share_link_id         | uuid                     | NO          |
+| email_invitations   | invited_email         | text                     | NO          |
+| email_invitations   | invited_by            | uuid                     | NO          |
+| email_invitations   | invitation_message    | text                     | YES         |
+| email_invitations   | sent_at               | timestamp with time zone | YES         |
+| email_invitations   | accepted_at           | timestamp with time zone | YES         |
+| email_invitations   | status                | text                     | YES         |
+| email_invitations   | created_at            | timestamp with time zone | YES         |
+| email_invitations   | updated_at            | timestamp with time zone | YES         |
+| file_operations     | id                    | uuid                     | NO          |
+| file_operations     | file_id               | uuid                     | NO          |
+| file_operations     | user_id               | uuid                     | NO          |
+| file_operations     | operation_type        | character varying        | NO          |
+| file_operations     | position              | jsonb                    | NO          |
+| file_operations     | content               | text                     | YES         |
+| file_operations     | length                | integer                  | YES         |
+| file_operations     | timestamp             | timestamp with time zone | YES         |
+| file_operations     | operation_id          | character varying        | NO          |
+| file_versions       | id                    | uuid                     | NO          |
+| file_versions       | project_version_id    | uuid                     | NO          |
+| file_versions       | file_id               | uuid                     | NO          |
+| file_versions       | content               | text                     | YES         |
+| file_versions       | content_hash          | character varying        | YES         |
+| file_versions       | change_type           | character varying        | NO          |
+| file_versions       | old_path              | text                     | YES         |
+| file_versions       | created_at            | timestamp with time zone | YES         |
+| project_files       | id                    | uuid                     | NO          |
+| project_files       | project_id            | uuid                     | NO          |
+| project_files       | name                  | character varying        | NO          |
+| project_files       | path                  | text                     | NO          |
+| project_files       | content               | text                     | YES         |
+| project_files       | file_type             | character varying        | YES         |
+| project_files       | mime_type             | character varying        | YES         |
+| project_files       | size_bytes            | bigint                   | YES         |
+| project_files       | parent_id             | uuid                     | YES         |
+| project_files       | created_at            | timestamp with time zone | YES         |
+| project_files       | updated_at            | timestamp with time zone | YES         |
+| project_files       | created_by            | uuid                     | YES         |
+| project_members     | id                    | uuid                     | NO          |
+| project_members     | project_id            | uuid                     | NO          |
+| project_members     | user_id               | uuid                     | NO          |
+| project_members     | role                  | text                     | NO          |
+| project_members     | joined_at             | timestamp with time zone | YES         |
+| project_tags        | id                    | uuid                     | NO          |
+| project_tags        | project_id            | uuid                     | NO          |
+| project_tags        | name                  | character varying        | NO          |
+| project_tags        | color                 | character varying        | YES         |
+| project_versions    | id                    | uuid                     | NO          |
+| project_versions    | project_id            | uuid                     | NO          |
+| project_versions    | version_number        | integer                  | NO          |
+| project_versions    | commit_hash           | character varying        | NO          |
+| project_versions    | commit_message        | text                     | YES         |
+| project_versions    | author_id             | uuid                     | NO          |
+| project_versions    | parent_version_id     | uuid                     | YES         |
+| project_versions    | is_main_branch        | boolean                  | YES         |
+| project_versions    | branch_name           | character varying        | YES         |
+| project_versions    | created_at            | timestamp with time zone | YES         |
+| projects            | id                    | uuid                     | NO          |
+| projects            | name                  | character varying        | NO          |
+| projects            | description           | text                     | YES         |
+| projects            | owner_id              | uuid                     | NO          |
+| projects            | is_public             | boolean                  | YES         |
+| projects            | created_at            | timestamp with time zone | YES         |
+| projects            | updated_at            | timestamp with time zone | YES         |
+| projects            | sharing_enabled       | boolean                  | NO          |
+| sharing_permissions | id                    | uuid                     | NO          |
+| sharing_permissions | project_id            | uuid                     | NO          |
+| sharing_permissions | share_token           | character varying        | YES         |
+| sharing_permissions | expires_at            | timestamp with time zone | YES         |
+| sharing_permissions | created_by            | uuid                     | NO          |
+| sharing_permissions | created_at            | timestamp with time zone | YES         |
+| sharing_permissions | is_active             | boolean                  | YES         |
+| sharing_permissions | role                  | text                     | NO          |
+| trigger_log         | id                    | integer                  | NO          |
+| trigger_log         | event_type            | text                     | YES         |
+| trigger_log         | user_id               | uuid                     | YES         |
+| trigger_log         | user_email            | text                     | YES         |
+| trigger_log         | raw_data              | jsonb                    | YES         |
+| trigger_log         | created_at            | timestamp with time zone | YES         |
+| trigger_log         | error_message         | text                     | YES         |
+| user_preferences    | user_id               | uuid                     | NO          |
+| user_preferences    | theme                 | character varying        | YES         |
+| user_preferences    | editor_settings       | jsonb                    | YES         |
+| user_preferences    | notification_settings | jsonb                    | YES         |
+| user_preferences    | updated_at            | timestamp with time zone | YES         |
+| users               | id                    | uuid                     | NO          |
+| users               | email                 | text                     | NO          |
+| users               | name                  | text                     | NO          |
+| users               | avatar_url            | text                     | YES         |
+| users               | created_at            | timestamp with time zone | YES         |
+| users               | updated_at            | timestamp with time zone | YES         |
+| users               | last_active_at        | timestamp with time zone | YES         |

@@ -66,8 +66,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const simpleDbUser: DbUser = {
           id: user.id,
           email: user.email!,
-          username: user.email?.split('@')[0] || 'user',
-          display_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0],
+          name: user.user_metadata?.name,
           avatar_url: user.user_metadata?.avatar_url,
           created_at: user.created_at,
           updated_at: new Date().toISOString(),
@@ -126,9 +125,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-      
-      console.log('Auth state change:', event, session?.user?.id);
-      
+            
       setIsLoading(false);
       
       if (session?.user) {
@@ -241,7 +238,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         password,
         options: {
           data: {
-            full_name: name,
+            name: name,
           },
           emailRedirectTo: `${window.location.origin}/dashboard`,
         },
@@ -363,22 +360,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     isReady,
     error,
   ]);
-
-  // Enhanced debugging
-  useEffect(() => {
-    console.log('Auth State:', {
-      isReady, 
-      isInitialized, 
-      isSyncing, 
-      isLoading, 
-      isSigningUp,
-      isSigningIn,
-      isSigningOut,
-      hasUser: !!user, 
-      hasDbUser: !!dbUser,
-      userEmail: user?.email
-    });
-  }, [isReady, isInitialized, isSyncing, isLoading, isSigningUp, isSigningIn, isSigningOut, user, dbUser]);
 
   return (
     <AuthContext.Provider value={value}>

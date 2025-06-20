@@ -339,6 +339,8 @@ const detectLanguage = (projectName: string): string => {
       // First get the project to find the owner
       const { data: projectData } = await projectsApi.getProject(projectId);
       if (!projectData) return;
+
+      console.log('HELLO', projectData);
       
       const ownerId = projectData.owner_id;
       

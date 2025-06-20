@@ -29,11 +29,6 @@ const Editor = () => {
         throw new Error('Project not found');
       }
       
-      // Update the project's updated_at timestamp in the background
-      (projectsApi as ProjectsApi).updateProject(projectId, {
-        updated_at: new Date().toISOString()
-      }).catch(console.error);
-      
       return data;
     },
     enabled: !!projectId && isReady && !!user,

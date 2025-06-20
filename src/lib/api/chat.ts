@@ -39,15 +39,23 @@ export class ChatMessageApi extends ApiClient {
     super(config, 'chat_messages');
   }
 
-  // List messages by room with joined user display_name
+  // List messages by room with joined user name
   async listByRoom(
     room_id: string,
     pagination?: PaginationParams,
     sort?: SortParams
-  ): Promise<PaginatedResponse<ChatMessage & { user: { display_name: string } }>> {
+  ): Promise<PaginatedResponse<ChatMessage & { user: {
+    id: string;
+    email: string;
+    name: string;
+    avatar_url?: string;
+    created_at: string;
+    updated_at: string;
+    last_active_at: string;
+  }}>> {
     let query = this.client
       .from('chat_messages')
-      .select(`*, user:user_id(display_name)`)
+      .select(`*, user:user_id(id, email, name, avatar_url, created_at, updated_at, last_active_at)`)
       .eq('room_id', room_id)
       .eq('is_deleted', false);
 

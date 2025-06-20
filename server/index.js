@@ -56,7 +56,7 @@ const userConnections = new Map();
 
 // Socket.io connection
 io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
+  console.log(`User connected to Socket: ${socket.id}`);
   
 
   // Handle user joining a room
@@ -139,7 +139,7 @@ io.on('connection', (socket) => {
 
   // Handle disconnection
   socket.on('disconnect', (reason) => {
-    console.log(`User disconnected: ${socket.id}, reason: ${reason}`);
+    console.log(`User disconnected from Socket: ${socket.id}, reason: ${reason}`);
     
     // Only handle cleanup if this was a voluntary disconnect or a timeout
     if (reason === 'io server disconnect' || reason === 'transport close' || reason === 'ping timeout') {

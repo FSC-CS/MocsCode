@@ -200,9 +200,11 @@ export class CollaborationApi extends ApiClient {
             user:users!project_members_user_id_fkey(
               id,
               email,
-              username,
-              display_name,
-              avatar_url
+              name,
+              avatar_url,
+              created_at,
+              updated_at,
+              last_active_at
             )
           `)
           .eq('id', parsedResult.member_id)

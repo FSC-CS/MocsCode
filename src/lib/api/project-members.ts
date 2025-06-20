@@ -42,19 +42,22 @@ export class ProjectMembersApi extends ApiClient {
         };
       }
 
+      console.log('BYE', data);
+
       const members = (data || []).map((row: any) => ({
         id: row.id,
         project_id: row.project_id,
         user_id: row.user_id,
         role: row.role,
-        invited_by: row.invited_by,
         joined_at: row.joined_at,
-        user: row.user_email ? {
-          id: row.user_id,
-          email: row.user_email,
-          username: row.user_username,
-          display_name: row.user_display_name,
-          avatar_url: row.user_avatar_url
+        user: row.user ? {
+          id: row.user.id,
+          email: row.user.email,
+          name: row.user.name,
+          avatar_url: row.user.avatar_url,
+          created_at: row.user.created_at,
+          updated_at: row.user.updated_at,
+          last_active_at: row.user.last_active_at
         } : null
       }));
 
@@ -66,6 +69,7 @@ export class ProjectMembersApi extends ApiClient {
             userId: member.user_id,
             projectId: member.project_id
           });
+          console.log(member);
           return false;
         }
         return true;
@@ -103,7 +107,7 @@ export class ProjectMembersApi extends ApiClient {
       // First, verify the user exists
       const { data: user, error: userError } = await this.client
         .from('users')
-        .select('id, email, username, display_name, avatar_url')
+        .select('id, email, name, avatar_url, created_at, updated_at, last_active_at')
         .eq('id', data.user_id)
         .single();
 
@@ -178,7 +182,7 @@ export class ProjectMembersApi extends ApiClient {
       // First, check if the user exists
       const { data: existingUser, error: userError } = await this.client
         .from('users')
-        .select('id, email, username, display_name, avatar_url')
+        .select('id, email, name, avatar_url')
         .eq('email', email)
         .single();
 
@@ -332,7 +336,7 @@ export class ProjectMembersApi extends ApiClient {
     try {
       // Use our helper function
       const { data: access, error } = await this.client
-        .rpc<{ user_role: 'owner' | 'editor' | 'viewer' }>('check_project_access', { 
+        .rpc('check_project_access', { 
           p_project_id: projectId,
           p_user_id: userId 
         })
@@ -345,7 +349,7 @@ export class ProjectMembersApi extends ApiClient {
         };
       }
 
-      const canManage = access?.user_role === 'owner';
+      const canManage = (access as { user_role: 'owner' | 'editor' | 'viewer' } | null)?.user_role === 'owner';
 
       return {
         data: canManage,

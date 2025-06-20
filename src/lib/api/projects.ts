@@ -173,6 +173,7 @@ export class ProjectsApi extends ApiClient {
   }
 
   async updateProject(id: string, data: Partial<Project>): Promise<ApiResponse<Project>> {
+    console.log('Updating project:', id, data)
     return this.update<Project>(id, data);
   }
 

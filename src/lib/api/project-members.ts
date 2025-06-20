@@ -42,8 +42,6 @@ export class ProjectMembersApi extends ApiClient {
         };
       }
 
-      console.log('BYE', data);
-
       const members = (data || []).map((row: any) => ({
         id: row.id,
         project_id: row.project_id,

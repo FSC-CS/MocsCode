@@ -123,7 +123,11 @@ const ChatPanel = ({
           return;
         }
 
-        const res = await chatApi.listByRoom(roomId);
+        const res = await chatApi.listByRoom(
+          roomId,
+          { page: 1, per_page: 100 },
+          { field: 'created_at', direction: 'desc' }
+        );
         
         if (mounted && res?.data?.items) {
           // Normalize messages for UI compatibility
@@ -135,7 +139,8 @@ const ChatPanel = ({
             color: getAvatarColor({ user_id: msg.user_id }), // Generate color based on user
             isOwn: msg.user_id === currentUser?.id,
             room: currentRoom,
-          }));
+          }))
+          .reverse();
           
           setMessages(normalizedMessages);
         }

@@ -118,14 +118,14 @@ io.on('connection', (socket) => {
     if (user) {
       const message = {
         id: msg.id, // Echo the client-provided id to prevent duplicates
-        user: user.email || user.name,
+        user: msg.user || "Unknown", // WHy does user.name resolve to EMAIL??
         userId: socket.id,
-        text: msg.text,
+        content: msg.content,
         timestamp: new Date(),
         color: msg.color || '#6B7280',
-        room: user.room
+        room: msg.room
       };
-      io.to(user.room).emit('message', message);
+      io.to(msg.room).emit('message', message);
     }
   });
 

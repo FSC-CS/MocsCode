@@ -32,7 +32,7 @@ const Landing = () => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
               <Code className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">CodeCollab</h1>
+              <h1 className="text-2xl font-bold text-gray-900">MocsCode</h1>
             </div>
             <div className="flex items-center space-x-4">
               {user ? (
@@ -97,7 +97,7 @@ const Landing = () => {
         {/* Features Section */}
         <div className="py-20">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
-            Why Choose CodeCollab?
+            Why Choose MocsCode?
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
@@ -132,7 +132,7 @@ const Landing = () => {
             <Zap className="h-16 w-16 mx-auto mb-6" />
             <h2 className="text-3xl font-bold mb-4">Ready to Start Coding?</h2>
             <p className="text-xl mb-8 opacity-90">
-              Join thousands of developers already collaborating on CodeCollab
+              Join thousands of developers already collaborating on MocsCode
             </p>
             <Button 
               size="lg"
@@ -150,11 +150,11 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="flex items-center justify-center space-x-2 mb-4">
             <Code className="h-6 w-6" />
-            <span className="text-lg font-semibold">CodeCollab</span>
+            <span className="text-lg font-semibold">MocsCode</span>
           </div>
           <p className="text-slate-400">
-            2024 CodeCollab. Empowering collaborative development.
-            © 2024 CodeCollab. Empowering collaborative development.
+            2024 MocsCode. Empowering collaborative development.
+            © 2024 MocsCode. Empowering collaborative development.
           </p>
         </div>
       </footer>

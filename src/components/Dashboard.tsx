@@ -485,7 +485,7 @@ const detectLanguage = (projectName: string): string => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
               <Code className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">CodeCollab</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">MocsCode</h1>
             </div>
             <div className="flex items-center space-x-4">
               {isAuthLoading ? (

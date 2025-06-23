@@ -66,6 +66,7 @@ export interface ShareableLink {
 export type PaginationParams = {
   page?: number;
   per_page?: number;
+  cursor?: string;
 };
 
 export type SortParams = {
@@ -86,6 +87,7 @@ export type PaginatedResponse<T> = ApiResponse<{
   total: number;
   page: number;
   per_page: number;
+  nextCursor?: string;
 }>;
 
 // === Chat feature types for chat API integration ===

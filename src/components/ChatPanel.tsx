@@ -99,6 +99,11 @@ const ChatPanel = ({
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatListRef = useRef<HTMLDivElement>(null); // Ref for scrollable chat container
+
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [paginationCursor, setPaginationCursor] = useState<string | null>(null); // e.g., oldest message id or timestamp
 
   // Chat API instances
   const chatApi = React.useMemo(() => new ChatMessageApi({ client: supabase }), []);
@@ -125,8 +130,8 @@ const ChatPanel = ({
 
         const res = await chatApi.listByRoom(
           roomId,
-          { page: 1, per_page: 100 },
-          { field: 'created_at', direction: 'desc' }
+          { page: 1, per_page: 10 },
+          { field: 'created_at', direction: 'desc' },
         );
         
         if (mounted && res?.data?.items) {
@@ -226,6 +231,83 @@ const ChatPanel = ({
       console.error('Error sending message:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // --- Infinite Scroll: Attach scroll event listener ---
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!chatListRef.current || loadingMore || !hasMore) return;
+      // If user scrolls near the top (e.g., < 100px), load older messages
+      if (chatListRef.current.scrollTop < 100) {
+        loadOlderMessages();
+      }
+    };
+    const node = chatListRef.current;
+    if (node) node.addEventListener('scroll', handleScroll);
+    return () => node?.removeEventListener('scroll', handleScroll);
+  }, [loadingMore, hasMore]);
+
+  // Placeholder: implement this in the next step
+  const loadOlderMessages = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+
+    // Save current scroll height to maintain position after prepending
+    const prevScrollHeight = chatListRef.current?.scrollHeight || 0;
+
+    try {
+      console.log("loading older messages")
+      // Get projectId and roomId
+      if (!projectId || !projectMembers || projectMembers.length === 0) {
+        setLoadingMore(false);
+        console.log("no project id or project members")
+        return;
+      }
+      const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, projectId);
+      if (!roomId) {
+        setLoadingMore(false);
+        return;
+      }
+      // Use the oldest message's timestamp or id as the cursor
+      const oldest = messages[0];
+      const cursor = oldest ? oldest.timestamp : null;
+      const res = await chatApi.listByRoom(
+        roomId,
+        { per_page: 50, cursor: cursor },
+        { field: 'created_at', direction: 'desc' },
+      );
+      const newItems = res?.data?.items || [];
+      if (newItems.length === 0) {
+        setHasMore(false);
+        setLoadingMore(false);
+        return;
+      }
+      // Normalize and reverse (oldest first)
+      const normalized: UIMessage[] = newItems.map(msg => ({
+        id: msg.id,
+        user: msg.user.name,
+        content: msg.content,
+        timestamp: msg.created_at,
+        color: getAvatarColor({ user_id: msg.user_id }),
+        isOwn: msg.user_id === currentUser?.id,
+        room: currentRoom,
+      })).reverse();
+      setMessages(prev => [...normalized, ...prev]);
+      // Update cursor for next fetch
+      setPaginationCursor(normalized[0]?.timestamp || null);
+      // Maintain scroll position
+      setTimeout(() => {
+        if (chatListRef.current) {
+          chatListRef.current.scrollTop = (chatListRef.current.scrollHeight - prevScrollHeight);
+        }
+      }, 0);
+      // If fewer than per_page were returned, no more pages
+      if (newItems.length < 50) setHasMore(false);
+    } catch (error) {
+      console.error('Error loading older messages:', error);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -612,7 +694,7 @@ const ChatPanel = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={chatListRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading && messages.length === 0 && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-gray-400" />

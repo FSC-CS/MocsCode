@@ -43,7 +43,7 @@ export class ChatMessageApi extends ApiClient {
   async listByRoom(
     room_id: string,
     pagination?: PaginationParams,
-    sort?: SortParams
+    sort?: SortParams,
   ): Promise<PaginatedResponse<ChatMessage & { user: {
     id: string;
     email: string;
@@ -55,29 +55,50 @@ export class ChatMessageApi extends ApiClient {
   }}>> {
     let query = this.client
       .from('chat_messages')
-      .select(`*, user:user_id(id, email, name, avatar_url, created_at, updated_at, last_active_at)`)
+      .select(`*, user:user_id(id, email, name, avatar_url, created_at, updated_at, last_active_at)` )
       .eq('room_id', room_id)
       .eq('is_deleted', false);
 
-    // Apply sorting if provided
+    // Apply sorting if provided, else default to created_at descending
     if (sort) {
       query = query.order(sort.field, { ascending: sort.direction === 'asc' });
+    } else {
+      query = query.order('created_at', { ascending: false });
     }
-    // Apply pagination if provided
-    if (pagination) {
-      const { page, per_page } = pagination;
-      const from = (page - 1) * per_page;
-      const to = from + per_page - 1;
+
+    // Cursor-based pagination
+    if (pagination?.cursor) {
+      // Assumes cursor is a created_at ISO string
+      query = query.lt('created_at', pagination.cursor);
+    }
+
+    // Limit results (for both cursor and page-based)
+    if (pagination?.per_page) {
+      query = query.limit(pagination.per_page);
+    }
+
+    // Page-based fallback (if no cursor)
+    if (!pagination?.cursor && pagination?.page && pagination?.per_page) {
+      const from = (pagination.page - 1) * pagination.per_page;
+      const to = from + pagination.per_page - 1;
       query = query.range(from, to);
     }
 
     const { data, error, count } = await query;
+
+    // Compute next cursor (for infinite scroll)
+    let nextCursor: string | undefined = undefined;
+    if (data && data.length > 0) {
+      nextCursor = data[data.length - 1].created_at;
+    }
+
     return {
       data: {
         items: data || [],
         total: count ?? data?.length ?? 0,
         page: pagination?.page ?? 1,
-        per_page: pagination?.per_page ?? (data?.length ?? 0)
+        per_page: pagination?.per_page ?? (data?.length ?? 0),
+        nextCursor,
       },
       error
     };

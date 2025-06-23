@@ -50,6 +50,59 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const clearError = () => setError(null);
 
+  // Listen for email invitations in real time
+  useEffect(() => {
+    if (!user || !user.email) return;
+  
+    const channel = supabase.channel('email-invite-listener')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'email_invitations',
+          filter: `invited_email=eq.${user.email}`,
+        },
+        async (payload) => {
+          const shareLinkId = payload.new?.share_link_id;
+          if (!shareLinkId) return;
+  
+          // Fetch the share_token from sharing_permissions
+          const { data, error } = await supabase
+            .from('sharing_permissions')
+            .select('share_token')
+            .eq('id', shareLinkId)
+            .single();
+  
+          const shareToken = data?.share_token;
+  
+          toast({
+            title: "You've been invited to a project!",
+            description: (
+              <span>
+                Click <button
+                  className="underline text-blue-600 hover:text-blue-800"
+                  onClick={() => {
+                    if (shareToken) {
+                      window.location.href = `/join/${shareToken}`;
+                    } else {
+                      window.location.href = '/joinproject';
+                    }
+                  }}
+                >here</button> to accept your invitation.
+              </span>
+            ),
+            duration: Infinity,
+          });
+        }
+      )
+      .subscribe();
+  
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, toast]);
+
   // SIMPLIFIED: User sync without recursive lookups
   useEffect(() => {
     if (!isInitialized || !user) {

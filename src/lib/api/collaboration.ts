@@ -470,6 +470,28 @@ export class CollaborationApi extends ApiClient {
         };
       }
 
+      // Also update email_invitations if a record exists for this share_link_id
+      const { data: invitation, error: invitationFetchError } = await this.client
+        .from('email_invitations')
+        .select()
+        .eq('share_link_id', linkId)
+        .maybeSingle();
+
+      if (invitationFetchError) {
+        console.error('Email invitation not found:', invitationFetchError);
+        // Do not block main operation, just log
+      } else if (invitation) {
+        const { error: invitationUpdateError } = await this.client
+          .from('email_invitations')
+          .update({ status: 'revoked' })
+          .eq('id', invitation.id);
+
+        if (invitationUpdateError) {
+          console.error('Error updating email invitation status:', invitationUpdateError);
+          // Do not block main operation, just log
+        }
+      }
+
       console.log('Share link revoked successfully');
 
       return {

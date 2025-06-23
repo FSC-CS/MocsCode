@@ -307,23 +307,6 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
               Try Again
             </Button>
           </Card>
-        ) : otherCollaborators.length === 0 ? (
-          // Empty state
-          <Card className="p-4 bg-gray-700 border-gray-600 text-center">
-            <User className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-400 mb-2">No other collaborators yet</p>
-            {canManageMembers && onInviteClick && (
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={onInviteClick}
-                className="border-gray-600 text-gray-300 hover:bg-gray-600"
-              >
-                <UserPlus className="h-3 w-3 mr-1" />
-                Invite People
-              </Button>
-            )}
-          </Card>
         ) : (
           // Collaborators list
           otherCollaborators.map((collaborator) => (

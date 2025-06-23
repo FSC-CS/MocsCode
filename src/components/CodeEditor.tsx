@@ -1029,6 +1029,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
               Collaborators
             </button>
           </div>
+
           {/* Tab Content */}
           <div className="flex-1 min-h-0 overflow-y-auto">
             {activeSidebarTab === 'chat' ? (

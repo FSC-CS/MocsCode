@@ -101,6 +101,13 @@ const ChatPanel = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null); // Ref for scrollable chat container
 
+  // Helper: Scroll to bottom only when sending or joining, not when loading older messages
+  const scrollToBottom = () => {
+    if (chatListRef.current) {
+      chatListRef.current.scrollTop = chatListRef.current.scrollHeight;
+    }
+  };
+
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [paginationCursor, setPaginationCursor] = useState<string | null>(null); // e.g., oldest message id or timestamp
@@ -130,7 +137,7 @@ const ChatPanel = ({
 
         const res = await chatApi.listByRoom(
           roomId,
-          { page: 1, per_page: 10 },
+          { page: 1, per_page: 256 },
           { field: 'created_at', direction: 'desc' },
         );
         
@@ -236,32 +243,46 @@ const ChatPanel = ({
 
   // --- Infinite Scroll: Attach scroll event listener ---
   useEffect(() => {
-    const handleScroll = () => {
-      if (!chatListRef.current || loadingMore || !hasMore) return;
-      // If user scrolls near the top (e.g., < 100px), load older messages
-      if (chatListRef.current.scrollTop < 100) {
-        loadOlderMessages();
-      }
+    if (!chatListRef.current) return;
+    let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const debouncedScroll = () => {
+      if (debounceTimeout) clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        if (!chatListRef.current || loadingMore || !hasMore) return;
+        if (chatListRef.current.scrollTop < 100) {
+          loadOlderMessages();
+        }
+      }, 100); // 100ms debounce
     };
+
     const node = chatListRef.current;
-    if (node) node.addEventListener('scroll', handleScroll);
-    return () => node?.removeEventListener('scroll', handleScroll);
-  }, [loadingMore, hasMore]);
+    node.addEventListener('scroll', debouncedScroll);
+    return () => {
+      node.removeEventListener('scroll', debouncedScroll);
+      if (debounceTimeout) clearTimeout(debounceTimeout);
+    };
+  }, [chatListRef.current, loadingMore, hasMore]);
 
   // Placeholder: implement this in the next step
   const loadOlderMessages = async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
 
-    // Save current scroll height to maintain position after prepending
-    const prevScrollHeight = chatListRef.current?.scrollHeight || 0;
+    // Save scroll position relative to the first visible message
+    let prevScrollHeight = 0;
+    let prevScrollTop = 0;
+    if (chatListRef.current) {
+      prevScrollHeight = chatListRef.current.scrollHeight;
+      prevScrollTop = chatListRef.current.scrollTop;
+    }
 
     try {
       console.log("loading older messages")
       // Get projectId and roomId
-      if (!projectId || !projectMembers || projectMembers.length === 0) {
+      if (!projectId) {
         setLoadingMore(false);
-        console.log("no project id or project members")
+        console.log("no project id")
         return;
       }
       const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, projectId);
@@ -293,19 +314,14 @@ const ChatPanel = ({
         isOwn: msg.user_id === currentUser?.id,
         room: currentRoom,
       })).reverse();
-      setMessages(prev => [...normalized, ...prev]);
-      // Update cursor for next fetch
-      setPaginationCursor(normalized[0]?.timestamp || null);
-      // Maintain scroll position
-      setTimeout(() => {
-        if (chatListRef.current) {
-          chatListRef.current.scrollTop = (chatListRef.current.scrollHeight - prevScrollHeight);
-        }
-      }, 0);
-      // If fewer than per_page were returned, no more pages
-      if (newItems.length < 50) setHasMore(false);
-    } catch (error) {
-      console.error('Error loading older messages:', error);
+
+      // Deduplicate: only prepend messages that are not already present
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(m => m.id));
+        const deduped = normalized.filter(m => !existingIds.has(m.id));
+        return [...deduped, ...prev];
+      });
+
     } finally {
       setLoadingMore(false);
     }

@@ -1083,6 +1083,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
           projectId={project.id}
           onMemberUpdated={handleMemberUpdated}
           onMemberRemoved={handleMemberRemoved}
+          onMembersChanged={() => setMemberRefreshTrigger(t => t + 1)}
         />
       )}
     </div>

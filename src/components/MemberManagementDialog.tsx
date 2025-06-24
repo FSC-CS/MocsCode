@@ -57,6 +57,7 @@ interface MemberManagementDialogProps {
   projectId: string;
   onMemberUpdated?: (updatedMember: EnhancedMember) => void;
   onMemberRemoved?: (removedMemberId: string) => void;
+  onMembersChanged?: () => void; // NEW: generic callback for any member/permission change
 }
 
 const MemberManagementDialog: React.FC<MemberManagementDialogProps> = ({
@@ -66,6 +67,7 @@ const MemberManagementDialog: React.FC<MemberManagementDialogProps> = ({
   projectId,
   onMemberUpdated,
   onMemberRemoved,
+  onMembersChanged,
 }) => {
   const { toast } = useToast();
   const { projectMembersApi } = useApi();
@@ -130,6 +132,8 @@ const MemberManagementDialog: React.FC<MemberManagementDialogProps> = ({
           description: error.message,
           variant: 'destructive',
         });
+
+        // If using React Query:
         return;
       }
 
@@ -145,7 +149,10 @@ const MemberManagementDialog: React.FC<MemberManagementDialogProps> = ({
         if (onMemberUpdated) {
           onMemberUpdated(updatedMember);
         }
-
+        // NEW: trigger generic refresh for CollaboratorPanel
+        if (onMembersChanged) {
+          onMembersChanged();
+        }
         setHasChanges(false);
       }
     } catch (error) {
@@ -185,7 +192,10 @@ const MemberManagementDialog: React.FC<MemberManagementDialogProps> = ({
       if (onMemberRemoved) {
         onMemberRemoved(member.id);
       }
-
+      // NEW: trigger generic refresh for CollaboratorPanel
+      if (onMembersChanged) {
+        onMembersChanged();
+      }
       // Close dialogs
       setShowRemoveConfirm(false);
       onClose();

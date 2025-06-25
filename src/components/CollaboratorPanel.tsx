@@ -7,6 +7,7 @@ import { useApi } from '@/contexts/ApiContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { ProjectMember } from '@/lib/api/types';
+import { UserAvatar } from '@/components/UserAvatar';
 
 interface EnhancedCollaborator extends ProjectMember {
   user?: {
@@ -244,10 +245,9 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
                 style={{ backgroundColor: getAvatarColor(currentUser) }}
               >
                 {currentUser.user?.avatar_url ? (
-                  <img 
-                    src={currentUser.user.avatar_url} 
-                    alt="Avatar" 
-                    className="w-8 h-8 rounded-full"
+                  <UserAvatar 
+                    avatar_url={currentUser.user.avatar_url}
+                    size="sm"
                   />
                 ) : (
                   getInitials(currentUser)
@@ -332,10 +332,9 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
                     style={{ backgroundColor: getAvatarColor(collaborator) }}
                   >
                     {collaborator.user?.avatar_url ? (
-                      <img 
-                        src={collaborator.user.avatar_url} 
-                        alt="Avatar" 
-                        className="w-8 h-8 rounded-full"
+                      <UserAvatar 
+                        avatar_url={collaborator.user.avatar_url} 
+                        size="sm"
                       />
                     ) : (
                       getInitials(collaborator)

@@ -2,10 +2,14 @@ import React from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { User } from 'lucide-react';
 
+import { useApi } from '@/contexts/ApiContext';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+
 interface UserAvatarProps {
-  src?: string | null;
-  name?: string | null;
-  email?: string | null;
+  avatar_url: string | null;
+  fallbackInitials?: string;
+  fallbackColor?: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
 }
@@ -16,23 +20,16 @@ const sizeClasses = {
   lg: 'h-12 w-12',
 };
 
-export function UserAvatar({ 
-  src, 
-  name, 
-  email, 
+export function UserAvatar({
+  avatar_url,
+  fallbackInitials = 'U',
+  fallbackColor,
   className = '',
-  size = 'md' 
+  size = 'md',
 }: UserAvatarProps) {
   const [hasError, setHasError] = React.useState(false);
-  const displayName = name || email?.split('@')[0] || 'U';
-  const initials = displayName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-
-  // Generate a consistent color based on the user's name or email
+  const [isLoading, setIsLoading] = React.useState(!!avatar_url);
+  // Generate a consistent color based on the fallback string
   const stringToColor = (str: string) => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -41,26 +38,65 @@ export function UserAvatar({
     const hue = Math.abs(hash % 360);
     return `hsl(${hue}, 70%, 60%)`;
   };
+  const backgroundColor = fallbackColor || stringToColor(fallbackInitials);
 
-  const backgroundColor = stringToColor(displayName);
+  // Resolve avatar image (with signed URL if needed)
+  const [signedUrl, setSignedUrl] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!avatar_url) {
+      setSignedUrl(null);
+      return;
+    }
+    if (avatar_url.startsWith('http')) {
+      setSignedUrl(avatar_url);
+      return;
+    }
+    // Supabase storage path
+    let cancelled = false;
+    supabase.storage
+      .from('avatar-images')
+      .createSignedUrl(avatar_url, 60 * 60 * 24 * 365)
+      .then(({ data: signed, error }) => {
+        if (!cancelled) {
+          setSignedUrl(signed?.signedUrl || null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [avatar_url]);
 
-  // Don't try to load the image if we've already had an error
-  const imageSrc = src && !hasError ? src : undefined;
+  const imageSrc = signedUrl && !hasError ? signedUrl : undefined;
+
+  // Handler for image load
+  const handleImageLoad = () => setIsLoading(false);
+  const handleImageError = () => {
+    setHasError(true);
+    setIsLoading(false);
+  };
 
   return (
     <Avatar className={`${sizeClasses[size]} ${className}`}>
-      {imageSrc ? (
-        <AvatarImage 
-          src={imageSrc} 
-          alt={name || ''}
-          onError={() => setHasError(true)}
+      {imageSrc && !hasError && (
+        <AvatarImage
+          src={imageSrc}
+          alt={fallbackInitials}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
         />
-      ) : null}
-      <AvatarFallback 
-        className="text-white font-medium flex items-center justify-center"
-        style={{ backgroundColor }}
+      )}
+      <AvatarFallback
+        className={
+          `text-white font-medium flex items-center justify-center ` +
+          (isLoading ? 'bg-neutral-300' : '')
+        }
+        style={isLoading ? undefined : { backgroundColor }}
       >
-        {initials}
+        {isLoading ? (
+          <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-label="Loading avatar" />
+        ) : (
+          fallbackInitials
+        )}
       </AvatarFallback>
     </Avatar>
   );

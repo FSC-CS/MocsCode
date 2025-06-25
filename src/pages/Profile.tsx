@@ -9,6 +9,9 @@ import { ArrowLeft, Camera, Edit2, Save, Users, Clock, Code, Sun, Moon } from 'l
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext'    
 import { useTheme } from 'next-themes';
+import { supabase } from '@/lib/supabase';
+import imageCompression from 'browser-image-compression';
+import { useApi } from '@/contexts/ApiContext';
 
 interface Project {
   id: string;
@@ -21,8 +24,12 @@ interface Project {
 }
 
 const Profile = () => {
+  // ...existing state
+  const [avatarLoading, setAvatarLoading] = useState(true);
+  const [avatarError, setAvatarError] = useState(false);
+  const { usersApi } = useApi();
   const navigate = useNavigate();
-  const { user, isLoading } = useAuth();
+  const { user: authUser, isLoading } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const { theme, setTheme } = useTheme();
   const [profileData, setProfileData] = useState({
@@ -31,59 +38,167 @@ const Profile = () => {
     bio: 'Computer Science student passionate about algorithms and web development. Currently working on data structures and machine learning projects.',
     profilePicture: null as string | null
   });
+  const [customUser, setCustomUser] = useState<any>(null);
+const [profileLoading, setProfileLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) {
+  const handleSave = async () => {
+    setIsEditing(false);
+    // Only update if username changed
+    if (!customUser || profileData.username === customUser.name) return;
+    try {
+      // Optionally: Set a loading state here
+      const { error, data } = await usersApi.updateUser(authUser.id, { name: profileData.username });
+      if (error) {
+        alert('Failed to update username: ' + error.message);
+        return;
+      }
+      // Update local customUser state with new name
+      setCustomUser((prev: any) => ({ ...prev, name: profileData.username }));
+      // Optionally: Show success toast
+      if (window && (window as any).toast) {
+        (window as any).toast({
+          title: 'Profile Updated',
+          description: 'Your username was updated!',
+          variant: 'success',
+        });
+      }
+    } catch (err: any) {
+      alert('An unexpected error occurred while updating username: ' + err.message);
+    }
+  };
+
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const handleProfilePictureChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    setAvatarUploading(true);
+
+    try {
+      // Compress and resize the image before upload
+      const options = {
+        maxSizeMB: 0.15, // ~150KB
+        maxWidthOrHeight: 256,
+        useWebWorker: true,
+      };
+      const compressedFile = await imageCompression(file, options);
+      const fileExt = compressedFile.name.split('.').pop() || file.name.split('.').pop();
+      const fileName = `${user.id}/avatar.${fileExt}`;
+
+      // Upload the file
+      const { data, error } = await supabase.storage
+        .from('avatar-images')
+        .upload(fileName, compressedFile, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: compressedFile.type,
+        });
+
+      if (error) throw error;
+
+      // Create a signed URL for the uploaded file
+      const { data: signedUrlData, error: urlError } = await supabase.storage
+        .from('avatar-images')
+        .createSignedUrl(fileName, 60 * 60 * 24 * 365); // 1 year expiry
+
+      if (urlError) throw urlError;
+      if (!signedUrlData?.signedUrl) throw new Error('Could not get signed URL');
+
       setProfileData(prev => ({
         ...prev,
-        email: user.email || '',
-        username: user.email?.split('@')[0] || 'student123'
+        profilePicture: signedUrlData.signedUrl
       }));
-    }
-  }, [user]);
 
-  // Mock user's owned projects (latest 3)
-  const userProjects: Project[] = [
-    {
-      id: '1',
-      name: 'Data Structures Assignment',
-      language: 'Java',
-      lastModified: '2 hours ago',
-      collaborators: 3,
-      description: 'Implementing sorting algorithms for CS210',
-      collaboratorAvatars: [
-        { initials: 'SK', color: '#ef4444' },
-        { initials: 'MJ', color: '#3b82f6' }
-      ]
-    },
-    {
-      id: '3',
-      name: 'Algorithm Analysis',
-      language: 'Python',
-      lastModified: '3 days ago',
-      collaborators: 1,
-      collaboratorAvatars: []
-    }
-  ];
+      // Update user profile in DB with new avatar_url
+      try {
+        const { error: updateError } = await usersApi.updateUser(user.id, { avatar_url: fileName });
+        if (updateError) {
+          throw updateError;
+        }
+        // Optionally: refetch user profile here if needed
+      } catch (updateErr) {
+        console.error('Failed to update avatar_url in users table:', updateErr);
+        alert('Avatar upload succeeded, but failed to update user profile.');
+      }
 
-  const handleSave = () => {
-    setIsEditing(false);
-    // Here you would typically save to a backend
-  };
-
-  const handleProfilePictureChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setProfileData(prev => ({
-          ...prev,
-          profilePicture: e.target?.result as string
-        }));
-      };
-      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Failed to upload avatar: ' + (err as Error).message);
+    } finally {
+      setAvatarUploading(false);
     }
   };
+
+
+  // Load avatar using avatar_url from users table
+const loadExistingAvatar = async () => {
+  if (!customUser) {
+    return;
+  }
+
+  try {
+    const avatarUrl = customUser.avatar_url;
+    if (!avatarUrl) {
+      return;
+    }
+
+    // Check if avatarUrl is a Google profile image
+    if (avatarUrl.startsWith('https://lh3.googleusercontent.com/')) {
+      setProfileData(prev => ({
+        ...prev,
+        profilePicture: avatarUrl
+      }));
+      return;
+    }
+
+    // Otherwise, treat as Supabase storage path
+    const { data, error } = await supabase.storage
+      .from('avatar-images')
+      .createSignedUrl(avatarUrl, 60 * 60 * 24 * 365);
+
+    if (!error && data?.signedUrl) {
+      console.log('Supabase signed URL:', data.signedUrl);
+      setProfileData(prev => ({
+        ...prev,
+        profilePicture: data.signedUrl
+      }));
+    } else {
+      if (error) {
+        console.error('Supabase signed URL error:', error);
+      } else {
+        console.warn('No signed URL returned from Supabase:', data);
+      }
+    }
+  } catch (err) {
+    console.error('Error loading existing avatar:', err);
+  }
+};
+
+// Fetch custom user after auth
+useEffect(() => {
+  if (authUser) {
+    setProfileLoading(true);
+    usersApi.getUser(authUser.id).then((res: any) => {
+      setCustomUser(res.data);
+      setProfileLoading(false);
+    });
+  }
+}, [authUser]);
+
+useEffect(() => {
+  if (authUser && customUser) {
+    setProfileData(prev => ({
+      ...prev,
+      email: authUser.email || '',
+      username: customUser.name || ''
+    }));
+    // Load existing avatar
+    loadExistingAvatar();
+    setAvatarLoading(true); // Reset loading state when user changes
+    setAvatarError(false);
+  }
+}, [authUser, customUser]);
 
   const getLanguageColor = (language: string) => {
     const colors: { [key: string]: string } = {
@@ -175,12 +290,28 @@ const Profile = () => {
           <div className="flex flex-col md:flex-row items-start md:items-center space-y-6 md:space-y-0 md:space-x-8">
             {/* Profile Picture */}
             <div className="relative">
-              <Avatar className="w-32 h-32 border-4 border-blue-100 dark:border-indigo-500/30">
-                <AvatarImage src={profileData.profilePicture || undefined} />
-                <AvatarFallback className="text-2xl font-bold bg-gradient-to-br from-blue-500 to-purple-600 dark:from-indigo-500 dark:to-purple-500 text-white">
-                  {getInitials(profileData.email)}
-                </AvatarFallback>
-              </Avatar>
+              <Avatar className="w-32 h-32 border-4 border-blue-100 dark:border-indigo-500/30 relative">
+  {/* Skeleton Loader */}
+  {avatarLoading && !avatarError && (
+    <div className="absolute inset-0 flex items-center justify-center bg-gray-200 dark:bg-slate-700 animate-pulse rounded-full z-10">
+      <span className="w-10 h-10 border-4 border-blue-300 border-t-transparent rounded-full animate-spin"></span>
+    </div>
+  )}
+  <AvatarImage
+    src={profileData.profilePicture || undefined}
+    style={{ display: avatarLoading || avatarError ? 'none' : 'block' }}
+    onLoad={() => { setAvatarLoading(false); setAvatarError(false); }}
+    onError={() => { setAvatarLoading(false); setAvatarError(true); }}
+    alt="Profile picture"
+  />
+  {/* Only show fallback if error */}
+  {(avatarError || (!profileData.profilePicture && !avatarLoading)) && (
+    <AvatarFallback className="text-2xl font-bold bg-gradient-to-br from-blue-500 to-purple-600 dark:from-indigo-500 dark:to-purple-500 text-white">
+      {getInitials(profileData.email)}
+    </AvatarFallback>
+  )}
+</Avatar>
+
               {isEditing && (
                 <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white p-2 rounded-full cursor-pointer shadow-lg transition-colors">
                   <Camera className="h-4 w-4" />
@@ -189,7 +320,11 @@ const Profile = () => {
                     accept="image/*"
                     onChange={handleProfilePictureChange}
                     className="hidden"
+                    disabled={avatarUploading}
                   />
+                  {avatarUploading && (
+                    <span className="absolute bottom-0 left-0 text-xs text-blue-600 bg-white bg-opacity-80 px-2 py-1 rounded shadow">Uploading...</span>
+                  )}
                 </label>
               )}
             </div>
@@ -220,7 +355,13 @@ const Profile = () => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <h2 className="text-3xl font-bold text-gray-900 dark:text-white">@{profileData.username}</h2>
+                  <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+                    {profileLoading ? (
+                      <span className="animate-pulse text-gray-400 dark:text-slate-500">Loading...</span>
+                    ) : (
+                      `@${customUser?.name || profileData.username || ''}`
+                    )}
+                  </h2>
                   <p className="text-lg text-gray-600 dark:text-slate-400">{profileData.email}</p>
                   <p className="text-gray-700 dark:text-slate-300 leading-relaxed max-w-2xl">{profileData.bio}</p>
                 </div>
@@ -244,82 +385,7 @@ const Profile = () => {
           </div>
         </Card>
 
-        {/* Projects Section */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">My Latest Projects</h3>
-            <Badge variant="secondary" className="text-sm dark:bg-slate-700 dark:text-slate-300">
-              {userProjects.length} project{userProjects.length !== 1 ? 's' : ''}
-            </Badge>
-          </div>
 
-          {userProjects.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {userProjects.map((project) => (
-                <Card 
-                  key={project.id} 
-                  className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-lg dark:shadow-indigo-900/10 dark:hover:shadow-indigo-900/30 transition-all duration-200 cursor-pointer border border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-indigo-500/50"
-                >
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-start">
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white line-clamp-2">{project.name}</h4>
-                      <Badge variant="secondary" className="text-xs dark:bg-indigo-900/50 dark:text-indigo-300">Owner</Badge>
-                    </div>
-                    
-                    {project.description && (
-                      <p className="text-sm text-gray-600 dark:text-slate-400 line-clamp-2">{project.description}</p>
-                    )}
-                    
-                    <div className="space-y-3">
-                      <Badge className={`${getLanguageColor(project.language)} text-xs font-medium`}>
-                        {project.language}
-                      </Badge>
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <div className="flex -space-x-1">
-                            {project.collaboratorAvatars.slice(0, 3).map((avatar, index) => (
-                              <div
-                                key={index}
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white border-2 border-white dark:border-slate-800"
-                                style={{ backgroundColor: avatar.color }}
-                              >
-                                {avatar.initials}
-                              </div>
-                            ))}
-                            {project.collaboratorAvatars.length > 3 && (
-                              <div className="w-6 h-6 rounded-full bg-gray-300 dark:bg-slate-600 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-slate-300 border-2 border-white dark:border-slate-800">
-                                +{project.collaboratorAvatars.length - 3}
-                              </div>
-                            )}
-                          </div>
-                          <span className="text-sm text-gray-500 dark:text-slate-400 flex items-center">
-                            <Users className="h-3 w-3 mr-1" />
-                            {project.collaborators}
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center space-x-1">
-                          <Clock className="h-4 w-4 text-gray-400 dark:text-slate-500" />
-                          <span className="text-sm text-gray-500 dark:text-slate-400">{project.lastModified}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <Card className="p-12 text-center bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm dark:border-slate-700">
-              <Code className="h-16 w-16 text-gray-300 dark:text-slate-600 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No projects yet</h3>
-              <p className="text-gray-500 dark:text-slate-400 mb-4">Start creating projects to see them here.</p>
-              <Button onClick={() => navigate('/')} className="bg-blue-600 hover:bg-blue-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white">
-                Create Your First Project
-              </Button>
-            </Card>
-          )}
-        </div>
       </main>
     </div>
   );

@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Derived readiness state
   const isReady = isInitialized && !isSyncing && !isLoading && !!user;
 
-  const { authApi } = useApi()
+  const { authApi, usersApi } = useApi()
   const { toast } = useToast();
 
   const clearError = () => setError(null);
@@ -112,23 +112,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     
     const syncUser = async () => {
       setIsSyncing(true);
-      
       try {
-        // Create a simple dbUser object from the Supabase user
-        // This avoids the problematic database lookup that was causing recursion
-        const simpleDbUser: DbUser = {
-          id: user.id,
-          email: user.email!,
-          name: user.user_metadata?.name,
-          avatar_url: user.user_metadata?.avatar_url,
-          created_at: user.created_at,
-          updated_at: new Date().toISOString(),
-          last_active_at: new Date().toISOString()
-        };
+        // Fetch from custom users table
+        const { data, error } = await usersApi.getCurrentUser();
+        if (error || !data) {
+          setDbUser(null);
+          setError('Failed to load user profile. Please refresh the page.');
+          setIsSyncing(false);
+          return;
+        }
 
-        setDbUser(simpleDbUser);
-        console.log('User synced successfully (simplified):', simpleDbUser.id);
-        
+        // No more signed URL logic here; avatar_url is passed as-is from the users table
+        setDbUser({ ...data, avatar_url: data.avatar_url });
+        console.log('User synced from custom users table:', data.id);
       } catch (error: any) {
         console.error('User sync error:', error);
         setError('Failed to sync user data. Please refresh the page.');

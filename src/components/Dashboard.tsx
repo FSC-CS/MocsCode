@@ -548,9 +548,7 @@ const detectLanguage = (projectName: string): string => {
                     aria-label="Go to profile"
                   >
                     <UserAvatar 
-                      src={user.user_metadata?.avatar_url}
-                      name={user.user_metadata?.full_name || user.email}
-                      email={user.email}
+                      avatar_url={dbUser?.avatar_url}
                       size="sm"
                       className="ring-2 ring-transparent hover:ring-blue-300 transition-all duration-200"
                     />
@@ -567,7 +565,7 @@ const detectLanguage = (projectName: string): string => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Welcome back, {user?.user_metadata.name || user?.email?.split('@')[0]}!
+            Welcome back, {dbUser?.name || dbUser?.email?.split('@')[0]}!
           </h2>
           <p className="text-gray-600 dark:text-gray-300">Continue working on your collaborative projects or start something new.</p>
         </div>

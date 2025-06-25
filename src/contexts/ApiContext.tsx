@@ -1,22 +1,13 @@
-// ApiContext.tsx - Make sure this is properly exported
+// ApiContext.tsx - API Context for the application
 
 import React, { createContext, useContext } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { UsersApi } from '@/lib/api/users';
 import { ProjectsApi } from '@/lib/api/projects';
 import { ProjectMembersApi } from '@/lib/api/project-members';
 import { ProjectFilesApi } from '@/lib/api/project-files';
 import { CollaborationApi } from '@/lib/api/collaboration';
 import { AuthApi } from '@/lib/api/auth';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Create API instances
 const apiConfig = { client: supabase };

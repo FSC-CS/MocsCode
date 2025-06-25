@@ -102,7 +102,13 @@
     "undefsafe": "^2.0.5",
     "unpipe": "^1.0.0",
     "utils-merge": "^1.0.1",
-    "vary": "^1.1.2"
+    "vary": "^1.1.2",
+    "ws": "^8.18.2",
+    "y-codemirror.next": "^0.3.5",
+    "y-leveldb": "^0.2.0",
+    "y-protocols": "^1.0.6",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.27"
   },
   "scripts": {
     "start": "node index.js",

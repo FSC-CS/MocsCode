@@ -102,14 +102,10 @@ export function createEditorView({ parent, doc, language, onChange, tabSize = 4,
 
   // Configure autocomplete extension based on the parameter
   const autocompleteExt = autocomplete ? [
-    autocompleteCompartment.of(autocompletion({ override: [
-      jsDocCompletions,
-      javascriptCompletions,
-      htmlCompletions,
-      pythonCompletions,
-      cppCompletions,
-      javaCompletions
-    ]}))
+    autocompletion({
+      activateOnTyping: true,
+      defaultKeymap: true
+    })
   ] : [];
 
   const state = EditorState.create({
@@ -563,14 +559,11 @@ const state = EditorState.create({
     closeBrackets(),
     
     // Autocompletion (toggled via compartment)
-    autocompleteCompartment.of(autocompletion({ override: [
-      jsDocCompletions,
-      javascriptCompletions,
-      htmlCompletions,
-      pythonCompletions,
-      cppCompletions,
-      javaCompletions
-    ]})),
+    autocompleteCompartment.of(autocompletion({
+      // Use a simpler configuration without overrides
+      activateOnTyping: true,
+      defaultKeymap: true
+    })),
     
     // Line highlighting
     highlightActiveLine(),
@@ -707,14 +700,10 @@ function setAutocompleteEnabled(enabled) {
   
   editor.dispatch({
     effects: autocompleteCompartment.reconfigure(
-      enabled ? autocompletion({ override: [
-        jsDocCompletions,
-        javascriptCompletions,
-        htmlCompletions,
-        pythonCompletions,
-        cppCompletions,
-        javaCompletions
-      ]}) : []
+      enabled ? autocompletion({
+        activateOnTyping: true,
+        defaultKeymap: true
+      }) : []
     )
   });
 }
@@ -726,7 +715,14 @@ export function updateEditorSettings(view, { tabSize, autocomplete }) {
     effects.push(tabSizeCompartment.reconfigure(EditorState.tabSize.of(tabSize)));
   }
   if (typeof autocomplete === 'boolean') {
-    effects.push(autocompleteCompartment.reconfigure(autocomplete ? autocompletion() : []));
+    effects.push(autocompleteCompartment.reconfigure(
+      autocomplete 
+        ? autocompletion({
+            activateOnTyping: true,
+            defaultKeymap: true
+          })
+        : []
+    ));
   }
   if (effects.length > 0) {
     view.dispatch({ effects });

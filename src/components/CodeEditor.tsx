@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { presenceService } from '@/lib/presence';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
@@ -14,27 +15,27 @@ import { cn } from '@/lib/utils';
 import { useApi } from '@/contexts/ApiContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
-import { DndProvider } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
 import ShareDialog from './ShareDialog';
 import MemberManagementDialog from './MemberManagementDialog';
 import FileExplorer from './FileExplorer';
 import OutputPanel from './OutputPanel';
 import ChatPanel from './ChatPanel';
 import SourceControlPanel from './SourceControlPanel';
-import {
-  EditorContent,
-  EditorPanel,
-  OutputPanelContainer,
-  ExplorerPanel,
-  ChatPanelContainer,
-  CollaboratorsPanelContainer,
-  VersionsPanelContainer,
-} from './panels/EditorContent';
+import ResizablePanel from './ResizablePanel'; // Add this import
+
+interface Collaborator {
+  id: number;
+  name: string;
+  color: string;
+  cursor: { x: number; y: number } | null;
+  isTyping: boolean;
+  accessLevel: 'owner' | 'edit' | 'view';
+}
 
 interface CodeEditorProps {
   project: any;
   onBack: () => void;
+  collaborators?: Collaborator[];
 }
 
 interface OpenFile {
@@ -42,6 +43,7 @@ interface OpenFile {
   content: string;
   language: string;
   id?: string;
+  lastSaved?: string;
 }
 
 // Enhanced member interface to match what we expect from the API
@@ -107,42 +109,18 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef(null);
 
-  // Initialize presence service and load project members when component mounts or when project/user changes
+  // Use collaborators from props if available, otherwise use empty array
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  
+  // Update online users when collaborators change
   useEffect(() => {
-    if (project?.id && user?.id) {
-      // Initialize presence service with current user and project
-      presenceService.initialize(user.id, project.id);
-      
-      // Load project members
-      loadProjectMembers();
-      
-      // Subscribe to presence updates
-      const unsubscribe = presenceService.subscribe((userId, isOnline) => {
-        setOnlineUsers(prev => {
-          const newSet = new Set(prev);
-          if (isOnline) {
-            newSet.add(userId);
-          } else {
-            newSet.delete(userId);
-          }
-          return newSet;
-        });
-      });
-      
-      // Initial online users
-      const initialOnlineUsers = new Set<string>();
-      if (presenceService.isUserOnline(user.id)) {
-        initialOnlineUsers.add(user.id);
-      }
-      setOnlineUsers(initialOnlineUsers);
-      
-      // Cleanup on unmount
-      return () => {
-        unsubscribe();
-        presenceService.cleanup();
-      };
+    if (collaborators) {
+      const collaboratorIds = new Set(
+        collaborators.map(c => c.id.toString())
+      );
+      setOnlineUsers(collaboratorIds);
     }
-  }, [project?.id, user?.id, memberRefreshTrigger]);
+  }, [collaborators]);
 
   // Set up auto-refresh for member list (every 30 seconds when enabled)
   useEffect(() => {
@@ -164,8 +142,10 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     };
   }, [autoRefreshEnabled, project?.id, user?.id, memberOperationStatus.type]);
 
-  // Transform project members to chat collaborators format
-  const collaborators = React.useMemo(() => {
+  // Use collaborators from props if available, otherwise transform project members
+  const collaboratorsList = React.useMemo(() => {
+    if (collaborators) return collaborators;
+    
     return projectMembers
       .filter(member => member.user_id !== user?.id) // Exclude current user
       .map(member => {
@@ -195,9 +175,9 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
           accessLevel: getAccessLevel(member.role)
         };
       });
-  }, [projectMembers, user?.id]);
+  }, [collaborators, projectMembers, user?.id]);
 
-  // Cleanup auto-refresh on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (refreshIntervalRef.current) {
@@ -205,6 +185,9 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       }
     };
   }, []);
+  
+  // Use collaborators from props or fallback to project members
+  const effectiveCollaborators = collaborators || collaboratorsList;
 
   const loadProjectMembers = async (silent: boolean = false) => {
     if (!project?.id || !user?.id) return;
@@ -664,6 +647,8 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
+  const [isSaving, setIsSaving] = useState(false);
+
   const saveCurrentFile = async () => {
     const currentFile = openFiles[activeFileIndex];
     if (!currentFile?.id) {
@@ -674,41 +659,64 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       });
       return;
     }
+
+    if (isSaving) return;
+    setIsSaving(true);
+
     try {
+      // Get the latest content directly from the editor view if available
+      const editorView = editorRef.current;
+      const latestContent = editorView?.state?.doc?.toString() || currentFile.content;
+      
       const now = new Date().toISOString();
       const { error } = await projectFilesApi.updateFile(currentFile.id, {
-        content: currentFile.content,
+        content: latestContent,
         updated_at: now,
-        size_bytes: currentFile.content.length
+        size_bytes: latestContent.length
       });
+
       if (error) {
         console.error('Manual save error:', error);
         throw error;
       }
+
+      // Update local state to match saved content
+      const updatedFiles = [...openFiles];
+      updatedFiles[activeFileIndex] = {
+        ...currentFile,
+        content: latestContent,
+        lastSaved: now
+      };
+      setOpenFiles(updatedFiles);
+
       toast({
         title: 'File Saved',
         description: `${currentFile.name} saved successfully`
       });
     } catch (error: any) {
-      console.error('Manual save failed:', error);
+      console.error('Save failed:', error);
       toast({
         title: 'Save Failed',
-        description: `Failed to save ${currentFile.name}: ${error.message}`,
+        description: `Failed to save ${currentFile.name}: ${error.message || 'Unknown error'}`,
         variant: 'destructive'
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
-        event.preventDefault();
-        saveCurrentFile();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Save on Cmd+S (Mac) or Ctrl+S (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        saveCurrentFile(false); // Explicit save (not auto-save)
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [openFiles, activeFileIndex]);
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [saveCurrentFile]);
 
   const updateFileContent = (content: string) => {
     const updatedFiles = [...openFiles];
@@ -747,42 +755,10 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     }
   };
 
-  // Initialize presence service when component mounts
-  useEffect(() => {
-    if (!user?.id || !project?.id) return;
-
-    console.log('Initializing presence service for user:', user.id, 'project:', project.id);
-    
-    // Initialize presence service
-    presenceService.initialize(user.id, project.id);
-    
-    // Subscribe to presence updates
-    const unsubscribe = presenceService.subscribe((userId, isOnline) => {
-      console.log(`[CodeEditor] Presence update - User ${userId} is ${isOnline ? 'online' : 'offline'}`);
-      
-      setOnlineUsers(prev => {
-        const newSet = new Set(prev);
-        if (isOnline) {
-          newSet.add(userId);
-        } else {
-          newSet.delete(userId);
-        }
-        console.log('Updated online users in CodeEditor:', Array.from(newSet));
-        return newSet;
-      });
-    });
-
-    // Initial state
-    setOnlineUsers(new Set(presenceService.getOnlineUsers()));
-
-    // Clean up on unmount
-    return () => {
-      console.log('Cleaning up presence service in CodeEditor');
-      unsubscribe();
-      // Don't clean up the entire presence service here as it's a singleton
-      // The service will handle cleanup when the page is unloaded
-    };
-  }, [user?.id, project?.id]);
+  // Handle cursor position updates for collaboration
+  const handleCursorChange = useCallback((cursor: { x: number; y: number } | null) => {
+    // This will be handled by Liveblocks' useUpdateMyPresence
+  }, []);
 
   // Transform project members to chat collaborators format
   const chatCollaborators = projectMembers
@@ -799,21 +775,20 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const activeFile = openFiles[activeFileIndex];
 
   return (
-    <DndProvider backend={HTML5Backend}>
-      <div className="flex flex-col h-screen bg-gray-900 text-white">
-        {/* Header */}
-        <header className="bg-gray-800 border-b border-gray-700 px-4 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onBack}
-                className="text-gray-300 hover:text-white hover:bg-gray-700"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Dashboard
-              </Button>
+    <div className="h-screen flex flex-col bg-gray-900 text-white">
+      {/* Header */}
+      <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onBack}
+              className="text-gray-300 hover:text-white hover:bg-gray-700"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Dashboard
+            </Button>
             
             <div className="flex items-center space-x-3">
               {isRenaming ? (
@@ -956,7 +931,15 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        <ExplorerPanel>
+        {/* Resizable File Explorer with Source Control */}
+        <ResizablePanel
+          direction="horizontal"
+          initialSize={fileExplorerWidth}
+          minSize={180}
+          maxSize={600}
+          onResize={setFileExplorerWidth}
+          className="bg-gray-800 border-r border-gray-700 flex flex-col"
+        >
           <div className="flex-1">
             <FileExplorer 
               currentFile={openFiles[activeFileIndex]?.name || ''} 
@@ -967,9 +950,10 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
           <div className="h-64">
             <SourceControlPanel />
           </div>
-        </ExplorerPanel>
+        </ResizablePanel>
 
-        <EditorContent>
+        {/* Editor and Output */}
+        <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
           {/* File Tabs */}
           <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
             <div className="flex items-center space-x-1 overflow-x-auto">
@@ -1003,52 +987,116 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             </div>
           </div>
 
-          <EditorPanel>
-            {activeFile && (
-              <CodeMirrorEditor
-                value={activeFile.content}
-                language={activeFile.language}
-                onChange={updateFileContent}
-                tabSize={tabSize}
-                autocomplete={autocomplete}
+          {/* Main Editor and Output Container */}
+          <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+            {/* Editor Section */}
+            <div className="overflow-hidden" style={{ height: editorHeight, minHeight: 100 }}>
+              {activeFile && (
+                <CodeMirrorEditor
+                  value={activeFile.content}
+                  language={activeFile.language}
+                  onChange={updateFileContent}
+                  tabSize={tabSize}
+                  autocomplete={autocomplete}
+                />
+              )}
+            </div>
+
+            {/* Resize Handle */}
+            <div 
+              className="h-2 w-full bg-gray-700 hover:bg-blue-500 cursor-row-resize active:bg-blue-600 relative z-10"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const startY = e.clientY;
+                const startHeight = editorHeight;
+                const container = e.currentTarget.parentElement?.getBoundingClientRect();
+                if (!container) return;
+                
+                const onMouseMove = (moveEvent: MouseEvent) => {
+                  const delta = moveEvent.clientY - startY;
+                  const newHeight = startHeight + delta;
+                  // Ensure we don't go below min height or above max height
+                  const minHeight = 100;
+                  const maxHeight = window.innerHeight - 200; // Leave some space for other UI
+                  const constrainedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+                  setEditorHeight(constrainedHeight);
+                };
+
+                const onMouseUp = () => {
+                  document.removeEventListener('mousemove', onMouseMove);
+                  document.removeEventListener('mouseup', onMouseUp);
+                };
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp, { once: true });
+              }}
+            />
+
+            {/* Output Panel */}
+            <div className="bg-gray-800 border-t border-gray-700 flex-1 min-h-[100px] overflow-auto" style={{ minHeight: 100 }}>
+              <OutputPanel output={output} isRunning={isRunning} />
+            </div>
+          </div>
+        </div>
+
+        {/* Resizable Tabbed Panel for Chat/Collaborators */}
+        <ResizablePanel
+          direction="horizontal"
+          initialSize={chatPanelWidth}
+          minSize={200}
+          maxSize={600}
+          onResize={setChatPanelWidth}
+          className="bg-gray-800 border-l border-gray-700 flex flex-col"
+        >
+          {/* Tab Bar */}
+          <div className="flex items-center border-b border-gray-700">
+            <button
+              className={cn(
+                'flex-1 px-4 py-2 text-sm font-medium transition-all',
+                activeSidebarTab === 'chat' ? 'bg-gray-900 text-blue-400' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              )}
+              onClick={() => setActiveSidebarTab('chat')}
+              type="button"
+            >
+              Chat
+            </button>
+            <button
+              className={cn(
+                'flex-1 px-4 py-2 text-sm font-medium transition-all',
+                activeSidebarTab === 'collaborators' ? 'bg-gray-900 text-blue-400' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              )}
+              onClick={() => setActiveSidebarTab('collaborators')}
+              type="button"
+            >
+              Collaborators
+            </button>
+          </div>
+          {/* Tab Content */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {activeSidebarTab === 'chat' ? (
+              <ChatPanel 
+                collaborators={collaborators}
+                projectMembers={projectMembers}
+                currentUser={user}
+                isLoadingMembers={isLoadingMembers}
+                memberOperationStatus={memberOperationStatus}
+                onMemberClick={handleMemberClick}
+                onInviteClick={() => setShowShareDialog(true)}
+                canManageMembers={canManageProject()}
+              />
+            ) : (
+              <CollaboratorPanel 
+                projectId={project.id}
+                onMemberClick={handleMemberClick}
+                onInviteClick={() => setShowShareDialog(true)}
+                refreshTrigger={memberRefreshTrigger}
+                onlineUsers={onlineUsers}
               />
             )}
-          </EditorPanel>
-
-          <OutputPanelContainer>
-            <OutputPanel output={output} isRunning={isRunning} />
-          </OutputPanelContainer>
-        </EditorContent>
-
-        <ChatPanelContainer>
-          <ChatPanel 
-            collaborators={collaborators}
-            projectMembers={projectMembers}
-            currentUser={user}
-            isLoadingMembers={isLoadingMembers}
-            memberOperationStatus={memberOperationStatus}
-            onMemberClick={handleMemberClick}
-            onInviteClick={() => setShowShareDialog(true)}
-            canManageMembers={canManageProject()}
-          />
-        </ChatPanelContainer>
-
-        <CollaboratorsPanelContainer>
-          <CollaboratorPanel 
-            projectId={project.id}
-            onMemberClick={handleMemberClick}
-            onInviteClick={() => setShowShareDialog(true)}
-            refreshTrigger={memberRefreshTrigger}
-            onlineUsers={onlineUsers}
-          />
-        </CollaboratorsPanelContainer>
-
-        <VersionsPanelContainer>
-          <div className="p-4">
-            <h3 className="text-lg font-medium mb-4">Version History</h3>
-            <p className="text-gray-400">Version history will be displayed here</p>
           </div>
-        </VersionsPanelContainer>
+        </ResizablePanel>
       </div>
       
       {/* Share Dialog - Enhanced with real project data */}
@@ -1080,7 +1128,6 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
         />
       )}
     </div>
-  </DndProvider>
   );
 };
 

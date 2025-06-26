@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from '@/components/ui/button';
@@ -532,7 +531,11 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   };
 
   const openFile = async (filename: string, fileId?: string) => {
-    const existingIndex = openFiles.findIndex(file => file.name === filename);
+    // First try to find by file ID if provided, then fall back to filename
+    const existingIndex = fileId 
+      ? openFiles.findIndex(file => file.id === fileId)
+      : openFiles.findIndex(file => file.name === filename);
+      
     if (existingIndex !== -1) {
       setActiveFileIndex(existingIndex);
       return;
@@ -707,6 +710,16 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
   const activeFile = openFiles[activeFileIndex];
 
+  const handleFileRenamed = useCallback((fileId: string, oldName: string, newName: string) => {
+    setOpenFiles(prevFiles => 
+      prevFiles.map(file => 
+        file.id === fileId || (file.id === undefined && file.name === oldName)
+          ? { ...file, name: newName, language: getLanguageFromFile(newName) }
+          : file
+      )
+    );
+  }, []);
+
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white">
       {/* Header */}
@@ -877,6 +890,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
             <FileExplorer 
               currentFile={openFiles[activeFileIndex]?.name || ''} 
               onFileSelect={openFile}
+              onFileRenamed={handleFileRenamed}
               projectId={project.id}
             />
           </div>

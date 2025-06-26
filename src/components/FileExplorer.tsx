@@ -20,6 +20,7 @@ interface FileItem extends ProjectFile {
 interface FileExplorerProps {
   currentFile: string;
   onFileSelect: (filename: string, fileId: string) => void;
+  onFileRenamed?: (fileId: string, oldName: string, newName: string) => void;
   projectId: string;
 }
 
@@ -125,7 +126,7 @@ function sortFileStructureRecursively(items: FileItem[], options: SortOptions = 
   }));
 }
 
-const FileExplorer = ({ currentFile, onFileSelect, projectId }: FileExplorerProps) => {
+const FileExplorer = ({ currentFile, onFileSelect, onFileRenamed, projectId }: FileExplorerProps) => {
   const { user, dbUser } = useAuth();
   const currentUserId = user?.id || dbUser?.id;
   // ...state declarations
@@ -239,6 +240,7 @@ const FileExplorer = ({ currentFile, onFileSelect, projectId }: FileExplorerProp
         title: 'Success', 
         description: `${itemToEdit.file_type === 'directory' ? 'Folder' : 'File'} renamed successfully` 
       });
+      onFileRenamed?.(editingItem, itemToEdit.name, newName);
     } catch (error: any) {
       console.error('Rename error:', error);
       toast({ 

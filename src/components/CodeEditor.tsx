@@ -21,7 +21,9 @@ import FileExplorer from './FileExplorer';
 import OutputPanel from './OutputPanel';
 import ChatPanel from './ChatPanel';
 import SourceControlPanel from './SourceControlPanel';
-import ResizablePanel from './ResizablePanel'; // Add this import
+import ResizablePanel from './ResizablePanel';
+import { runJudge0Code } from '@/lib/api/judge0';
+
 
 interface CodeEditorProps {
   project: any;
@@ -95,6 +97,10 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef(null);
+
+  // Bash scripts config state
+  const [compileScript, setCompileScript] = useState('javac Main.java');
+  const [runScript, setRunScript] = useState('java Main');
 
   // Load project members when component mounts or when refresh is triggered
   useEffect(() => {
@@ -487,34 +493,17 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       setIsRunning(false);
       return;
     }
-    // Judge0 language IDs
-    const langMap: { [key: string]: number } = {
-      'cpp': 54,
-      'java': 62,
-      'python': 71,
-      'javascript': 63,
-      'c': 50,
-      'csharp': 51,
-      'plaintext': 43,
-      'markdown': 60,
-      'html': 42
-    };
-    const language_id = langMap[file.language] || 43;
-    const endpoint = 'https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true';
+
+    console.log("COMPILE SCRIPT", compileScript);
+    console.log("RUN SCRIPT", runScript);
+
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-RapidAPI-Key': '5e11628ca4msh0cac24bb162a655p1257c7jsnde986d9f6d3a',
-          'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
-        },
-        body: JSON.stringify({
-          source_code: file.content,
-          language_id,
-        })
+      console.log('RUNNING JUDGE0 CODE');
+      const data = await runJudge0Code({
+        projectId: project?.id,
+        compileScript: compileScript,
+        runScript: runScript,
       });
-      const data = await response.json();
       let output = '';
       if (data.stdout) output += data.stdout;
       if (data.stderr) output += '\n[stderr]\n' + data.stderr;
@@ -522,7 +511,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       if (data.message) output += '\n[message]\n' + data.message;
       setOutput(output || '[No output]');
     } catch (err: any) {
-      setOutput('Error running code: ' + err.message);
+      setOutput('Error running code: ' + (err?.message || err));
     }
     setIsRunning(false);
   };
@@ -992,7 +981,14 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 
             {/* Output Panel */}
             <div className="bg-gray-800 border-t border-gray-700 flex-1 min-h-[100px] overflow-auto" style={{ minHeight: 100 }}>
-              <OutputPanel output={output} isRunning={isRunning} />
+              <OutputPanel 
+                output={output} 
+                isRunning={isRunning}
+                compileScript={compileScript}
+                setCompileScript={setCompileScript}
+                runScript={runScript}
+                setRunScript={setRunScript} 
+              />
             </div>
           </div>
         </div>

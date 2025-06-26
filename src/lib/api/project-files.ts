@@ -2,6 +2,7 @@
 
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, ProjectFile, PaginatedResponse, PaginationParams, SortParams } from './types';
+import JSZip from 'jszip';
 
 export class ProjectFilesApi extends ApiClient {
   constructor(config: ApiConfig) {
@@ -327,52 +328,37 @@ export class ProjectFilesApi extends ApiClient {
     }
   }
 
-  /**
-   * Test utility - use helper function
-   */
-  async testContentStorage(projectId: string): Promise<void> {
-    const testContent = "console.log('Hello, World!');";
-    try {
-      console.log('Testing content storage...');
-
-      // Use our helper function
-      const { data: fileId, error } = await this.client
-        .rpc('upsert_project_file', {
-          p_file_id: null,
-          p_project_id: projectId,
-          p_name: 'test-file.js',
-          p_path: '/test-file.js',
-          p_content: testContent,
-          p_file_type: 'file',
-          p_mime_type: 'text/javascript',
-          p_parent_id: null
-        });
-
-      if (error) {
-        console.error('Test file creation failed:', error);
-        return;
-      }
-
-      // Retrieve test file
-      const { data: retrievedFile, error: retrieveError } = await this.getFile(fileId);
-
-      if (retrieveError) {
-        console.error('Test file retrieval failed:', retrieveError);
-        return;
-      }
-
-      console.log('Content storage test results:', {
-        originalContent: testContent,
-        storedContent: retrievedFile?.content,
-        contentMatches: testContent === retrievedFile?.content
-      });
-
-      // Clean up
-      await this.deleteFile(fileId);
-      console.log('Test file cleaned up successfully');
-
-    } catch (error) {
-      console.error('Content storage test encountered an error:', error);
+  async exportProjectAsBase64Zip(
+    projectId: string,
+    compileScript: string,
+    runScript: string,
+  ): Promise<string> {
+    // Fetch all files for the project
+    const { data, error } = await this.client
+      .from(this.table)
+      .select('name, path, content, file_type')
+      .eq('project_id', projectId);
+  
+    if (error) throw new Error('Failed to fetch project files: ' + error.message);
+  
+    const files = (data || []).filter((f: any) => f.file_type === 'file');
+  
+    const zip = new JSZip();
+    for (const file of files) {
+      // Use file.path as the zip path
+      const zipPath = file.path;
+      zip.file(zipPath, file.content || '');
     }
+
+    console.log('compileScript', compileScript);
+    console.log('runScript', runScript);
+
+    zip.file('/compile.sh', '#!/bin/bash\n\n' + compileScript);
+    zip.file('/run.sh', '#!/bin/bash\n\n' + runScript);
+  
+    const zipBuffer = await zip.generateAsync({ type: 'base64' });
+
+    // Convert to base64 string
+    return zipBuffer;
   }
 }

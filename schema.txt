@@ -42,7 +42,6 @@
 | file_operations     | content               | text                     | YES         |
 | file_operations     | length                | integer                  | YES         |
 | file_operations     | timestamp             | timestamp with time zone | YES         |
-| file_operations     | operation_id          | character varying        | NO          |
 | file_versions       | id                    | uuid                     | NO          |
 | file_versions       | project_version_id    | uuid                     | NO          |
 | file_versions       | file_id               | uuid                     | NO          |

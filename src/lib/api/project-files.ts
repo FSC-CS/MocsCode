@@ -124,7 +124,7 @@ export class ProjectFilesApi extends ApiClient {
           p_path: data.path,
           p_content: data.content || '',
           p_file_type: data.file_type,
-          p_mime_type: data.mime_type,
+          p_mime_type: 'text/plain',
           p_parent_id: data.parent_id
         });
 

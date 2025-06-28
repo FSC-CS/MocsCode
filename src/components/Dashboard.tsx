@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import JSZip from 'jszip';
+import { importZipAsProject } from '@/import_project';
 import { Card } from '@/components/ui/card';
 import ProjectCard from './ProjectCard';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { LogIn, Plus, Search, User, Code, Clock, Users, ChevronDown, Loader2, LogOut, Moon, Sun } from 'lucide-react';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { LogIn, Plus, Search, User, Code, Clock, Users, ChevronDown, Loader2, LogOut, Moon, Sun, UploadCloud } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApi } from '@/contexts/ApiContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -41,6 +45,77 @@ const listProjects = async (
 };
 
 const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
+  // --- Import Project State ---
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importProjectName, setImportProjectName] = useState('');
+  const [importZipFile, setImportZipFile] = useState<File | null>(null);
+  const [importProgress, setImportProgress] = useState(0); // 0-100
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importDescription, setImportDescription] = useState('');
+  const [importLanguage, setImportLanguage] = useState<string>('JavaScript');
+
+  // Handle ZIP file selection
+  const handleZipFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setImportZipFile(e.target.files[0]);
+      setImportError(null);
+    }
+  };
+
+  // Handle import submit
+  const handleImportProject = async () => {
+    setImportError(null);
+    if (!importProjectName.trim()) {
+      setImportError('Project name is required.');
+      return;
+    }
+    if (!importZipFile) {
+      setImportError('Please select a ZIP file.');
+      return;
+    }
+    if (!user || !projectsApi || !projectFilesApi) {
+      setImportError('Missing user or API context.');
+      return;
+    }
+    setIsImporting(true);
+    setImportProgress(0);
+    try {
+      const { project, error } = await importZipAsProject({
+        zipFile: importZipFile,
+        projectName: importProjectName,
+        userId: user.id,
+        projectsApi,
+        projectFilesApi,
+        description: importDescription,
+        language: importLanguage,
+        onProgress: setImportProgress,
+      });
+      if (error || !project) {
+        setImportError(error?.message || 'Import failed.');
+        setIsImporting(false);
+        return;
+      }
+      setImportProgress(100);
+      toast({ title: 'Import Complete', description: `Project "${project.name}" imported successfully.` });
+      setTimeout(() => {
+        setImportDialogOpen(false);
+        setImportZipFile(null);
+        setImportProjectName('');
+        setImportDescription('');
+        setImportLanguage('JavaScript');
+        setImportProgress(0);
+        setIsImporting(false);
+        if (typeof loadProjects === 'function') loadProjects();
+      }, 1200);
+    } catch (err: any) {
+      setImportError('Failed to process ZIP file.');
+      setIsImporting(false);
+    }
+  };
+
+
+
   // New: project-specific loading state
   const [isProjectsLoading, setIsProjectsLoading] = useState(false);
 const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
@@ -56,7 +131,7 @@ const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
   const [currentLeavingId, setCurrentLeavingId] = useState<string | null>(null);
   
   const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading, isSigningOut, isReady } = useAuth();
-  const { projectsApi, projectMembersApi } = useApi();
+  const { projectsApi, projectMembersApi, projectFilesApi } = useApi();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -111,7 +186,7 @@ const detectLanguage = (projectName: string): string => {
     return '1+ week ago';
   };
 
-  const createProject = async (language: string): Promise<void> => {
+  const createProject = async (language: string, name: string): Promise<void> => {
     if (!user) {
       toast({
         title: 'Error',
@@ -124,7 +199,7 @@ const detectLanguage = (projectName: string): string => {
     setIsCreating(true);
     try {
       const timestamp = format(new Date(), 'yyyy-MM-dd-HH-mm');
-      const projectName = `${language} Project - ${timestamp}`;
+      const projectName = name || `${language} Project - ${timestamp}`;
 
       const { data: project, error } = await projectsApi.createProject({
         name: projectName,
@@ -571,44 +646,142 @@ const detectLanguage = (projectName: string): string => {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2">
-                <Plus className="h-5 w-5" />
-                <span>Create Project</span>
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {supportedLanguages.map((lang) => (
-                <DropdownMenuItem 
-                  key={lang.name} 
-                  onClick={() => createProject(lang.name)}
-                  disabled={isCreating}
-                >
-                  <div className="flex items-center gap-2">
-                    {isCreating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    <span className="text-sm font-medium">{lang.name}</span>
-                    <Badge variant="outline" className="text-xs">
-                      .{lang.extension}
-                    </Badge>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <Input
-              type="text"
-              placeholder="Search projects..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+  <div className="flex flex-row gap-2">
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2">
+          <Plus className="h-5 w-5" />
+          <span>Create Project</span>
+          <ChevronDown className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {supportedLanguages.map((lang) => (
+          <DropdownMenuItem 
+            key={lang.name} 
+            onClick={() => createProject(lang.name)}
+            disabled={isCreating}
+          >
+            <div className="flex items-center gap-2">
+              {isCreating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              <span className="text-sm font-medium">{lang.name}</span>
+              <Badge variant="outline" className="text-xs">
+                .{lang.extension}
+              </Badge>
+            </div>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+    {/* Import Project Button */}
+    <Button
+      variant="outline"
+      className="px-6 py-3 rounded-lg flex items-center space-x-2"
+      onClick={() => setImportDialogOpen(true)}
+      disabled={isImporting}
+    >
+      {isImporting ? (
+        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+      ) : (
+        <UploadCloud className="h-5 w-5 mr-2" />
+      )}
+      <span>Import Project</span>
+    </Button>
+    {/* Import Project Dialog */}
+    <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Import Project</DialogTitle>
+          <DialogDescription>
+            Upload a ZIP file containing your project. All files and folders will be imported.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          <Input
+            placeholder="Project Name"
+            value={importProjectName}
+            onChange={e => setImportProjectName(e.target.value)}
+            disabled={isImporting}
+            maxLength={64}
+          />
+          <div>
+            <label className="block text-xs font-medium mb-1">Language</label>
+            <Select value={importLanguage} onValueChange={setImportLanguage} disabled={isImporting}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select language" />
+              </SelectTrigger>
+              <SelectContent>
+                {supportedLanguages.map((lang) => (
+                  <SelectItem key={lang.name} value={lang.name}>
+                    {lang.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <textarea
+            className="w-full rounded border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Project Description (optional)"
+            rows={2}
+            value={importDescription}
+            onChange={e => setImportDescription(e.target.value)}
+            disabled={isImporting}
+            maxLength={256}
+          />
+          <Input
+            type="file"
+            accept=".zip"
+            onChange={handleZipFileChange}
+            disabled={isImporting}
+          />
+          {importZipFile && (
+            <div className="text-xs text-gray-500">{importZipFile.name}</div>
+          )}
+          {importError && (
+            <div className="text-xs text-red-500">{importError}</div>
+          )}
+          <div className="flex items-center space-x-2">
+            <Button
+              onClick={handleImportProject}
+              disabled={isImporting || !importProjectName.trim() || !importZipFile}
+              className="w-full"
+            >
+              {isImporting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Import
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setImportDialogOpen(false)}
+              disabled={isImporting}
+              className="w-full"
+            >
+              Cancel
+            </Button>
+          </div>
+          <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${importProgress}%` }}
             />
           </div>
+          {isImporting && (
+            <div className="text-xs text-gray-500">Processing ZIP... ({importProgress}%)</div>
+          )}
         </div>
+      </DialogContent>
+    </Dialog>
+  </div>
+  <div className="relative flex-1 max-w-md">
+    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+    <Input
+      type="text"
+      placeholder="Search projects..."
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      className="pl-10"
+    />
+  </div>
+</div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700">

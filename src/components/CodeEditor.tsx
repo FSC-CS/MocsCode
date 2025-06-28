@@ -88,7 +88,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const [showMemberDialog, setShowMemberDialog] = useState(false);
   const [selectedMember, setSelectedMember] = useState<EnhancedMember | null>(null);
   const [memberOperationStatus, setMemberOperationStatus] = useState<{
-    type: 'idle' | 'loading' | 'adding' | 'updating' | 'removing';
+    type: 'idle' | 'error' | 'adding' | 'updating' | 'removing';
     error?: Error;
     memberId?: string;
   }>({ type: 'idle' });

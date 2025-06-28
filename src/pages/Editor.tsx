@@ -3,8 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useApi } from '@/contexts/ApiContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
-import CodeEditor from '@/components/CodeEditor';
 import { Loader2 } from 'lucide-react';
+import CodeEditor from '@/components/CodeEditor';
+import { Button } from '@/components/ui/button';
+import { LiveblocksProvider } from '@/components/providers/LiveblocksProvider';
 import { useQuery } from '@tanstack/react-query';
 import { ProjectsApi } from '@/lib/api/projects';
 
@@ -78,11 +80,16 @@ const Editor = () => {
     return null;
   }
 
+  // Create a unique room ID based on project ID
+  const roomId = `project-${project.id}`;
+
   return (
-    <CodeEditor 
-      project={project} 
-      onBack={handleBackToDashboard} 
-    />
+    <LiveblocksProvider roomId={roomId}>
+      <CodeEditor 
+        project={project} 
+        onBack={handleBackToDashboard} 
+      />
+    </LiveblocksProvider>
   );
 };
 

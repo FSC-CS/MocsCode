@@ -67,6 +67,8 @@ interface ChatPanelProps {
     error?: Error;
     memberId?: string;
   };
+  lastRefresh?: Date | null;
+  autoRefreshEnabled?: boolean;
   onInviteClick?: () => void;
   onMemberClick?: (member: EnhancedMember) => void;
   onMemberRoleChange?: (memberId: string, newRole: 'owner' | 'editor' | 'viewer') => void;
@@ -81,12 +83,14 @@ const ChatPanel = ({
   currentUser,
   isLoadingMembers,
   memberOperationStatus,
+  lastRefresh,
+  autoRefreshEnabled = true,
   onInviteClick,
   onMemberClick,
   onMemberRoleChange,
   onRemoveMember,
   canManageMembers = false,
-  projectId, // Added projectId prop
+  projectId,
 }: ChatPanelProps) => {
   const [messages, setMessages] = useState<UIMessage[]>([]); // Fixed: Changed from ChatMessag[] to UIMessage[]
   const [message, setMessage] = useState('');

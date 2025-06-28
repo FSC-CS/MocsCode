@@ -1,5 +1,30 @@
 import { createClient } from '@liveblocks/client';
 import { createRoomContext } from '@liveblocks/react';
+import * as Y from 'yjs';
+import { LiveblocksYjsProvider } from '@liveblocks/yjs';
+
+type Presence = {
+  cursor: { x: number; y: number } | null;
+  selection: string[];
+  name: string;
+  color: string;
+};
+
+type Storage = {
+  // No storage needed as we're using Y.Doc directly
+};
+
+type UserMeta = {
+  id: string;
+  info: {
+    name: string;
+    avatar?: string;
+  };
+};
+
+type RoomEvent = {
+  // Define your custom room events here
+};
 
 // Create the Liveblocks client
 const client = createClient({
@@ -18,6 +43,11 @@ const client = createClient({
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Auth response error:', errorText);
+        // For testing purposes, return a mock token
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Using mock authentication for development');
+          return { token: 'mock-token' };
+        }
         throw new Error(`Auth failed: ${response.status} - ${errorText}`);
       }
 
@@ -63,57 +93,59 @@ const client = createClient({
     }
   },
   throttle: 16,
+  resolveUsers: async ({ userIds }) => {
+    // Return mock user data for development
+    if (process.env.NODE_ENV === 'development') {
+      return userIds.map(userId => ({
+        id: userId,
+        info: {
+          name: `User ${userId.slice(0, 4)}`,
+          avatar: `https://ui-avatars.com/api/?name=User+${userId.slice(0, 4)}&background=random`
+        }
+      }));
+    }
+    // In production, you would fetch real user data here
+    return [];
+  },
+  resolveMentionSuggestions: async ({ text }) => {
+    // Return mock mention suggestions for development
+    if (process.env.NODE_ENV === 'development') {
+      return ['alice', 'bob', 'charlie'].filter(name => 
+        name.toLowerCase().includes(text.toLowerCase())
+      );
+    }
+    // In production, you would fetch real mention suggestions here
+    return [];
+  },
 });
 
-// Type for the presence data
-type Presence = {
-  cursor: { x: number; y: number } | null;
-  selection: string[];
-  name: string;
-  color: string;
-};
-
-// Type for the storage
-type Storage = {
-  code: any; // Replace 'any' with your specific storage type
-};
-
-// Type for user info
-type UserMeta = {
-  id: string;
-  info: {
-    name: string;
-    avatar?: string;
-  };
-};
-
-// Type for room events
-type RoomEvent = {
-  // Define your room events here if needed
-};
-
-// Create the RoomContext
+// Create the RoomContext with proper typing
 const context = createRoomContext<Presence, Storage, UserMeta, RoomEvent>(client);
 
-// Export the client
-export { client };
-
-// Export all the Liveblocks hooks and components
+// Export all the hooks and components
 export const {
   RoomProvider,
+  useRoom,
   useMyPresence,
   useUpdateMyPresence,
   useSelf,
   useOthers,
   useStorage,
   useMutation,
-  useRoom,
-  useHistory,
-  useUndo,
   useRedo,
-  useCanUndo,
+  useUndo,
   useCanRedo,
+  useCanUndo,
+  useHistory,
+  useErrorListener,
+  useEventListener,
+  useLostConnectionListener,
+  useOthersListener,
+  useStatus,
 } = context;
+
+// Export the client for direct use if needed
+export { client };
 
 // Export types
 export type { Presence, Storage, UserMeta, RoomEvent };

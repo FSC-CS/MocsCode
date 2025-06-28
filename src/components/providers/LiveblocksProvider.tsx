@@ -1,11 +1,46 @@
-import { ReactNode } from 'react';
-import { ClientSideSuspense } from '@liveblocks/react';
-import { LiveMap } from '@liveblocks/client';
-import { RoomProvider } from '@/liveblocks.config'; // Using @ alias for src directory
+import { ReactNode, useEffect, useRef } from 'react';
+import { ClientSideSuspense, useRoom } from '@liveblocks/react';
+import { RoomProvider } from '@/liveblocks.config';
+import * as Y from 'yjs';
+import { LiveblocksYjsProvider } from '@liveblocks/yjs';
 
-interface LiveblocksProviderProps {
+type LiveblocksProviderProps = {
   children: ReactNode;
   roomId: string;
+};
+
+// YjsProvider component to handle Yjs document and provider
+function YjsProvider({ children, room }: { children: ReactNode; room: any }) {
+  const yDocRef = useRef<Y.Doc | null>(null);
+  const providerRef = useRef<LiveblocksYjsProvider | null>(null);
+
+  useEffect(() => {
+    if (!room) return;
+    
+    // Create a new Y.Doc
+    const yDoc = new Y.Doc();
+    yDocRef.current = yDoc;
+
+    // Set up Liveblocks Yjs provider
+    const provider = new LiveblocksYjsProvider(room, yDoc);
+    providerRef.current = provider;
+
+    // Cleanup
+    return () => {
+      provider.destroy();
+      yDoc.destroy();
+      yDocRef.current = null;
+      providerRef.current = null;
+    };
+  }, [room]);
+
+  return <>{children}</>;
+}
+
+// Wrapper component to access the room inside ClientSideSuspense
+function YjsWrapper({ children, roomId }: { children: ReactNode; roomId: string }) {
+  const room = useRoom();
+  return <YjsProvider room={room}>{children}</YjsProvider>;
 }
 
 export function LiveblocksProvider({ children, roomId }: LiveblocksProviderProps) {
@@ -15,15 +50,14 @@ export function LiveblocksProvider({ children, roomId }: LiveblocksProviderProps
       initialPresence={{
         cursor: null,
         selection: [],
-        name: '',
-        color: '#' + Math.floor(Math.random() * 16777215).toString(16),
-      }}
-      initialStorage={{
-        code: new LiveMap(),
+        name: `User-${Math.floor(Math.random() * 1000)}`,
+        color: `hsl(${Math.floor(Math.random() * 360)} 80% 60%)`,
       }}
     >
       <ClientSideSuspense fallback={<div>Loading...</div>}>
-        {() => children}
+        <YjsWrapper roomId={roomId}>
+          {children}
+        </YjsWrapper>
       </ClientSideSuspense>
     </RoomProvider>
   );

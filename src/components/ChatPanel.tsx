@@ -124,9 +124,6 @@ const ChatPanel = ({
       setLoading(true);
       
       try {
-        // Get projectId from ChatPanel prop
-        console.log('Resolved project ID:', projectId);
-
         // Get room id using project id and room name
         const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, projectId);
         
@@ -278,11 +275,9 @@ const ChatPanel = ({
     }
 
     try {
-      console.log("loading older messages")
       // Get projectId and roomId
       if (!projectId) {
         setLoadingMore(false);
-        console.log("no project id")
         return;
       }
       const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, projectId);
@@ -392,7 +387,6 @@ const ChatPanel = ({
       if (document.visibilityState === 'visible') {
         // Only reconnect if actually disconnected
         if (socket.disconnected && !isConnected) {
-          console.log('Tab visible and socket disconnected, reconnecting...');
           socket.connect();
         }
       }
@@ -440,7 +434,6 @@ const ChatPanel = ({
 
     // Join the general room when connected
     const onConnect = () => {
-      console.log('Connected to socket server');
       setIsConnected(true);
       if (currentUser) {
         // Check if we're already in a room by looking at the socket's rooms
@@ -464,13 +457,11 @@ const ChatPanel = ({
     
     // Handle disconnection
     newSocket.on('disconnect', (reason) => {
-      console.log('Disconnected from socket server:', reason);
       setIsConnected(false);
     });
 
     // Handle reconnection attempts
     newSocket.on('reconnect_attempt', (attempt) => {
-      console.log(`Reconnection attempt ${attempt}`);
     });
 
     newSocket.on('reconnect_failed', () => {

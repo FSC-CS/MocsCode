@@ -22,6 +22,8 @@ import ChatPanel from './ChatPanel';
 import SourceControlPanel from './SourceControlPanel';
 import ResizablePanel from './ResizablePanel';
 import { runJudge0Code } from '@/lib/api/judge0';
+import EditorTabBar from './editor/EditorTabBar';
+import EditorToolbar from './editor/EditorToolbar';
 
 
 interface CodeEditorProps {
@@ -154,7 +156,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
           id: Number(member.user_id || member.id), // Convert to number
           name: member.user?.name || member.user?.email.split('@')[0] || 'Unknown',
           color: stringToColor(member.user_id || member.id),
-          cursor: null, // Default cursor position
+          cursor: 25, // Default cursor position
           isTyping: false, // Default typing state
           accessLevel: getAccessLevel(member.role)
         };
@@ -493,11 +495,7 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       return;
     }
 
-    console.log("COMPILE SCRIPT", compileScript);
-    console.log("RUN SCRIPT", runScript);
-
     try {
-      console.log('RUNNING JUDGE0 CODE');
       const data = await runJudge0Code({
         projectId: project?.id,
         compileScript: compileScript,
@@ -724,155 +722,26 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     <div className="h-screen flex flex-col bg-gray-900 text-white">
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onBack}
-              className="text-gray-300 hover:text-white hover:bg-gray-700"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
-            </Button>
-            
-            <div className="flex items-center space-x-3">
-              {isRenaming ? (
-                <div className="flex items-center space-x-2">
-                  <Input
-                    autoFocus
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className="h-8 w-64 bg-gray-700 text-white border-gray-600 focus-visible:ring-1 focus-visible:ring-blue-500"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-green-500 hover:bg-green-900/20 hover:text-green-400"
-                    onClick={handleRenameProject}
-                  >
-                    <Check className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-gray-400 hover:bg-gray-700 hover:text-gray-300"
-                    onClick={() => {
-                      setIsRenaming(false);
-                      setNewProjectName(project.name);
-                    }}
-                  >
-                    <XIcon className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center group">
-                  <h1 className="text-lg font-semibold text-white">{project?.name}</h1>
-                  {canManageProject() && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white hover:bg-gray-700"
-                      onClick={() => {
-                        setNewProjectName(project.name);
-                        setIsRenaming(true);
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              )}
-              <Badge className="bg-orange-100 text-orange-800">{project?.language}</Badge>
-              {currentUserRole && (
-                <Badge variant="outline" className="text-gray-300 border-gray-500">
-                  {currentUserRole === 'owner' ? 'Owner' : 
-                   currentUserRole === 'editor' ? 'Editor' : 'Viewer'}
-                </Badge>
-              )}
-              
-              {/* Editor Settings Dropdown */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 ml-2 text-gray-400 hover:text-white hover:bg-gray-700"
-                    aria-label="Editor Settings"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-56 p-4">
-                  <div className="space-y-4">
-                    <h4 className="font-medium leading-none">Editor Settings</h4>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="tab-size">Tab Size</Label>
-                      <select
-                        id="tab-size"
-                        value={tabSize}
-                        onChange={(e) => setTabSize(Number(e.target.value))}
-                        className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      >
-                        <option value={2}>2 spaces</option>
-                        <option value={4}>4 spaces</option>
-                        <option value={8}>8 spaces</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="autocomplete">Autocomplete</Label>
-                      <Switch
-                        id="autocomplete"
-                        checked={autocomplete}
-                        onCheckedChange={setAutocomplete}
-                        className="data-[state=checked]:bg-blue-600"
-                      />
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            {/* Only show run button if user has edit permissions */}
-            {(currentUserRole === 'owner' || currentUserRole === 'editor') && (
-              <Button
-                onClick={runCode}
-                disabled={isRunning}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2"
-              >
-                <Play className="h-4 w-4 mr-2" />
-                {isRunning ? 'Running...' : 'Run Code'}
-              </Button>
-            )}
-            
-            {/* Only show share button if user can manage members */}
-            {canManageMembers() && (
-              <Button
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => setShowShareDialog(true)}
-              >
-                <Share className="h-4 w-4 mr-2" />
-                Share
-              </Button>
-            )}
-
-
-            {/* Save button - show for editors and owners */}
-            {(currentUserRole === 'owner' || currentUserRole === 'editor') && (
-              <Button
-                onClick={saveCurrentFile}
-                variant="outline"
-                className="border-gray-600 text-gray-600 hover:bg-gray-700 hover:text-white"
-              >
-                <FaSave className="h-4 w-4 mr-2" />
-                Save
-              </Button>
-            )}
-          </div>
-        </div>
+        <EditorToolbar
+          project={project}
+          isRenaming={isRenaming}
+          newProjectName={newProjectName}
+          setNewProjectName={setNewProjectName}
+          setIsRenaming={setIsRenaming}
+          handleRenameProject={handleRenameProject}
+          handleRenameKeyDown={handleKeyDown}
+          canManageProject={canManageProject}
+          currentUserRole={currentUserRole}
+          tabSize={tabSize}
+          setTabSize={setTabSize}
+          autocomplete={autocomplete}
+          setAutocomplete={setAutocomplete}
+          runCode={runCode}
+          isRunning={isRunning}
+          saveCurrentFile={saveCurrentFile}
+          setShowShareDialog={setShowShareDialog}
+          onBack={onBack}
+        />
       </header>
 
       {/* Main Content */}
@@ -902,37 +771,12 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
         {/* Editor and Output */}
         <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
           {/* File Tabs */}
-          <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
-            <div className="flex items-center space-x-1 overflow-x-auto">
-              {openFiles.map((file, index) => (
-                <div
-                  key={`${file.name}-${index}`}
-                  className={`flex items-center space-x-2 px-3 py-1 rounded-t-lg text-sm cursor-pointer group min-w-0 ${
-                    index === activeFileIndex
-                      ? 'bg-gray-700 text-white'
-                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  }`}
-                  onClick={() => setActiveFileIndex(index)}
-                >
-                  <FileText className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate">{file.name}</span>
-                  {openFiles.length > 0 && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeFile(index);
-                      }}
-                      className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white"
-                    >
-                      <XIcon className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <EditorTabBar
+  openFiles={openFiles}
+  activeFileIndex={activeFileIndex}
+  setActiveFileIndex={setActiveFileIndex}
+  closeFile={closeFile}
+/>
 
           {/* Main Editor and Output Container */}
           <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
@@ -956,6 +800,8 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       onChange={updateFileContent}
       tabSize={tabSize}
       autocomplete={autocomplete}
+      file_name={activeFile.name}
+      collaborative={dbUser}
     />
   )
 )}

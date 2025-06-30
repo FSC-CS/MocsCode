@@ -357,14 +357,6 @@ const getDefaultContent = (fileName: string): string => {
         throw error;
       }
 
-      console.log('File created successfully:', {
-        fileId: data?.id,
-        name,
-        hasContent: !!data?.content,
-        contentLength: data?.content?.length || 0,
-        data
-      });
-
       // Add new item and apply sorting
       const allFiles = [...flattenFileTree(fileStructure), data];
       updateAndSortStructure(allFiles);

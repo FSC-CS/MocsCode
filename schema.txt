@@ -37,11 +37,14 @@
 | file_operations     | id                    | uuid                     | NO          |
 | file_operations     | file_id               | uuid                     | NO          |
 | file_operations     | user_id               | uuid                     | NO          |
-| file_operations     | operation_type        | character varying        | NO          |
-| file_operations     | position              | jsonb                    | NO          |
+| file_operations     | operation_type        | text                     | NO          |
+| file_operations     | position              | integer                  | NO          |
 | file_operations     | content               | text                     | YES         |
 | file_operations     | length                | integer                  | YES         |
 | file_operations     | timestamp             | timestamp with time zone | YES         |
+| file_operations     | yjs_update            | bytea                    | YES         |
+| file_operations     | vector_clock          | jsonb                    | YES         |
+| file_operations     | client_id             | uuid                     | YES         |
 | file_versions       | id                    | uuid                     | NO          |
 | file_versions       | project_version_id    | uuid                     | NO          |
 | file_versions       | file_id               | uuid                     | NO          |
@@ -67,10 +70,6 @@
 | project_members     | user_id               | uuid                     | NO          |
 | project_members     | role                  | text                     | NO          |
 | project_members     | joined_at             | timestamp with time zone | YES         |
-| project_tags        | id                    | uuid                     | NO          |
-| project_tags        | project_id            | uuid                     | NO          |
-| project_tags        | name                  | character varying        | NO          |
-| project_tags        | color                 | character varying        | YES         |
 | project_versions    | id                    | uuid                     | NO          |
 | project_versions    | project_id            | uuid                     | NO          |
 | project_versions    | version_number        | integer                  | NO          |
@@ -97,15 +96,8 @@
 | sharing_permissions | created_at            | timestamp with time zone | YES         |
 | sharing_permissions | is_active             | boolean                  | YES         |
 | sharing_permissions | role                  | text                     | NO          |
-| trigger_log         | id                    | integer                  | NO          |
-| trigger_log         | event_type            | text                     | YES         |
-| trigger_log         | user_id               | uuid                     | YES         |
-| trigger_log         | user_email            | text                     | YES         |
-| trigger_log         | raw_data              | jsonb                    | YES         |
-| trigger_log         | created_at            | timestamp with time zone | YES         |
-| trigger_log         | error_message         | text                     | YES         |
 | user_preferences    | user_id               | uuid                     | NO          |
-| user_preferences    | theme                 | character varying        | YES         |
+| user_preferences    | theme                 | text                     | YES         |
 | user_preferences    | editor_settings       | jsonb                    | YES         |
 | user_preferences    | notification_settings | jsonb                    | YES         |
 | user_preferences    | updated_at            | timestamp with time zone | YES         |

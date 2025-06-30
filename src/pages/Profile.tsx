@@ -158,7 +158,6 @@ const loadExistingAvatar = async () => {
       .createSignedUrl(avatarUrl, 60 * 60 * 24 * 365);
 
     if (!error && data?.signedUrl) {
-      console.log('Supabase signed URL:', data.signedUrl);
       setProfileData(prev => ({
         ...prev,
         profilePicture: data.signedUrl

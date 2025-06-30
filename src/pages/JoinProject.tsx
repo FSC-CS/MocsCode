@@ -39,7 +39,6 @@ const JoinProject = () => {
     }
 
     try {
-      console.log('Validating share token...');
       
       const { data, error } = await collaborationApi.validateShareToken(token);
       
@@ -48,7 +47,6 @@ const JoinProject = () => {
         setError(error?.message || 'Invalid or expired share link');
         setJoinStep('error');
       } else {
-        console.log('Token validated successfully:', data);
         setShareLink(data);
         setJoinStep('ready');
       }
@@ -82,8 +80,6 @@ const JoinProject = () => {
         setJoinStep('error');
         return;
       }
-
-      console.log('Successfully joined project:', data);
       
       setJoinStep('success');
       
@@ -227,7 +223,6 @@ const JoinProject = () => {
 
   // Ready to join state
   if (joinStep === 'ready' && shareLink) {
-    console.log('SHARELINK:', shareLink);
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Card className="w-full max-w-md p-8">

@@ -1,439 +1,109 @@
-import { EditorState, Compartment, EditorSelection } from "@codemirror/state"
-
-// Compartment for dynamic tab size configuration
-const tabSizeCompartment = new Compartment();
+// CodeMirror core imports
+import { EditorView, basicSetup } from 'codemirror';
+import { EditorState, Compartment } from '@codemirror/state';
+import { keymap } from '@codemirror/view';
 import { 
   autocompletion, 
-  completionKeymap, 
-  closeBrackets,
-  closeBracketsKeymap,
   acceptCompletion,
-  closeCompletion
-} from "@codemirror/autocomplete"
-import {
-  EditorView, 
-  keymap, 
-  highlightSpecialChars, 
+  completionKeymap 
+} from '@codemirror/autocomplete';
+
+// Language support
+import { javascript } from '@codemirror/lang-javascript';
+import { python } from '@codemirror/lang-python';
+import { java } from '@codemirror/lang-java';
+import { cpp } from '@codemirror/lang-cpp';
+import { html } from '@codemirror/lang-html';
+
+// Additional CodeMirror features
+import { 
+  lineNumbers,
+  highlightSpecialChars,
   drawSelection,
-  highlightActiveLine, 
-  dropCursor, 
+  dropCursor,
   rectangularSelection,
-  crosshairCursor, 
-  lineNumbers, 
-  highlightActiveLineGutter
-} from "@codemirror/view"
-import {
-  defaultHighlightStyle, 
-  syntaxHighlighting, 
+  crosshairCursor,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+} from '@codemirror/view';
+
+import { 
   indentOnInput,
-  bracketMatching, 
-  foldGutter, 
-  foldKeymap
-} from "@codemirror/language"
+  syntaxHighlighting,
+  defaultHighlightStyle,
+  bracketMatching,
+} from '@codemirror/language';
+
 import {
-  defaultKeymap, 
-  history, 
-  historyKeymap, 
+  defaultKeymap,
+  historyKeymap,
   indentWithTab
-} from "@codemirror/commands"
-import {
-  searchKeymap, 
-  highlightSelectionMatches
-} from "@codemirror/search"
-import { lintKeymap } from "@codemirror/lint"
-import {javascript, javascriptLanguage} from "@codemirror/lang-javascript"
-import {python, pythonLanguage} from "@codemirror/lang-python"
-import {html, htmlLanguage} from "@codemirror/lang-html"
-import {java, javaLanguage} from "@codemirror/lang-java"
-import {cpp, cppLanguage} from "@codemirror/lang-cpp"
-import {toggleLineWrapping, toggleHighlightActiveLine, toggleYellowBackground} from "./toggle-extension.mjs"
-import {createAutoLanguageExtension} from "./auto-language.mjs"
-import {cursorTooltip} from "./cursor-tooltip.mjs"
+} from '@codemirror/commands';
 
-// --- JSDoc Autocomplete for JavaScript ---
-import {syntaxTree} from "@codemirror/language"
+import { syntaxTree } from '@codemirror/language';
 
-// --- React-friendly factory for CodeMirror ---
-/**
- * Create a CodeMirror EditorView for React
- * @param {Object} opts
- * @param {HTMLElement} opts.parent - DOM node to mount editor in
- * @param {string} opts.doc - Initial document content
- * @param {string} opts.language - Language string (e.g. 'python', 'java', ...)
- * @param {function} opts.onChange - Callback for document changes
- */
-export function createEditorView({ parent, doc, language, onChange, tabSize = 4, autocomplete = true }) {
-  let langExt;
-  switch (language) {
-    case 'python': 
-      langExt = [
-        python(),
-        pythonCompletions
-      ];
-      break;
-    case 'java': 
-      langExt = [
-        java(),
-        javaCompletions
-      ];
-      break;
-    case 'cpp': 
-      langExt = [
-        cpp(),
-        cppCompletions
-      ];
-      break;
-    case 'html': 
-      langExt = [
-        html(),
-        htmlCompletions
-      ];
-      break;
-    case 'javascript': 
-    default: 
-      langExt = [
-        javascript(),
-        jsDocCompletions
-      ];
-      break;
-  }
+// *** COLLABORATIVE EDITING IMPORT ***
+import { createCollaborativeExtensions } from './collab-features.js';
 
-  // Configure autocomplete extension based on the parameter
-  const autocompleteExt = autocomplete ? [autocompletion()] : [];
+// Custom extensions (these files need to exist)
+import { createAutoLanguageExtension } from './auto-language.mjs';
+import { cursorTooltip } from './cursor-tooltip.mjs';
+import { languageConfigs } from "./language-support.js";
+import { 
+  toggleLineWrapping, 
+  toggleHighlightActiveLine, 
+  toggleYellowBackground 
+} from './toggle-extension.mjs';
 
-  const state = EditorState.create({
-    doc,
-    extensions: [
-      lineNumbers(),
-      foldGutter(),
-      highlightSpecialChars(),
-      history(),
-      drawSelection(),
-      dropCursor(),
-      EditorState.allowMultipleSelections.of(true),
-      rectangularSelection(),
-      crosshairCursor(),
-      indentOnInput(),
-      syntaxHighlighting(defaultHighlightStyle),
-      bracketMatching(),
-      closeBrackets(),
-      ...autocompleteExt, // Use the configured autocomplete
-      cursorTooltip(),
-      toggleLineWrapping(),
-      toggleHighlightActiveLine(),
-      toggleYellowBackground(),
-      ...langExt, // Language extensions first
-      tabSizeCompartment.of(EditorState.tabSize.of(tabSize)), // Tab size compartment after language
-      EditorView.updateListener.of((v) => {
-        if (v.docChanged && onChange) {
-          onChange(v.state.doc.toString());
-        }
-      }),
-      EditorView.theme({
-        "&": { 
-          backgroundColor: "#1a1f2e",
-          color: "#e2e8f0",
-          height: "100%",
-          "&.cm-editor": { 
-            height: "100%",
-            outline: "none"
-          },
-          "& .cm-scroller": { 
-            overflow: "auto",
-            scrollbarWidth: "thin",
-            fontFamily: '"Fira Code", monospace',
-            "&::-webkit-scrollbar": {
-              width: "8px",
-              height: "8px"
-            },
-            "&::-webkit-scrollbar-track": {
-              background: "#1e293b"
-            },
-            "&::-webkit-scrollbar-thumb": {
-              background: "#334155",
-              borderRadius: "4px"
-            },
-            "&::-webkit-scrollbar-thumb:hover": {
-              background: "#475569"
-            }
-          },
-          "& .cm-gutters": {
-            backgroundColor: "#1a1f2e",
-            color: "#64748b",
-            borderRight: "1px solid #1e293b"
-          },
-          "& .cm-activeLine": {
-            backgroundColor: "#1e293b"
-          },
-          "&.cm-focused .cm-cursor": {
-            borderLeft: "2px solid #60a5fa"
-          },
-          "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-            backgroundColor: "#2d3a5a"
-          },
-          "&.cm-focused .cm-matchingBracket": {
-            backgroundColor: "#2d3a5a",
-            outline: "1px solid #60a5fa"
-          }
-        },
-        ".cm-content": { 
-          fontFamily: '"Fira Code", monospace', 
-          fontSize: "14px",
-          minHeight: "100%",
-          caretColor: "#60a5fa"
-        },
-        ".cm-lineNumbers .cm-gutterElement": {
-          padding: "0 8px 0 16px"
-        },
-        ".cm-line": {
-          padding: "0 8px"
-        },
-        ".cm-scroller": {
-          overflow: "auto"
-        },
-        ".cm-keyword": { color: "#93c5fd" },
-        ".cm-builtin": { color: "#fca5a5" },
-        ".cm-string": { color: "#86efac" },
-        ".cm-number": { color: "#f0abfc" },
-        ".cm-comment": { color: "#64748b" },
-        ".cm-def": { color: "#93c5fd" },
-        ".cm-variable": { color: "#e2e8f0" },
-        ".cm-variable-2": { color: "#e2e8f0" },
-        ".cm-type-name": { color: "#93c5fd" },
-        ".cm-property": { color: "#93c5fd" },
-        ".cm-operator": { color: "#e2e8f0" },
-        ".cm-python .cm-variable": { color: "#e2e8f0" },
-        ".cm-python .cm-builtin": { color: "#fca5a5" },
-        ".cm-javascript .cm-variable": { color: "#e2e8f0" },
-        ".cm-javascript .cm-property": { color: "#93c5fd" },
-        ".cm-tag": { color: "#93c5fd" },
-        ".cm-attribute": { color: "#f0abfc" },
-        ".cm-type": { color: "#93c5fd" },
-        ".cm-class-name": { color: "#93c5fd" }
-      }),
-      keymap.of([
-        {
-          key: 'Tab',
-          run: (view) => {
-            if (acceptCompletion(view)) return true;
-            
-            const tabSize = view.state.tabSize;
-            const spaces = ' '.repeat(tabSize);
-            const cursorPosition = view.state.selection.main.from;
-            
-            view.dispatch({
-              changes: { 
-                from: cursorPosition, 
-                insert: spaces 
-              },
-              selection: { 
-                anchor: cursorPosition + tabSize 
-              }
-            });
-            
-            return true;
-          }
-        },
-        {
-          key: "Shift-Tab", 
-          run: (view) => {
-            return indentWithTab.shift(view);
-          }
-        },
-        ...closeBracketsKeymap,
-        ...defaultKeymap.filter(binding => binding.key !== 'Tab'),
-        ...searchKeymap,
-        ...historyKeymap,
-        ...foldKeymap,
-        ...completionKeymap,
-        ...lintKeymap
-      ]),
-    ]
-  });
-  
-  const view = new EditorView({
-    state,
-    parent,
-  });
-
-  // Remove the problematic calls to window.setTabSize and window.setAutocompleteEnabled
-  // The configuration is now handled directly in the state creation above
-  
-  return view;
-}
-
-// --- HTML Tag Autocomplete ---
-const htmlCompletions = htmlLanguage.data.of({
-  // ... (rest of the code remains the same)
-  autocomplete: context => {
-    let word = context.matchBefore(/\w*/);
-    if (!word || (word.from == word.to && !context.explicit)) return null;
-    return {
-      from: word.from,
-      options: [
-        {label: "div", type: "tag", apply: "<div>$0</div>"},
-        {label: "span", type: "tag", apply: "<span>$0</span>"},
-        {label: "p", type: "tag", apply: "<p>$0</p>"},
-        {label: "a", type: "tag", apply: "<a href=\"$1\">$0</a>"},
-        {label: "img", type: "tag", apply: "<img src=\"$1\" alt=\"$2\">$0"},
-        {label: "ul", type: "tag", apply: "<ul>\n  <li>$0</li>\n</ul>"},
-        {label: "ol", type: "tag", apply: "<ol>\n  <li>$0</li>\n</ol>"},
-        {label: "li", type: "tag", apply: "<li>$0</li>"},
-        {label: "table", type: "tag", apply: "<table>\n  <tr><th>$1</th></tr>\n  <tr><td>$0</td></tr>\n</table>"},
-        {label: "form", type: "tag", apply: "<form action=\"$1\" method=\"$2\">\n  $0\n</form>"},
-        {label: "input", type: "tag", apply: "<input type=\"$1\" name=\"$2\">$0"},
-        {label: "button", type: "tag", apply: "<button type=\"$1\">$0</button>"},
-        {label: "select", type: "tag", apply: "<select name=\"$1\">\n  <option value=\"$2\">$0</option>\n</select>"},
-        {label: "textarea", type: "tag", apply: "<textarea name=\"$1\" rows=\"4\" cols=\"50\">$0</textarea>"},
-        {label: "label", type: "tag", apply: "<label for=\"$1\">$0</label>"},
-        {label: "h1", type: "tag", apply: "<h1>$0</h1>"},
-        {label: "h2", type: "tag", apply: "<h2>$0</h2>"},
-        {label: "h3", type: "tag", apply: "<h3>$0</h3>"},
-        {label: "header", type: "tag", apply: "<header>\n  $0\n</header>"},
-        {label: "footer", type: "tag", apply: "<footer>\n  $0\n</footer>"},
-        {label: "section", type: "tag", apply: "<section>\n  $0\n</section>"},
-        {label: "article", type: "tag", apply: "<article>\n  $0\n</article>"},
-        {label: "nav", type: "tag", apply: "<nav>\n  $0\n</nav>"},
-        {label: "main", type: "tag", apply: "<main>\n  $0\n</main>"},
-        {label: "aside", type: "tag", apply: "<aside>\n  $0\n</aside>"},
-        {label: "figure", type: "tag", apply: "<figure>\n  $0\n</figure>"},
-        {label: "figcaption", type: "tag", apply: "<figcaption>$0</figcaption>"},
-        {label: "time", type: "tag", apply: "<time datetime=\"$1\">$0</time>"},
-        {label: "mark", type: "tag", apply: "<mark>$0</mark>"}
-      ]
-    };
-  }
-});
-
-// --- Python Keyword Autocomplete ---
-const pythonKeywords = [
-  // Snippet completions for control flow
-  {label: "for", type: "keyword", apply: "for i in range():\n    ", info: "Python for loop", boost: 100},
-  {label: "while", type: "keyword", apply: "while :\n    ", info: "Python while loop", boost: 100},
-  {label: "if", type: "keyword", apply: "if :\n    ", info: "Python if statement", boost: 100},
-  {label: "elif", type: "keyword", apply: "elif :\n    ", info: "Python elif statement", boost: 100},
-  {label: "else", type: "keyword", apply: "else:\n    ", info: "Python else statement", boost: 100},
-  // Standard keywords
-  ...[
-    "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else", "except",
-    "False", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "None",
-    "nonlocal", "not", "or", "pass", "raise", "return", "True", "try", "while", "with", "yield"
-  ].map(word => ({label: word, type: "keyword"}))
-];
-
-function pythonKeywordCompletion(context) {
-  let word = context.matchBefore(/\w*/);
-  if (!word || (word.from == word.to && !context.explicit)) return null;
-  return {
-    from: word.from,
-    options: pythonKeywords,
-    validFor: /^\w*$/
-  };
-}
-
-const pythonCompletions = pythonLanguage.data.of({
-  autocomplete: pythonKeywordCompletion
-});
-
-// --- C++ Keyword Autocomplete ---
-const cppKeywords = [
-  // Snippet completions for control flow
-  {label: "for", type: "keyword", apply: "for (int i = 0; i < n; i++) {\n    \n}", info: "C++ for loop", boost: 100},
-  {label: "while", type: "keyword", apply: "while () {\n    \n}", info: "C++ while loop", boost: 100},
-  {label: "if", type: "keyword", apply: "if () {\n    \n}", info: "C++ if statement", boost: 100},
-  {label: "switch", type: "keyword", apply: "switch () {\n    case :\n        break;\n    default:\n        break;\n}", info: "C++ switch statement", boost: 100},
-  // Standard keywords
-  ...[
-    "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool", "break", "case", "catch", "char", "char16_t", "char32_t", "class", "compl", "const", "constexpr", "const_cast", "continue", "decltype", "default", "delete", "do", "double", "dynamic_cast", "else", "enum", "export", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "return", "short", "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch", "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq"
-  ].map(word => ({label: word, type: "keyword"}))
-];
-
-function cppKeywordCompletion(context) {
-  let word = context.matchBefore(/\w*/);
-  if (!word || (word.from == word.to && !context.explicit)) return null;
-  return {
-    from: word.from,
-    options: cppKeywords,
-    validFor: /^\w*$/
-  };
-}
-
-const cppCompletions = cppLanguage.data.of({
-  autocomplete: cppKeywordCompletion
-});
-
-// --- Java Keyword Autocomplete ---
-const javaKeywords = [
-  // Snippet completions for control flow
-  {label: "for", type: "keyword", apply: "for (int i = 0; i < n; i++) {\n    \n}", info: "Java for loop", boost: 100},
-  {label: "while", type: "keyword", apply: "while () {\n    \n}", info: "Java while loop", boost: 100},
-  {label: "if", type: "keyword", apply: "if () {\n    \n}", info: "Java if statement", boost: 100},
-  {label: "switch", type: "keyword", apply: "switch () {\n    case :\n        break;\n    default:\n        break;\n}", info: "Java switch statement", boost: 100},
-  // Standard keywords
-  ...[
-    "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
-    "class", "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
-    "finally", "float", "goto", "implements", "import", "instanceof", "int",
-    "interface", "long", "native", "new", "package", "private", "protected", "public",
-    "return", "short", "static", "strictfp", "super", "synchronized", "this",
-    "throw", "throws", "transient", "try", "void", "volatile"
-  ].map(word => ({label: word, type: "keyword"}))
-];
-
-function javaKeywordCompletion(context) {
-  let word = context.matchBefore(/\w*/);
-  if (!word || (word.from == word.to && !context.explicit)) return null;
-  return {
-    from: word.from,
-    options: javaKeywords,
-    validFor: /^\w*$/
-  };
-}
-
-const javaCompletions = javaLanguage.data.of({
-  autocomplete: javaKeywordCompletion
-});
-
-const tagOptions = [
-  "constructor", "deprecated", "link", "param", "returns", "type"
-].map(tag => ({label: "@" + tag, type: "keyword"}))
-
+// JSDoc completion configuration
 function completeJSDoc(context) {
-  let nodeBefore = syntaxTree(context.state).resolveInner(context.pos, -1)
+  let nodeBefore = syntaxTree(context.state).resolveInner(context.pos, -1);
   if (nodeBefore.name != "BlockComment" ||
       context.state.sliceDoc(nodeBefore.from, nodeBefore.from + 3) != "/**")
-    return null
-  let textBefore = context.state.sliceDoc(nodeBefore.from, context.pos)
-  let tagBefore = /@\w*$/.exec(textBefore)
-  if (!tagBefore && !context.explicit) return null
+    return null;
+  let textBefore = context.state.sliceDoc(nodeBefore.from, context.pos);
+  let tagBefore = /@\w*$/.exec(textBefore);
+  if (!tagBefore && !context.explicit) return null;
+  
+  const tagOptions = [
+    { label: "@param", type: "keyword" },
+    { label: "@returns", type: "keyword" },
+    { label: "@throws", type: "keyword" },
+    { label: "@example", type: "keyword" },
+    { label: "@deprecated", type: "keyword" }
+  ];
+  
   return {
     from: tagBefore ? nodeBefore.from + tagBefore.index : context.pos,
     options: tagOptions,
     validFor: /^(@\w*)?$/
-  }
+  };
 }
 
-const jsDocCompletions = javascriptLanguage.data.of({
-  autocomplete: completeJSDoc
-})
-
 // Create compartments for dynamic configuration
-const languageCompartment = new Compartment()
-const themeCompartment = new Compartment()
-const readOnlyCompartment = new Compartment()
-const autocompleteCompartment = new Compartment()
+const languageCompartment = new Compartment();
+const themeCompartment = new Compartment();
+const tabSizeCompartment = new Compartment();
+const readOnlyCompartment = new Compartment();
+const autocompleteCompartment = new Compartment();
 
 // Export compartments for external use
-export { autocompleteCompartment };
+export { autocompleteCompartment, tabSizeCompartment };
 
 // Custom themes
 const lightTheme = EditorView.theme({
+  "&": {
+    backgroundColor: "#ffffff",
+    color: "#333333"
+  },
   ".cm-content": {
-    fontFamily: '"Fira Code", monospace',
-    fontSize: "14px"
+    fontFamily: '"Fira Code", "Consolas", monospace',
+    fontSize: "14px",
+    minHeight: "100%",
+    caretColor: "#0080ff"
   },
   ".cm-line": {
-    padding: "0 4px",
+    padding: "0 8px",
     lineHeight: "1.6"
   },
   "&.cm-focused .cm-cursor": {
@@ -446,76 +116,179 @@ const lightTheme = EditorView.theme({
     backgroundColor: "#f5f5f5",
     color: "#999",
     border: "none"
+  },
+  ".cm-activeLineGutter": {
+    backgroundColor: "#e8e8e8"
+  },
+  ".cm-activeLine": {
+    backgroundColor: "#f0f0f0"
   }
 });
 
 const darkTheme = EditorView.theme({
   "&": {
-    backgroundColor: "#1e1e1e",
-    color: "#d4d4d4"
+    backgroundColor: "#1a1f2e",
+    color: "#e2e8f0",
+    height: "100%"
   },
   ".cm-content": {
-    fontFamily: '"Fira Code", monospace',
-    fontSize: "14px"
+    fontFamily: '"Fira Code", "Consolas", monospace',
+    fontSize: "14px",
+    minHeight: "100%",
+    caretColor: "#60a5fa"
   },
-  ".cm-line": {
-    padding: "0 4px",
-    lineHeight: "1.6"
-  },
-  "&.cm-focused .cm-cursor": {
-    borderLeftColor: "#80bfff"
-  },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-    backgroundColor: "#264f78"
+  ".cm-scroller": {
+    overflow: "auto",
+    scrollbarWidth: "thin",
+    "&::-webkit-scrollbar": {
+      width: "8px",
+      height: "8px"
+    },
+    "&::-webkit-scrollbar-track": {
+      background: "#1e293b"
+    },
+    "&::-webkit-scrollbar-thumb": {
+      background: "#334155",
+      borderRadius: "4px"
+    },
+    "&::-webkit-scrollbar-thumb:hover": {
+      background: "#475569"
+    }
   },
   ".cm-gutters": {
-    backgroundColor: "#333333",
-    color: "#858585",
-    border: "none"
-  },
-  ".cm-activeLineGutter": {
-    backgroundColor: "#333333"
+    backgroundColor: "#1a1f2e",
+    color: "#64748b",
+    borderRight: "1px solid #1e293b"
   },
   ".cm-activeLine": {
-    backgroundColor: "#282828"
-  }
+    backgroundColor: "#1e293b"
+  },
+  "&.cm-focused .cm-cursor": {
+    borderLeft: "2px solid #60a5fa"
+  },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
+    backgroundColor: "#2d3a5a"
+  },
+  "&.cm-focused .cm-matchingBracket": {
+    backgroundColor: "#2d3a5a",
+    outline: "1px solid #60a5fa"
+  },
+  ".cm-lineNumbers .cm-gutterElement": {
+    padding: "0 8px 0 16px"
+  },
+  ".cm-line": {
+    padding: "0 8px"
+  },
+  // Syntax highlighting
+  ".cm-keyword": { color: "#93c5fd" },
+  ".cm-builtin": { color: "#fca5a5" },
+  ".cm-string": { color: "#86efac" },
+  ".cm-number": { color: "#f0abfc" },
+  ".cm-comment": { color: "#64748b" },
+  ".cm-def": { color: "#93c5fd" },
+  ".cm-variable": { color: "#e2e8f0" },
+  ".cm-variable-2": { color: "#e2e8f0" },
+  ".cm-type-name": { color: "#93c5fd" },
+  ".cm-property": { color: "#93c5fd" },
+  ".cm-operator": { color: "#e2e8f0" },
+  ".cm-tag": { color: "#93c5fd" },
+  ".cm-attribute": { color: "#f0abfc" },
+  ".cm-type": { color: "#93c5fd" },
+  ".cm-class-name": { color: "#93c5fd" }
 });
 
-console.log('[CodeMirrorTest] editor.mjs loaded');
+/**
+ * Create a CodeMirror EditorView for React or standalone use
+ * @param {Object} opts
+ * @param {HTMLElement} opts.parent - DOM node to mount editor in
+ * @param {string} opts.doc - Initial document content
+ * @param {string} opts.language - Language string (e.g. 'python', 'java', ...)
+ * @param {function} opts.onChange - Callback for document changes
+ * @param {number} opts.tabSize - Tab size (default: 4)
+ * @param {boolean} opts.autocomplete - Enable autocomplete (default: true)
+ * @param {string} opts.theme - Theme ('light' or 'dark', default: 'dark')
+ * @param {boolean} opts.readOnly - Read-only mode (default: false)
+ * @param {Object} opts.collaborative - Collaborative editing config { roomId, userName, userColor }
+ */
+export function createEditorView({ 
+  parent, 
+  doc = '', 
+  language = 'javascript', 
+  onChange, 
+  tabSize = 4, 
+  autocomplete = true,
+  theme = 'dark',
+  readOnly = false,
+  collaborative = null,  // *** NEW: Collaborative editing support ***
+  file_name = 'untitled'
+}) {
+  // Get language extension
+  let langExt;
+  switch (language.toLowerCase()) {
+    case 'python': 
+      langExt = python();
+      break;
+    case 'java': 
+      langExt = java();
+      break;
+    case 'cpp':
+    case 'c++': 
+      langExt = cpp();
+      break;
+    case 'html': 
+      langExt = html();
+      break;
+    case 'javascript':
+    case 'js':
+    default: 
+      langExt = javascript();
+      break;
+  }
 
-// Sample JavaScript code to display initially
-const initialCode = `// Welcome to CodeMirror 6
-function greet(name) {
-  return \`Hello, ${name}!\`;
-}
+  // *** COLLABORATIVE SETUP ***
+  let collaborativeInstance = null;
+  let isCollaborative = false;
+  
+  if (collaborative && collaborative.roomId) {
+    try {
+      collaborativeInstance = createCollaborativeExtensions(collaborative.roomId, {
+        userName: collaborative.userName || `User-${Math.floor(Math.random() * 1000)}`,
+        userColor: /*collaborative.userColor ||*/ {
+          color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
+          light: `hsl(${Math.floor(Math.random() * 360)}, 70%, 85%)`
+        }
+      });
+      isCollaborative = true;
+      
+      // Set up collaborative event handlers
+      if (collaborative.onUserJoin) {
+        collaborativeInstance.onUserJoin(collaborative.onUserJoin);
+      }
+      if (collaborative.onUserLeave) {
+        collaborativeInstance.onUserLeave(collaborative.onUserLeave);
+      }
+      if (collaborative.onContentChange) {
+        collaborativeInstance.onContentChange(collaborative.onContentChange);
+      }
+      
+      console.log('✅ Collaborative editing enabled for room:', collaborative.roomId);
+    } catch (error) {
+      console.error('❌ Failed to setup collaborative editing:', error);
+      isCollaborative = false;
+    }
+  }
 
-// Try folding this function (click the arrow in the gutter)
-function calculateSum(a, b) {
-  // You can also try autocompletion by typing
-  // Just start typing and press Ctrl+Space
-  const result = a + b;
-  return result;
-}
-
-// Try selecting this text to see matching highlights
-console.log(greet("World"));
-console.log(calculateSum(5, 10));
-`;
-
-// Create the editor state with compartments
-const state = EditorState.create({
-  doc: initialCode,
-  extensions: [
+  // Configure extensions
+  const extensions = [
+    // Basic setup
+    basicSetup,
+    
     // Line numbers and code folding
     lineNumbers(),
-    foldGutter(),
     
     // Special character highlighting
     highlightSpecialChars(),
-    
-    // History (undo/redo)
-    history(),
-    
+        
     // Selection and cursor behavior
     drawSelection(),
     dropCursor(),
@@ -527,38 +300,46 @@ const state = EditorState.create({
     indentOnInput(),
     syntaxHighlighting(defaultHighlightStyle),
     bracketMatching(),
-    closeBrackets(),
-    
-    // Autocompletion (toggled via compartment)
-    autocompleteCompartment.of(autocompletion()),
-    jsDocCompletions,
-    javaCompletions,
-    pythonCompletions,
-    cppCompletions,
     
     // Line highlighting
     highlightActiveLine(),
     highlightActiveLineGutter(),
-    highlightSelectionMatches(),
     
-    // Compartments for dynamic configuration
-    languageCompartment.of(javascript()),
-    tabSizeCompartment.of(EditorState.tabSize.of(2)),
-    themeCompartment.of(lightTheme),
-    readOnlyCompartment.of(EditorState.readOnly.of(false)),
+    // Language support
+    languageCompartment.of(langExt),
     
-    // Private compartments for toggling features
-    ...toggleLineWrapping("Alt-w", false),
-    ...toggleHighlightActiveLine("Alt-h", true),
-    ...toggleYellowBackground("Mod-o", false),
+    // Tab size
+    tabSizeCompartment.of(EditorState.tabSize.of(tabSize)),
     
-    // Automatic language detection
-    createAutoLanguageExtension(languageCompartment),
-
-    // Cursor position tooltip
-    ...cursorTooltip(),
+    // Theme
+    themeCompartment.of(theme === 'dark' ? darkTheme : lightTheme),
     
-    // Keymaps for various features
+    // Read-only
+    readOnlyCompartment.of(EditorState.readOnly.of(readOnly)),
+    
+    // Autocompletion
+    autocompleteCompartment.of(autocomplete ? [autocompletion(), ...languageConfigs[language]?.completions || []] : []),
+    
+    // *** COLLABORATIVE EXTENSIONS ***
+    ...(isCollaborative ? collaborativeInstance.extensions : []),
+    
+    // Custom extensions (only if they exist)
+    ...(typeof createAutoLanguageExtension === 'function' ? [createAutoLanguageExtension(languageCompartment)] : []),
+    ...(typeof cursorTooltip === 'function' ? cursorTooltip() : []),
+    ...(typeof toggleLineWrapping === 'function' ? [toggleLineWrapping()] : []),
+    ...(typeof toggleHighlightActiveLine === 'function' ? [toggleHighlightActiveLine()] : []),
+    ...(typeof toggleYellowBackground === 'function' ? [toggleYellowBackground()] : []),
+    
+    // Change listener (only for non-collaborative editors to avoid conflicts)
+    ...(isCollaborative ? [] : [
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged && onChange) {
+          onChange(update.state.doc.toString());
+        }
+      })
+    ]),
+    
+    // Keymaps
     keymap.of([
       {
         key: 'Tab',
@@ -567,10 +348,10 @@ const state = EditorState.create({
           if (acceptCompletion(view)) return true;
           
           // Get current tab size from the editor state
-          const tabSize = view.state.tabSize;
+          const currentTabSize = view.state.tabSize;
           
           // Create a string of spaces equal to tab size
-          const spaces = ' '.repeat(tabSize);
+          const spaces = ' '.repeat(currentTabSize);
           
           // Get the current cursor position
           const cursorPosition = view.state.selection.main.from;
@@ -582,153 +363,187 @@ const state = EditorState.create({
               insert: spaces 
             },
             selection: { 
-              anchor: cursorPosition + tabSize 
+              anchor: cursorPosition + currentTabSize 
             }
           });
           
-          return true; // Indicate we handled the key
+          return true;
         }
       },
       {
         key: "Shift-Tab", 
-        run: (view) => {
-          return indentWithTab.shift(view);
-        }
+        run: indentWithTab
       },
-      ...closeBracketsKeymap,
       ...defaultKeymap.filter(binding => binding.key !== 'Tab'),
-      ...searchKeymap,
       ...historyKeymap,
-      ...foldKeymap,
       ...completionKeymap,
-      ...lintKeymap
     ])
-  ]
-});
+  ];
 
-// Only run DOM-based initialization if not in a module/React context
-if (typeof window !== "undefined" && document.getElementById('editor-container')) {
-  const editorContainer = document.getElementById('editor-container');
-  if (!editorContainer) {
-    console.error('[CodeMirrorTest] #editor-container not found!');
-    // Show a visible error on the page
-    const errorDiv = document.createElement('div');
-    errorDiv.style.color = 'red';
-    errorDiv.style.fontWeight = 'bold';
-    errorDiv.textContent = '[CodeMirrorTest] Error: #editor-container not found!';
-    document.body.prepend(errorDiv);
+  // Create editor state
+  const state = EditorState.create({
+    doc: isCollaborative ? '' : doc, // Collaborative editors get content from YJS
+    extensions
+  });
+  
+  // Create editor view
+  const view = new EditorView({
+    state,
+    parent
+  });
+
+  // *** ATTACH COLLABORATIVE INSTANCE ***
+  if (isCollaborative) {
+    view._collaborativeInstance = collaborativeInstance;
+    view._isCollaborative = true;
+    
+    // Set initial content for collaborative editor if provided
+    if (doc && doc.length > 0) {
+      // Only set initial content if the collaborative document is empty
+      setTimeout(() => {
+        if (collaborativeInstance.getContent().length === 0) {
+          collaborativeInstance.ytext.insert(0, doc);
+        }
+      }, 100); // Small delay to ensure connection is established
+    }
   } else {
-    let editor = new EditorView({
-      state,
-      parent: editorContainer
-    });
-    // Attach editor to window for debugging
-    window.editor = editor;
+    view._isCollaborative = false;
   }
+
+  return view;
 }
 
-// Functions to dynamically change editor configuration
-function setLanguage(language) {
-  const code = editor.state.doc.toString();
-  const outputArea = document.getElementById('output-area');
-
-  switch(language) {
-    case 'javascript':
-      editor.dispatch({ effects: languageCompartment.reconfigure(javascript()) });
-      break;
-    case 'python':
-      editor.dispatch({ effects: languageCompartment.reconfigure(python()) });
-      break;
-    case 'html':
-      editor.dispatch({ effects: languageCompartment.reconfigure(html()) });
-      break;
-    case 'java':
-      editor.dispatch({ effects: languageCompartment.reconfigure(java()) });
-      break;
-    case 'cpp':
-      editor.dispatch({ effects: languageCompartment.reconfigure(cpp()) });
-      break;
-  }
-}
-
-// Dynamically update tab size for a given EditorView
-function updateTabSize(view, newSize) {
-  view.dispatch({
-    effects: tabSizeCompartment.reconfigure(EditorState.tabSize.of(newSize))
-  });
-}
-
-// For legacy global usage
-function setTabSize(size) {
-  updateTabSize(editor, size);
-}
-// Autocomplete toggle
-function setAutocompleteEnabled(enabled) {
-  editor.dispatch({
-    effects: autocompleteCompartment.reconfigure(enabled ? autocompletion() : [])
-  });
-}
-
-// Dynamically update tab size and autocomplete for a given EditorView
-export function updateEditorSettings(view, { tabSize, autocomplete }) {
+// *** ENHANCED UTILITY FUNCTIONS ***
+export function updateEditorSettings(view, { tabSize, autocomplete, theme, language, readOnly }) {
   const effects = [];
+  
   if (typeof tabSize === 'number') {
     effects.push(tabSizeCompartment.reconfigure(EditorState.tabSize.of(tabSize)));
   }
+  
   if (typeof autocomplete === 'boolean') {
-    effects.push(autocompleteCompartment.reconfigure(autocomplete ? autocompletion() : []));
+    effects.push(autocompleteCompartment.reconfigure(
+      autocomplete ? [autocompletion(), ...languageConfigs[language]?.completions || []] : []
+    ));
   }
+  
+  if (theme === 'dark' || theme === 'light') {
+    effects.push(themeCompartment.reconfigure(theme === 'dark' ? darkTheme : lightTheme));
+  }
+  
+  if (typeof readOnly === 'boolean') {
+    effects.push(readOnlyCompartment.reconfigure(EditorState.readOnly.of(readOnly)));
+  }
+  
+  if (language) {
+    let langExt;
+    switch (language.toLowerCase()) {
+      case 'python': langExt = python(); break;
+      case 'java': langExt = java(); break;
+      case 'cpp': case 'c++': langExt = cpp(); break;
+      case 'html': langExt = html(); break;
+      case 'javascript': case 'js': default: langExt = javascript(); break;
+    }
+    effects.push(languageCompartment.reconfigure(langExt));
+  }
+  
   if (effects.length > 0) {
     view.dispatch({ effects });
   }
 }
 
-// Export updateTabSize for external usage
-export { updateTabSize };
+// *** NEW: Collaborative utility functions ***
+export function getCollaborativeInfo(view) {
+  if (!view._isCollaborative || !view._collaborativeInstance) {
+    return null;
+  }
+  
+  return {
+    connectedUsers: view._collaborativeInstance.getConnectedUsers(),
+    isConnected: view._collaborativeInstance.provider.connected,
+    roomId: view._collaborativeInstance.provider.roomname
+  };
+}
 
-window.setAutocompleteEnabled = setAutocompleteEnabled;
-// Ensure global is updated for dropdown
-window.setTabSize = setTabSize;
+export function destroyCollaborative(view) {
+  if (view._collaborativeInstance) {
+    view._collaborativeInstance.destroy();
+    view._collaborativeInstance = null;
+    view._isCollaborative = false;
+  }
+}
 
-function setTheme(theme) {
-  editor.dispatch({
+// Individual update functions (unchanged)
+export function updateTabSize(view, newSize) {
+  view.dispatch({
+    effects: tabSizeCompartment.reconfigure(EditorState.tabSize.of(newSize))
+  });
+}
+
+export function updateLanguage(view, language) {
+  let langExt;
+  switch (language.toLowerCase()) {
+    case 'python': langExt = python(); break;
+    case 'java': langExt = java(); break;
+    case 'cpp': case 'c++': langExt = cpp(); break;
+    case 'html': langExt = html(); break;
+    case 'javascript': case 'js': default: langExt = javascript(); break;
+  }
+  view.dispatch({
+    effects: languageCompartment.reconfigure(langExt)
+  });
+}
+
+export function updateTheme(view, theme) {
+  view.dispatch({
     effects: themeCompartment.reconfigure(theme === 'dark' ? darkTheme : lightTheme)
   });
 }
 
-function setReadOnly(readOnly) {
-  editor.dispatch({
+export function updateAutocomplete(view, enabled) {
+  view.dispatch({
+    effects: autocompleteCompartment.reconfigure(
+      enabled ? [autocompletion(), ...languageConfigs[language]?.completions || []] : []
+    )
+  });
+}
+
+export function updateReadOnly(view, readOnly) {
+  view.dispatch({
     effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(readOnly))
   });
 }
 
-// Function to get editor content
-function getEditorContent() {
-  return editor.state.doc.toString();
-}
+// Global editor instance (for backward compatibility)
+let globalEditor = null;
 
-// Always define global functions, even if editor is not initialized
-if (typeof window.getEditorContent !== 'function') {
-  window.getEditorContent = () => '[CodeMirrorTest] Editor not initialized.';
-}
-if (typeof window.setLanguage !== 'function') {
-  window.setLanguage = () => {};
-}
-if (typeof window.setTabSize !== 'function') {
-  window.setTabSize = () => {};
-}
-if (typeof window.setTheme !== 'function') {
-  window.setTheme = () => {};
-}
-if (typeof window.setReadOnly !== 'function') {
-  window.setReadOnly = () => {};
-}
-
-// If editor initialized, override with real implementations
-if (typeof editor !== 'undefined') {
-  window.getEditorContent = getEditorContent;
-  window.setLanguage = setLanguage;
-  window.setTabSize = setTabSize;
-  window.setTheme = setTheme;
-  window.setReadOnly = setReadOnly;
+// Initialize global editor if DOM is available
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  document.addEventListener('DOMContentLoaded', () => {
+    const editorContainer = document.getElementById('editor-container');
+    if (editorContainer) {
+      globalEditor = createEditorView({
+        parent: editorContainer,
+        doc: '// Welcome to CodeMirror!\nconsole.log("Hello, World!");',
+        language: 'javascript',
+        onChange: (content) => {
+          console.log('Editor content changed:', content.length, 'characters');
+        }
+      });
+      
+      // Attach to window for debugging
+      window.editor = globalEditor;
+      
+      // Global functions for backward compatibility
+      window.getEditorContent = () => globalEditor?.state.doc.toString() || '';
+      window.setLanguage = (lang) => globalEditor && updateLanguage(globalEditor, lang);
+      window.setTabSize = (size) => globalEditor && updateTabSize(globalEditor, size);
+      window.setTheme = (theme) => globalEditor && updateTheme(globalEditor, theme);
+      window.setReadOnly = (readOnly) => globalEditor && updateReadOnly(globalEditor, readOnly);
+      window.setAutocompleteEnabled = (enabled) => globalEditor && updateAutocomplete(globalEditor, enabled);
+      
+      // *** NEW: Collaborative debugging functions ***
+      window.getCollaborativeInfo = () => globalEditor && getCollaborativeInfo(globalEditor);
+    }
+  });
 }

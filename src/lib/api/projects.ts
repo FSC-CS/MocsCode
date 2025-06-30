@@ -44,8 +44,6 @@ export class ProjectsApi extends ApiClient {
     try {
       const { page = 1, per_page = 50 } = pagination;
       
-      console.log('Loading projects for user:', userId);
-
       // Use helper function that bypasses RLS
       const { data: projects, error } = await this.client
         .rpc('get_user_projects', { p_user_id: userId });
@@ -73,11 +71,6 @@ export class ProjectsApi extends ApiClient {
       // Apply pagination
       const startIndex = (page - 1) * per_page;
       const paginatedProjects = allProjects.slice(startIndex, startIndex + per_page);
-
-      console.log(`Successfully loaded projects for user ${userId}:`, {
-        total: allProjects.length,
-        paginated: paginatedProjects.length
-      });
 
       return {
         data: {

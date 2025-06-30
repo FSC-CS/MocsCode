@@ -124,7 +124,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         // No more signed URL logic here; avatar_url is passed as-is from the users table
         setDbUser({ ...data, avatar_url: data.avatar_url });
-        console.log('User synced from custom users table:', data.id);
       } catch (error: any) {
         console.error('User sync error:', error);
         setError('Failed to sync user data. Please refresh the page.');
@@ -152,7 +151,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } 
         
         if (sessionData?.session?.user) {
-          console.log('Restored session for user:', sessionData.session.user.id);
           setUser(sessionData.session.user);
         } else {
           setUser(null);

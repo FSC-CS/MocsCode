@@ -48,7 +48,6 @@ export async function runJudge0Code({
   if (!apiKey) {
     throw new Error('Judge0 API key is not set in environment variables.');
   }
-  console.log('FECQHING')
   const response = await fetch(JUDGE0_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -75,8 +74,6 @@ export async function runJudge0Code({
   data.stderr = data.stderr !== null ? atob(data.stderr) : data.stderr;
   data.compile_output = data.compile_output !== null ? atob(data.compile_output) : data.compile_output;
   data.message = data.message !== null ? atob(data.message) : data.message;
-
-  console.log('ERROR', data.stderr);
 
   return data;
 }

@@ -77,8 +77,6 @@ export class ChatMessageApi extends ApiClient {
       query = query.limit(pagination.per_page);
     }
 
-    console.log('CURSOR', pagination?.cursor);
-
     // Page-based fallback (if no cursor)
     if (!pagination?.cursor && pagination?.page && pagination?.per_page) {
       const from = (pagination.page - 1) * pagination.per_page;

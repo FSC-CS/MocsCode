@@ -28,8 +28,6 @@ export class ProjectMembersApi extends ApiClient {
     const { page = 1, per_page = 50 } = pagination || {};
 
     try {
-      console.log('Loading project members for project:', projectId);
-
       // Use helper function that bypasses RLS issues
       const { data, error } = await this.client
         .rpc('get_project_members', { p_project_id: projectId });
@@ -67,7 +65,6 @@ export class ProjectMembersApi extends ApiClient {
             userId: member.user_id,
             projectId: member.project_id
           });
-          console.log(member);
           return false;
         }
         return true;
@@ -76,8 +73,6 @@ export class ProjectMembersApi extends ApiClient {
       // Apply pagination
       const startIndex = (page - 1) * per_page;
       const paginatedMembers = validMembers.slice(startIndex, startIndex + per_page);
-
-      console.log(`Successfully loaded ${validMembers.length} members for project ${projectId}`);
 
       return {
         data: {
@@ -152,7 +147,6 @@ export class ProjectMembersApi extends ApiClient {
         };
       }
 
-      console.log('Successfully added member:', user.email);
       return {
         data: { ...newMember, user } as ProjectMember,
         error: null

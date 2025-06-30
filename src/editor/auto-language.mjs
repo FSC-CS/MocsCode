@@ -3,9 +3,6 @@ import {htmlLanguage, html} from "@codemirror/lang-html"
 import {language} from "@codemirror/language"
 import {javascript} from "@codemirror/lang-javascript"
 
-console.log('[CodeMirrorTest] auto-language.mjs loaded');
-console.log('[CodeMirrorTest] Imports:', { htmlLanguage, html, language, javascript });
-
 if (!htmlLanguage || !html || !language || !javascript) {
   console.error('[CodeMirrorTest] One or more CodeMirror language imports are undefined!', { htmlLanguage, html, language, javascript });
 }

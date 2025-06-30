@@ -22,13 +22,6 @@ export class ProjectFilesApi extends ApiClient {
     pagination?: PaginationParams,
     sort?: SortParams
   ): Promise<PaginatedResponse<ProjectFile>> {
-    console.log('listProjectFiles called with:', {
-      projectId,
-      parentId,
-      parentIdType: typeof parentId,
-      parentIdValue: JSON.stringify(parentId)
-    });
-
     const { page = 1, per_page = 50 } = pagination || {};
 
     try {
@@ -89,8 +82,6 @@ export class ProjectFilesApi extends ApiClient {
       const startIndex = (page - 1) * per_page;
       const paginatedFiles = files.slice(startIndex, startIndex + per_page);
 
-      console.log(`Successfully loaded ${files.length} files for project ${projectId}`);
-
       return {
         data: {
           items: paginatedFiles as ProjectFile[],
@@ -114,8 +105,6 @@ export class ProjectFilesApi extends ApiClient {
    */
   async createFile(data: Omit<ProjectFile, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<ProjectFile>> {
     try {
-      console.log('Creating file:', { name: data.name, project_id: data.project_id });
-
       const { data: fileId, error } = await this.client
         .rpc('upsert_project_file', {
           p_file_id: null, // New file
@@ -140,7 +129,6 @@ export class ProjectFilesApi extends ApiClient {
         return { data: null, error: fetchError };
       }
 
-      console.log('File created successfully:', { fileId, name: data.name });
       return { data: createdFile, error: null };
 
     } catch (error) {
@@ -157,8 +145,6 @@ export class ProjectFilesApi extends ApiClient {
    */
   async updateFile(id: string, data: Partial<ProjectFile>): Promise<ApiResponse<ProjectFile>> {
     try {
-      console.log('Updating file:', { id, updates: Object.keys(data) });
-
       // First get the current file to preserve fields not being updated
       const { data: currentFile, error: fetchError } = await this.getFile(id);
       if (fetchError || !currentFile) {
@@ -190,7 +176,6 @@ export class ProjectFilesApi extends ApiClient {
         return { data: null, error: fetchUpdatedError };
       }
 
-      console.log('File updated successfully:', { id, name: updatedFile?.name });
       return { data: updatedFile, error: null };
 
     } catch (error) {
@@ -234,7 +219,6 @@ export class ProjectFilesApi extends ApiClient {
         return { data: null, error: new Error(deleteError.message) };
       }
 
-      console.log('File deleted successfully:', { id });
       return { data: null, error: null };
 
     } catch (error) {
@@ -349,9 +333,6 @@ export class ProjectFilesApi extends ApiClient {
       const zipPath = file.path;
       zip.file(zipPath, file.content || '');
     }
-
-    console.log('compileScript', compileScript);
-    console.log('runScript', runScript);
 
     zip.file('/compile.sh', '#!/bin/bash\n\n' + compileScript);
     zip.file('/run.sh', '#!/bin/bash\n\n' + runScript);

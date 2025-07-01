@@ -5,7 +5,8 @@ import { keymap } from '@codemirror/view';
 import {
   autocompletion,
   acceptCompletion,
-  completionKeymap
+  completionKeymap,
+  closeBrackets
 } from '@codemirror/autocomplete';
 
 // Language support
@@ -259,11 +260,18 @@ export function createEditorView({
     closeBrackets(),
     
     // Autocompletion (toggled via compartment)
-    autocompleteCompartment.of(autocompletion({
-      // Use a simpler configuration without overrides
-      activateOnTyping: true,
-      defaultKeymap: true
-    })),
+    autocompleteCompartment.of(
+      autocomplete
+        ? [
+            autocompletion({
+              activateOnTyping: true,
+              defaultKeymap: true
+            }),
+            ...(languageConfigs[language]?.completions || [])
+          ]
+        : []
+    ),
+    
     
     // Line highlighting
     highlightActiveLine(),
@@ -272,9 +280,14 @@ export function createEditorView({
     tabSizeCompartment.of(EditorState.tabSize.of(tabSize)),
     themeCompartment.of(theme === 'dark' ? darkTheme : lightTheme),
     readOnlyCompartment.of(EditorState.readOnly.of(readOnly)),
-    autocompleteCompartment.of(
-      autocomplete ? [autocompletion(), ...languageConfigs[language]?.completions || []] : []
-    ),
+
+    EditorView.updateListener.of(update => {
+      if (update.docChanged && typeof onChange === "function") {
+        const content = update.state.doc.toString();
+        onChange(content);
+      }
+    }),
+
     // Custom extensions if available
     ...(typeof createAutoLanguageExtension === 'function' ? [createAutoLanguageExtension(languageCompartment)] : []),
     ...(typeof cursorTooltip === 'function' ? cursorTooltip() : []),
@@ -282,13 +295,6 @@ export function createEditorView({
     ...(typeof toggleHighlightActiveLine === 'function' ? [toggleHighlightActiveLine()] : []),
     ...(typeof toggleYellowBackground === 'function' ? [toggleYellowBackground()] : []),
 
-    // Document change listener (for non-collaborative editors)
-    // EditorView.updateListener.of(update => {
-    //   if (update.docChanged && onChange) {
-    //     console.log("UPDATE", update.state.doc.toString());
-    //     onChange(update.state.doc.toString());
-    //   }
-    // }),
 
     // Keymaps with custom Tab behavior
     keymap.of([

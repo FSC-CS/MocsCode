@@ -21,6 +21,9 @@ import ChatPanel from './ChatPanel';
 import SourceControlPanel from './SourceControlPanel';
 import ResizablePanel from './ResizablePanel';
 import CollaboratorPanel from '@/components/CollaboratorPanel';
+import { useYjsDocuments } from '@/editor/useYjsDocuments';
+import { runJudge0Code } from '@/lib/api/judge0';
+import EditorTabBar from './editor/EditorTabBar';
 
 // Types
 interface Project {
@@ -73,6 +76,8 @@ interface OpenFile {
   name: string;
   content: string;
   language: string;
+  ytext: any;
+  provider: any;
   lastSaved?: string;
   isDirty?: boolean;
 }
@@ -711,8 +716,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
     try {
       // Get the latest content directly from the editor view if available
-      const editorView = editorRef.current;
-      const latestContent = editorView?.state?.doc?.toString() || currentFile.content;
+      const { ydoc, provider, ytext } = getOrCreateDoc(currentFile.id, "", dbUser);
+      const latestContent = ytext.toString();
       
       const now = new Date().toISOString();
       const { error } = await projectFilesApi.updateFile(currentFile.id, {
@@ -765,6 +770,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   }, [saveCurrentFile]);
 
   const updateFileContent = (content: string) => {
+    console.log("UI AUTO SAVE");
     const updatedFiles = [...openFiles];
     updatedFiles[activeFileIndex] = {
       ...updatedFiles[activeFileIndex],
@@ -1063,6 +1069,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
       autocomplete={autocomplete}
       ytext={activeFile.ytext}
       provider={activeFile.provider}
+      onChange={updateFileContent}
     />
   )
 )}

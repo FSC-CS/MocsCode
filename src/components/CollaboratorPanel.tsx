@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { ProjectMember } from '@/lib/api/types';
 import { presenceService } from '@/lib/presence';
+import { UserAvatar } from '@/components/UserAvatar';
 
 interface EnhancedCollaborator extends ProjectMember {
   user?: {

@@ -14,9 +14,11 @@ export function useYjsDocuments() {
     const provider = new WebsocketProvider("wss://6b6b-24-231-63-11.ngrok-free.app", roomId, ydoc);
     const ytext = ydoc.getText("content");
 
-    if (ytext.length === 0) {
-      ytext.insert(0, content);
-    }
+    provider.on('sync', (isSynced) => {
+      if (isSynced && ytext.length === 0) {
+        ytext.insert(0, content);
+      }
+    });
 
     provider.awareness.setLocalStateField('user', {
       name: dbUser.name,

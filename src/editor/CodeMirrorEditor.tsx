@@ -7,12 +7,11 @@ import { UndoRedoControls } from "./UndoRedoControls";
 // Dynamically import updateEditorSettings for live config changes
 let updateEditorSettings: any = null;
 let editorModule: any = null;
-import React, { useEffect, useRef } from "react";
 
 interface CodeMirrorEditorProps {
   value: string;
   language: string;
-  onChange?: (value: string) => void;
+  onChange: (value: string) => void;
   tabSize?: number;
   autocomplete?: boolean;
   ytext?: any;
@@ -22,7 +21,7 @@ interface CodeMirrorEditorProps {
 const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({ 
   value, 
   language, 
-  onChange = () => {}, 
+  onChange, 
   tabSize = 4, 
   autocomplete = true, 
   ytext,
@@ -119,9 +118,9 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   return (
     <div className="relative h-full w-full">
       <div ref={editorRef} className="h-full w-full" />
-      {editorView && (
+      {viewRef.current && (
         <UndoRedoControls
-          view={editorView}
+          view={viewRef.current}
           className="absolute top-2 right-2 z-10"
         />
       )}

@@ -49,11 +49,29 @@ export class ProjectsApi extends ApiClient {
         .rpc('get_user_projects', { p_user_id: userId });
 
       if (error) {
-        console.error('Error loading user projects:', error);
-        return {
-          data: { items: [], total: 0, page, per_page },
-          error: new Error(error.message)
-        };
+        console.warn('RPC get_user_projects failed, falling back to direct query');
+        const { data, error: queryError } = await this.client
+          .from('projects')
+          .select('*')
+          .or(`owner_id.eq.${userId},id.in.(
+            select project_id from project_members where user_id = '${userId}'
+          )`);
+          
+        if (queryError) {
+          console.error('Error loading user projects (fallback query):', queryError);
+          return {
+            data: { items: [], total: 0, page, per_page },
+            error: new Error('Failed to load projects')
+          };
+        }
+        
+        projects = data || [];
+        
+        // Add user role information
+        projects = projects.map(project => ({
+          ...project,
+          user_role: project.owner_id === userId ? 'owner' : 'member'
+        }));
       }
 
       const allProjects = projects || [];

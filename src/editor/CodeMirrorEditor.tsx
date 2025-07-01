@@ -1,3 +1,12 @@
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { EditorView } from "@codemirror/view";
+import { Extension } from "@codemirror/state";
+import { history } from "@codemirror/commands";
+import { UndoRedoControls } from "./UndoRedoControls";
+
+// Dynamically import updateEditorSettings for live config changes
+let updateEditorSettings: any = null;
+let editorModule: any = null;
 import React, { useEffect, useRef } from "react";
 
 interface CodeMirrorEditorProps {
@@ -29,6 +38,7 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     latestOnChangeRef.current = onChange;
   }, [onChange]);
 
+  // Only recreate the editor when language, tabSize, or autocomplete changes
   useEffect(() => {
     let cancelled = false;
     const thisSession = ++sessionRef.current;
@@ -82,19 +92,39 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
 
   // Live update tabSize and autocomplete settings
   useEffect(() => {
-    if (viewRef.current && updateEditorSettings) {
-      updateEditorSettings(viewRef.current, { tabSize, autocomplete });
-    }
+    const updateSettings = async () => {
+      if (!updateEditorSettings) {
+        const mod = await import("./editor.mjs");
+        updateEditorSettings = mod.updateEditorSettings;
+        editorModule = mod;
+      }
+
+      if (viewRef.current && updateEditorSettings) {
+        // Only update if the values have actually changed
+        const currentState = viewRef.current.state;
+        const currentTabSize = currentState.tabSize;
+        
+        if (currentTabSize !== tabSize || autocomplete !== undefined) {
+          updateEditorSettings(viewRef.current, { 
+            tabSize, 
+            autocomplete: autocomplete ?? true 
+          });
+        }
+      }
+    };
+
+    updateSettings();
   }, [tabSize, autocomplete]);
 
   return (
-    <div className="w-full h-full bg-[#1e1e1e] rounded-b-lg border border-gray-700 overflow-hidden">
-      <div
-        ref={editorRef}
-        className="cm-editor h-full w-full"
-        tabIndex={0}
-        data-testid="codemirror-editor"
-      />
+    <div className="relative h-full w-full">
+      <div ref={editorRef} className="h-full w-full" />
+      {editorView && (
+        <UndoRedoControls
+          view={editorView}
+          className="absolute top-2 right-2 z-10"
+        />
+      )}
     </div>
   );
 };

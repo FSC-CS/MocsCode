@@ -166,7 +166,7 @@ const MemberManagementDialog: React.FC<MemberManagementDialogProps> = ({
       setIsUpdating(false);
     }
   };
-
+  
   // Handle member removal
   const handleRemoveMember = async () => {
     if (!member || !user) return;

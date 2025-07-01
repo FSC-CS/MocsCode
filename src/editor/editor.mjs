@@ -256,6 +256,16 @@ export function createEditorView({
     indentOnInput(),
     syntaxHighlighting(defaultHighlightStyle),
     bracketMatching(),
+    closeBrackets(),
+    
+    // Autocompletion (toggled via compartment)
+    autocompleteCompartment.of(autocompletion({
+      // Use a simpler configuration without overrides
+      activateOnTyping: true,
+      defaultKeymap: true
+    })),
+    
+    // Line highlighting
     highlightActiveLine(),
     highlightActiveLineGutter(),
     languageCompartment.of(langExt),

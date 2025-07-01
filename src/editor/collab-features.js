@@ -23,7 +23,7 @@ export function createCollaborativeExtensions(roomId, options = {}) {
 
   // Create Yjs document and provider
   const ydoc = new Y.Doc();
-  const provider = new WebsocketProvider('wss://656d-24-231-63-11.ngrok-free.app', roomId, ydoc);
+  const provider = new WebsocketProvider('wss://0cff-24-231-63-11.ngrok-free.app', roomId, ydoc);
   const ytext = ydoc.getText('codemirror');
   const undoManager = new Y.UndoManager(ytext);
 

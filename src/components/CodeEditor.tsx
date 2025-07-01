@@ -24,6 +24,7 @@ import ResizablePanel from './ResizablePanel';
 import { runJudge0Code } from '@/lib/api/judge0';
 import EditorTabBar from './editor/EditorTabBar';
 import EditorToolbar from './editor/EditorToolbar';
+import { useYjsDocuments } from '../editor/useYjsDocuments';
 
 
 interface CodeEditorProps {
@@ -33,9 +34,11 @@ interface CodeEditorProps {
 
 interface OpenFile {
   name: string;
-  content: string;
+  content: any;
   language: string;
   id?: string;
+  ytext?: any;
+  provider?: any;
 }
 
 // Enhanced member interface to match what we expect from the API
@@ -79,6 +82,8 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const [editorHeight, setEditorHeight] = useState(400);
   const [fileExplorerWidth, setFileExplorerWidth] = useState(256);
   const [chatPanelWidth, setChatPanelWidth] = useState(320);
+
+  const { getOrCreateDoc, destroyDoc } = useYjsDocuments();
   
   // Members and collaboration state
   const [projectMembers, setProjectMembers] = useState<EnhancedMember[]>([]);
@@ -102,6 +107,14 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   // Bash scripts config state
   const [compileScript, setCompileScript] = useState('javac Main.java');
   const [runScript, setRunScript] = useState('java Main');
+
+  // At the top of your CodeEditor component
+  const collaborativeInstanceRef = useRef<any>(null); // No re-renders
+
+  const handleCollaborativeInstance = (instance: any) => {
+    collaborativeInstanceRef.current = instance;
+    // You can also access instance.ydoc here if needed
+  };
 
   // Load project members when component mounts or when refresh is triggered
   useEffect(() => {
@@ -488,12 +501,6 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
   const runCode = async () => {
     setIsRunning(true);
     setOutput('');
-    const file = openFiles[activeFileIndex];
-    if (!file) {
-      setOutput('No file selected.');
-      setIsRunning(false);
-      return;
-    }
 
     try {
       const data = await runJudge0Code({
@@ -561,15 +568,20 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
       fileContent = getDefaultContent(filename);
     }
 
+    const { ydoc, provider, ytext } = getOrCreateDoc(fileId, fileContent, dbUser);
+
     const newFile: OpenFile & { id?: string } = {
       name: filename,
-      content: fileContent,
+      content: ytext.toString(),
       language: getLanguageFromFile(filename),
-      id: fileId
+      id: fileId,
+      ytext,
+      provider
     };
 
     setOpenFiles([...openFiles, newFile]);
     setActiveFileIndex(openFiles.length);
+
   };
 
   const getDefaultContent = (fileName: string): string => {
@@ -607,6 +619,8 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
     } else if (index < activeFileIndex) {
       setActiveFileIndex(activeFileIndex - 1);
     }
+
+    destroyDoc(openFiles[index].id);
   };
 
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -795,13 +809,12 @@ const CodeEditor = ({ project, onBack }: CodeEditorProps) => {
 ) : (
   activeFile && (
     <CodeMirrorEditor
-      value={activeFile.content}
+      value={activeFile.content.toString()}
       language={activeFile.language}
-      onChange={updateFileContent}
       tabSize={tabSize}
       autocomplete={autocomplete}
-      file_name={activeFile.name}
-      collaborative={dbUser}
+      ytext={activeFile.ytext}
+      provider={activeFile.provider}
     />
   )
 )}

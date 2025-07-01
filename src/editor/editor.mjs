@@ -2,10 +2,10 @@
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState, Compartment } from '@codemirror/state';
 import { keymap } from '@codemirror/view';
-import { 
-  autocompletion, 
+import {
+  autocompletion,
   acceptCompletion,
-  completionKeymap 
+  completionKeymap
 } from '@codemirror/autocomplete';
 
 // Language support
@@ -16,7 +16,7 @@ import { cpp } from '@codemirror/lang-cpp';
 import { html } from '@codemirror/lang-html';
 
 // Additional CodeMirror features
-import { 
+import {
   lineNumbers,
   highlightSpecialChars,
   drawSelection,
@@ -27,7 +27,7 @@ import {
   highlightActiveLineGutter,
 } from '@codemirror/view';
 
-import { 
+import {
   indentOnInput,
   syntaxHighlighting,
   defaultHighlightStyle,
@@ -42,29 +42,30 @@ import {
 
 import { syntaxTree } from '@codemirror/language';
 
-// *** COLLABORATIVE EDITING IMPORT ***
-import { createCollaborativeExtensions } from './collab-features.js';
+import { linter } from "@codemirror/lint";
 
-// Custom extensions (these files need to exist)
+import { yCollab } from 'y-codemirror.next';
+
+// Custom extensions (assumed to exist)
 import { createAutoLanguageExtension } from './auto-language.mjs';
 import { cursorTooltip } from './cursor-tooltip.mjs';
-import { languageConfigs } from "./language-support.js";
-import { 
-  toggleLineWrapping, 
-  toggleHighlightActiveLine, 
-  toggleYellowBackground 
+import { languageConfigs } from './language-support.js';
+import {
+  toggleLineWrapping,
+  toggleHighlightActiveLine,
+  toggleYellowBackground
 } from './toggle-extension.mjs';
 
-// JSDoc completion configuration
+// --- JSDoc completion configuration ---
 function completeJSDoc(context) {
   let nodeBefore = syntaxTree(context.state).resolveInner(context.pos, -1);
-  if (nodeBefore.name != "BlockComment" ||
-      context.state.sliceDoc(nodeBefore.from, nodeBefore.from + 3) != "/**")
+  if (nodeBefore.name !== "BlockComment" ||
+      context.state.sliceDoc(nodeBefore.from, nodeBefore.from + 3) !== "/**")
     return null;
   let textBefore = context.state.sliceDoc(nodeBefore.from, context.pos);
   let tagBefore = /@\w*$/.exec(textBefore);
   if (!tagBefore && !context.explicit) return null;
-  
+
   const tagOptions = [
     { label: "@param", type: "keyword" },
     { label: "@returns", type: "keyword" },
@@ -72,7 +73,7 @@ function completeJSDoc(context) {
     { label: "@example", type: "keyword" },
     { label: "@deprecated", type: "keyword" }
   ];
-  
+
   return {
     from: tagBefore ? nodeBefore.from + tagBefore.index : context.pos,
     options: tagOptions,
@@ -80,7 +81,7 @@ function completeJSDoc(context) {
   };
 }
 
-// Create compartments for dynamic configuration
+// --- Compartments for dynamic reconfiguration ---
 const languageCompartment = new Compartment();
 const themeCompartment = new Compartment();
 const tabSizeCompartment = new Compartment();
@@ -90,7 +91,7 @@ const autocompleteCompartment = new Compartment();
 // Export compartments for external use
 export { autocompleteCompartment, tabSizeCompartment };
 
-// Custom themes
+// --- Custom Themes ---
 const lightTheme = EditorView.theme({
   "&": {
     backgroundColor: "#ffffff",
@@ -179,7 +180,7 @@ const darkTheme = EditorView.theme({
   ".cm-line": {
     padding: "0 8px"
   },
-  // Syntax highlighting
+  // Syntax highlighting colors
   ".cm-keyword": { color: "#93c5fd" },
   ".cm-builtin": { color: "#fca5a5" },
   ".cm-string": { color: "#86efac" },
@@ -197,283 +198,161 @@ const darkTheme = EditorView.theme({
   ".cm-class-name": { color: "#93c5fd" }
 });
 
+// --- Utility: Get language extension by name ---
+function getLanguageExtension(language) {
+  switch (language.toLowerCase()) {
+    case 'python': return python();
+    case 'java': return java();
+    case 'cpp':
+    case 'c++': return cpp();
+    case 'html': return html();
+    case 'javascript':
+    case 'js':
+    default: return javascript();
+  }
+}
+
+// --- Main function to create editor ---
 /**
- * Create a CodeMirror EditorView for React or standalone use
- * @param {Object} opts
- * @param {HTMLElement} opts.parent - DOM node to mount editor in
- * @param {string} opts.doc - Initial document content
- * @param {string} opts.language - Language string (e.g. 'python', 'java', ...)
- * @param {function} opts.onChange - Callback for document changes
- * @param {number} opts.tabSize - Tab size (default: 4)
- * @param {boolean} opts.autocomplete - Enable autocomplete (default: true)
- * @param {string} opts.theme - Theme ('light' or 'dark', default: 'dark')
- * @param {boolean} opts.readOnly - Read-only mode (default: false)
- * @param {Object} opts.collaborative - Collaborative editing config { roomId, userName, userColor }
+ * Create a CodeMirror EditorView instance
+ * @param {Object} opts - Configuration options
+ * @param {HTMLElement} opts.parent - DOM node to mount the editor in
+ * @param {string} [opts.doc=''] - Initial document content
+ * @param {string} [opts.language='javascript'] - Language name for syntax highlighting
+ * @param {function} [opts.onChange] - Callback on document change
+ * @param {number} [opts.tabSize=4] - Tab size for indentation
+ * @param {boolean} [opts.autocomplete=true] - Enable or disable autocompletion
+ * @param {string} [opts.theme='dark'] - Editor theme ('light' or 'dark')
+ * @param {boolean} [opts.readOnly=false] - Read-only mode toggle
+ * @returns {Object} - Contains the editor view instance
  */
-export function createEditorView({ 
-  parent, 
-  doc = '', 
-  language = 'javascript', 
-  onChange, 
-  tabSize = 4, 
+export function createEditorView({
+  parent,
+  doc = '',
+  language = 'javascript',
+  onChange,
+  tabSize = 4,
   autocomplete = true,
   theme = 'dark',
   readOnly = false,
-  collaborative = null,  // *** NEW: Collaborative editing support ***
-  file_name = 'untitled'
+  ytext,
+  provider,
 }) {
-  // Get language extension
-  let langExt;
-  switch (language.toLowerCase()) {
-    case 'python': 
-      langExt = python();
-      break;
-    case 'java': 
-      langExt = java();
-      break;
-    case 'cpp':
-    case 'c++': 
-      langExt = cpp();
-      break;
-    case 'html': 
-      langExt = html();
-      break;
-    case 'javascript':
-    case 'js':
-    default: 
-      langExt = javascript();
-      break;
-  }
+  const langExt = getLanguageExtension(language);
 
-  // *** COLLABORATIVE SETUP ***
-  let collaborativeInstance = null;
-  let isCollaborative = false;
-  
-  if (collaborative && collaborative.roomId) {
-    try {
-      collaborativeInstance = createCollaborativeExtensions(collaborative.roomId, {
-        userName: collaborative.userName || `User-${Math.floor(Math.random() * 1000)}`,
-        userColor: /*collaborative.userColor ||*/ {
-          color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
-          light: `hsl(${Math.floor(Math.random() * 360)}, 70%, 85%)`
-        }
-      });
-      isCollaborative = true;
-      
-      // Set up collaborative event handlers
-      if (collaborative.onUserJoin) {
-        collaborativeInstance.onUserJoin(collaborative.onUserJoin);
-      }
-      if (collaborative.onUserLeave) {
-        collaborativeInstance.onUserLeave(collaborative.onUserLeave);
-      }
-      if (collaborative.onContentChange) {
-        collaborativeInstance.onContentChange(collaborative.onContentChange);
-      }
-      
-      console.log('✅ Collaborative editing enabled for room:', collaborative.roomId);
-    } catch (error) {
-      console.error('❌ Failed to setup collaborative editing:', error);
-      isCollaborative = false;
-    }
-  }
+  console.log("DATA", ytext, provider, yCollab);
 
-  // Configure extensions
+  // Compose extensions
   const extensions = [
-    // Basic setup
     basicSetup,
-    
-    // Line numbers and code folding
+    yCollab(ytext, provider.awareness),
     lineNumbers(),
-    
-    // Special character highlighting
     highlightSpecialChars(),
-        
-    // Selection and cursor behavior
     drawSelection(),
     dropCursor(),
     EditorState.allowMultipleSelections.of(true),
     rectangularSelection(),
     crosshairCursor(),
-    
-    // Syntax features
     indentOnInput(),
     syntaxHighlighting(defaultHighlightStyle),
     bracketMatching(),
-    
-    // Line highlighting
     highlightActiveLine(),
     highlightActiveLineGutter(),
-    
-    // Language support
     languageCompartment.of(langExt),
-    
-    // Tab size
     tabSizeCompartment.of(EditorState.tabSize.of(tabSize)),
-    
-    // Theme
     themeCompartment.of(theme === 'dark' ? darkTheme : lightTheme),
-    
-    // Read-only
     readOnlyCompartment.of(EditorState.readOnly.of(readOnly)),
-    
-    // Autocompletion
-    autocompleteCompartment.of(autocomplete ? [autocompletion(), ...languageConfigs[language]?.completions || []] : []),
-    
-    // *** COLLABORATIVE EXTENSIONS ***
-    ...(isCollaborative ? collaborativeInstance.extensions : []),
-    
-    // Custom extensions (only if they exist)
+    autocompleteCompartment.of(
+      autocomplete ? [autocompletion(), ...languageConfigs[language]?.completions || []] : []
+    ),
+    // Custom extensions if available
     ...(typeof createAutoLanguageExtension === 'function' ? [createAutoLanguageExtension(languageCompartment)] : []),
     ...(typeof cursorTooltip === 'function' ? cursorTooltip() : []),
     ...(typeof toggleLineWrapping === 'function' ? [toggleLineWrapping()] : []),
     ...(typeof toggleHighlightActiveLine === 'function' ? [toggleHighlightActiveLine()] : []),
     ...(typeof toggleYellowBackground === 'function' ? [toggleYellowBackground()] : []),
-    
-    // Change listener (only for non-collaborative editors to avoid conflicts)
-    ...(isCollaborative ? [] : [
-      EditorView.updateListener.of((update) => {
-        if (update.docChanged && onChange) {
-          onChange(update.state.doc.toString());
-        }
-      })
-    ]),
-    
-    // Keymaps
+
+    // Document change listener (for non-collaborative editors)
+    // EditorView.updateListener.of(update => {
+    //   if (update.docChanged && onChange) {
+    //     console.log("UPDATE", update.state.doc.toString());
+    //     onChange(update.state.doc.toString());
+    //   }
+    // }),
+
+    // Keymaps with custom Tab behavior
     keymap.of([
       {
         key: 'Tab',
         run: (view) => {
-          // First, check if autocomplete is available and accept it
           if (acceptCompletion(view)) return true;
-          
-          // Get current tab size from the editor state
           const currentTabSize = view.state.tabSize;
-          
-          // Create a string of spaces equal to tab size
           const spaces = ' '.repeat(currentTabSize);
-          
-          // Get the current cursor position
-          const cursorPosition = view.state.selection.main.from;
-          
-          // Insert spaces at cursor position and move cursor forward
+          const cursorPos = view.state.selection.main.from;
           view.dispatch({
-            changes: { 
-              from: cursorPosition, 
-              insert: spaces 
-            },
-            selection: { 
-              anchor: cursorPosition + currentTabSize 
-            }
+            changes: { from: cursorPos, insert: spaces },
+            selection: { anchor: cursorPos + currentTabSize }
           });
-          
           return true;
         }
       },
       {
-        key: "Shift-Tab", 
+        key: 'Shift-Tab',
         run: indentWithTab
       },
       ...defaultKeymap.filter(binding => binding.key !== 'Tab'),
       ...historyKeymap,
       ...completionKeymap,
-    ])
+    ]),
   ];
 
-  // Create editor state
   const state = EditorState.create({
-    doc: isCollaborative ? '' : doc, // Collaborative editors get content from YJS
+    doc,
     extensions
   });
-  
-  // Create editor view
+
   const view = new EditorView({
     state,
     parent
   });
 
-  // *** ATTACH COLLABORATIVE INSTANCE ***
-  if (isCollaborative) {
-    view._collaborativeInstance = collaborativeInstance;
-    view._isCollaborative = true;
-    
-    // Set initial content for collaborative editor if provided
-    if (doc && doc.length > 0) {
-      // Only set initial content if the collaborative document is empty
-      setTimeout(() => {
-        if (collaborativeInstance.getContent().length === 0) {
-          collaborativeInstance.ytext.insert(0, doc);
-        }
-      }, 100); // Small delay to ensure connection is established
-    }
-  } else {
-    view._isCollaborative = false;
-  }
-
   return view;
 }
 
-// *** ENHANCED UTILITY FUNCTIONS ***
+// --- Dynamic update functions ---
+
 export function updateEditorSettings(view, { tabSize, autocomplete, theme, language, readOnly }) {
   const effects = [];
-  
+
   if (typeof tabSize === 'number') {
     effects.push(tabSizeCompartment.reconfigure(EditorState.tabSize.of(tabSize)));
   }
-  
+
   if (typeof autocomplete === 'boolean') {
-    effects.push(autocompleteCompartment.reconfigure(
-      autocomplete ? [autocompletion(), ...languageConfigs[language]?.completions || []] : []
-    ));
+    effects.push(
+      autocompleteCompartment.reconfigure(
+        autocomplete ? [autocompletion(), ...languageConfigs[language]?.completions || []] : []
+      )
+    );
   }
-  
+
   if (theme === 'dark' || theme === 'light') {
     effects.push(themeCompartment.reconfigure(theme === 'dark' ? darkTheme : lightTheme));
   }
-  
+
   if (typeof readOnly === 'boolean') {
     effects.push(readOnlyCompartment.reconfigure(EditorState.readOnly.of(readOnly)));
   }
-  
+
   if (language) {
-    let langExt;
-    switch (language.toLowerCase()) {
-      case 'python': langExt = python(); break;
-      case 'java': langExt = java(); break;
-      case 'cpp': case 'c++': langExt = cpp(); break;
-      case 'html': langExt = html(); break;
-      case 'javascript': case 'js': default: langExt = javascript(); break;
-    }
-    effects.push(languageCompartment.reconfigure(langExt));
+    effects.push(languageCompartment.reconfigure(getLanguageExtension(language)));
   }
-  
+
   if (effects.length > 0) {
     view.dispatch({ effects });
   }
 }
 
-// *** NEW: Collaborative utility functions ***
-export function getCollaborativeInfo(view) {
-  if (!view._isCollaborative || !view._collaborativeInstance) {
-    return null;
-  }
-  
-  return {
-    connectedUsers: view._collaborativeInstance.getConnectedUsers(),
-    isConnected: view._collaborativeInstance.provider.connected,
-    roomId: view._collaborativeInstance.provider.roomname
-  };
-}
-
-export function destroyCollaborative(view) {
-  if (view._collaborativeInstance) {
-    view._collaborativeInstance.destroy();
-    view._collaborativeInstance = null;
-    view._isCollaborative = false;
-  }
-}
-
-// Individual update functions (unchanged)
 export function updateTabSize(view, newSize) {
   view.dispatch({
     effects: tabSizeCompartment.reconfigure(EditorState.tabSize.of(newSize))
@@ -481,16 +360,8 @@ export function updateTabSize(view, newSize) {
 }
 
 export function updateLanguage(view, language) {
-  let langExt;
-  switch (language.toLowerCase()) {
-    case 'python': langExt = python(); break;
-    case 'java': langExt = java(); break;
-    case 'cpp': case 'c++': langExt = cpp(); break;
-    case 'html': langExt = html(); break;
-    case 'javascript': case 'js': default: langExt = javascript(); break;
-  }
   view.dispatch({
-    effects: languageCompartment.reconfigure(langExt)
+    effects: languageCompartment.reconfigure(getLanguageExtension(language))
   });
 }
 
@@ -500,7 +371,7 @@ export function updateTheme(view, theme) {
   });
 }
 
-export function updateAutocomplete(view, enabled) {
+export function updateAutocomplete(view, enabled, language) {
   view.dispatch({
     effects: autocompleteCompartment.reconfigure(
       enabled ? [autocompletion(), ...languageConfigs[language]?.completions || []] : []
@@ -514,10 +385,9 @@ export function updateReadOnly(view, readOnly) {
   });
 }
 
-// Global editor instance (for backward compatibility)
+// --- Global editor instance (for backward compatibility) ---
 let globalEditor = null;
 
-// Initialize global editor if DOM is available
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   document.addEventListener('DOMContentLoaded', () => {
     const editorContainer = document.getElementById('editor-container');
@@ -530,20 +400,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           console.log('Editor content changed:', content.length, 'characters');
         }
       });
-      
-      // Attach to window for debugging
+
       window.editor = globalEditor;
-      
-      // Global functions for backward compatibility
-      window.getEditorContent = () => globalEditor?.state.doc.toString() || '';
-      window.setLanguage = (lang) => globalEditor && updateLanguage(globalEditor, lang);
-      window.setTabSize = (size) => globalEditor && updateTabSize(globalEditor, size);
-      window.setTheme = (theme) => globalEditor && updateTheme(globalEditor, theme);
-      window.setReadOnly = (readOnly) => globalEditor && updateReadOnly(globalEditor, readOnly);
-      window.setAutocompleteEnabled = (enabled) => globalEditor && updateAutocomplete(globalEditor, enabled);
-      
-      // *** NEW: Collaborative debugging functions ***
-      window.getCollaborativeInfo = () => globalEditor && getCollaborativeInfo(globalEditor);
+
+      // Backwards compatibility functions
+      window.getEditorContent = () => globalEditor?.view.state.doc.toString() || '';
+      window.setLanguage = (lang) => globalEditor && updateLanguage(globalEditor.view, lang);
+      window.setTabSize = (size) => globalEditor && updateTabSize(globalEditor.view, size);
+      window.setTheme = (theme) => globalEditor && updateTheme(globalEditor.view, theme);
+      window.setReadOnly = (readOnly) => globalEditor && updateReadOnly(globalEditor.view, readOnly);
+      window.setAutocompleteEnabled = (enabled) => globalEditor && updateAutocomplete(globalEditor.view, enabled, 'javascript');
     }
   });
 }

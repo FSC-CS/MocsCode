@@ -1,11 +1,13 @@
+
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings } from 'lucide-react';
 import { presenceService } from '@/lib/presence';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import CollaboratorPanel from '@/components/CollaboratorPanel';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -19,45 +21,7 @@ import FileExplorer from './FileExplorer';
 import OutputPanel from './OutputPanel';
 import ChatPanel from './ChatPanel';
 import SourceControlPanel from './SourceControlPanel';
-import ResizablePanel from './ResizablePanel';
-import CollaboratorPanel from '@/components/CollaboratorPanel';
-
-// Types
-interface Project {
-  id: string;
-  name: string;
-  owner_id: string;
-  language?: string;
-  created_at?: string;
-  updated_at?: string;
-  description?: string;
-  is_public?: boolean;
-}
-
-interface ProjectMemberUser {
-  id: string;
-  name: string;
-  email: string;
-  username: string;
-  display_name?: string;
-  avatar_url?: string;
-  avatar?: string;
-}
-
-interface BaseProjectMember {
-  id: string;
-  user_id: string;
-  role: 'owner' | 'editor' | 'viewer';
-  user: ProjectMemberUser;
-  project_id: string;
-  permissions: Record<string, unknown>;
-  joined_at: string;
-  isOnline?: boolean;
-  lastSeen?: string;
-}
-
-type ProjectMember = BaseProjectMember;
-type EnhancedMember = Required<BaseProjectMember>;
+import ResizablePanel from './ResizablePanel'; // Add this import
 
 interface Collaborator {
   id: number;
@@ -68,22 +32,40 @@ interface Collaborator {
   accessLevel: 'owner' | 'edit' | 'view';
 }
 
-interface OpenFile {
-  id?: string;
-  name: string;
-  content: string;
-  language: string;
-  lastSaved?: string;
-  isDirty?: boolean;
-}
-
 interface CodeEditorProps {
-  project: Project;
+  project: any;
   onBack: () => void;
   collaborators?: Collaborator[];
 }
 
+interface OpenFile {
+  name: string;
+  content: string;
+  language: string;
+  id?: string;
+  lastSaved?: string;
+}
+
+// Enhanced member interface to match what we expect from the API
+interface EnhancedMember {
+  id: string;
+  project_id: string;
+  user_id: string;
+  role: 'owner' | 'editor' | 'viewer';
+  permissions: Record<string, unknown>;
+  invited_by?: string;
+  joined_at: string;
+  user?: {
+    id: string;
+    email: string;
+    username: string;
+    display_name?: string;
+    avatar_url?: string;
+  };
+}
+
 const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) => {
+  const editorRef = useRef<any>(null);
   // Settings state
   const [tabSize, setTabSize] = useState(4);
   const [autocomplete, setAutocomplete] = useState(true);
@@ -99,11 +81,13 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   const [newProjectName, setNewProjectName] = useState(project?.name || '');
   
   // File management state
-  const [openFiles, setOpenFiles] = useState<(OpenFile & { id?: string })[]>([]);
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [output, setOutput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
+  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
   const [editorHeight, setEditorHeight] = useState(400);
   const [fileExplorerWidth, setFileExplorerWidth] = useState(256);
   const [chatPanelWidth, setChatPanelWidth] = useState(320);
@@ -125,36 +109,86 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   }>({ type: 'idle' });
 
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const editorRef = useRef(null);
 
   // Track online users
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
-  const prevCollaboratorsRef = useRef<Collaborator[]>([]);
-  const prevCollaboratorsStrRef = useRef('');
   
   // Update online users when collaborators change
   useEffect(() => {
-    // Only update if collaborators actually changed
-    const currentCollaborators = JSON.stringify(collaborators);
-    if (prevCollaboratorsStrRef.current !== currentCollaborators) {
-      const collaboratorIds = new Set<string>();
-      
-      // Process collaborators safely
-      if (Array.isArray(collaborators)) {
-        collaborators.forEach(collaborator => {
-          if (collaborator?.id) {
-            collaboratorIds.add(String(collaborator.id));
-          }
-        });
-      }
-      
-      setOnlineUsers(collaboratorIds);
-      prevCollaboratorsRef.current = [...collaborators];
-      prevCollaboratorsStrRef.current = currentCollaborators;
-    }
+    const collaboratorIds = new Set<string>(
+      collaborators.map(c => c.id.toString())
+    );
+    setOnlineUsers(collaboratorIds);
   }, [collaborators]);
 
-  const loadProjectMembers = useCallback(async (silent: boolean = false) => {
+  // Set up auto-refresh for member list (every 30 seconds when enabled)
+  useEffect(() => {
+    if (!autoRefreshEnabled || !project?.id || !user?.id) {
+      return;
+    }
+
+    refreshIntervalRef.current = setInterval(() => {
+      // Only auto-refresh if no member operations are in progress
+      if (memberOperationStatus.type === 'idle') {
+        loadProjectMembers(true); // Silent refresh
+      }
+    }, 30000); // 30 seconds
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, [autoRefreshEnabled, project?.id, user?.id, memberOperationStatus.type]);
+
+  // Transform project members to collaborators format
+  const collaboratorsList = React.useMemo(() => {
+    if (collaborators.length > 0) return collaborators;
+    
+    return projectMembers
+      .filter(member => member.user_id !== user?.id) // Exclude current user
+      .map(member => {
+        // Generate a consistent color based on user ID
+        const stringToColor = (str: string) => {
+          let hash = 0;
+          for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+          }
+          const hue = Math.abs(hash % 360);
+          return `hsl(${hue}, 70%, 60%)`;
+        };
+
+        // Helper function to determine access level based on role
+        const getAccessLevel = (role: string): 'owner' | 'edit' | 'view' => {
+          if (role === 'owner') return 'owner';
+          if (role === 'editor') return 'edit';
+          return 'view';
+        };
+
+        return {
+          id: Number(member.user_id || member.id), // Convert to number
+          name: member.user?.display_name || member.user?.username || 'Unknown',
+          color: stringToColor(member.user_id || member.id),
+          cursor: null, // Default cursor position
+          isTyping: false, // Default typing state
+          accessLevel: getAccessLevel(member.role)
+        };
+      });
+  }, [collaborators, projectMembers, user?.id]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, []);
+  
+  // Use collaborators from props or fallback to project members
+  const effectiveCollaborators = collaborators.length > 0 ? collaborators : collaboratorsList;
+
+  const loadProjectMembers = async (silent: boolean = false) => {
     if (!project?.id || !user?.id) return;
 
     if (!silent) {
@@ -180,28 +214,17 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
         return;
       }
 
-      const members: EnhancedMember[] = (data?.items || []).map((member: any) => ({
-        ...member,
-        user: member.user || {
-          id: member.user_id,
-          name: member.name || 'Unknown User',
-          email: member.email || '',
-          username: member.username || ''
-        },
-        isOnline: false, // Default to offline, will be updated by presence
-        lastSeen: new Date().toISOString()
-      }));
+      const members = data?.items || [];
       
-      // Only update if members have actually changed
-      setProjectMembers(prevMembers => {
-        const prevMembersStr = JSON.stringify(prevMembers);
-        const newMembersStr = JSON.stringify(members);
-        return prevMembersStr === newMembersStr ? prevMembers : members;
-      });
+      // Check if member list has actually changed to avoid unnecessary updates
+      if (!silent || !arraysEqual(members, projectMembers)) {
+        setProjectMembers(members);
+        setLastRefresh(new Date());
+      }
 
-      // Set current user's role if found in members
-      const currentMember = members.find(m => m.user_id === user.id);
-      if (currentMember) {
+      // Set current user's role
+      const currentMember = members.find(member => member.user_id === user.id);
+      if (currentMember && currentMember.role !== currentUserRole) {
         setCurrentUserRole(currentMember.role);
       }
 
@@ -210,7 +233,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
       if (!silent) {
         toast({
           title: 'Error',
-          description: 'An unexpected error occurred while loading members',
+          description: 'An unexpected error occurred while loading collaborators',
           variant: 'destructive'
         });
       }
@@ -219,81 +242,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
         setIsLoadingMembers(false);
       }
     }
-  }, [project?.id, user?.id, projectMembersApi, toast]);
-
-  // Set up auto-refresh for member list (every 30 seconds when enabled)
-  useEffect(() => {
-    if (!autoRefreshEnabled || !project?.id || !user?.id) {
-      return;
-    }
-
-    const intervalId = setInterval(() => {
-      // Only auto-refresh if no member operations are in progress
-      if (memberOperationStatus.type === 'idle') {
-        loadProjectMembers(true); // Silent refresh
-      }
-    }, 30000); // 30 seconds
-
-    refreshIntervalRef.current = intervalId;
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [autoRefreshEnabled, project?.id, user?.id, memberOperationStatus.type, loadProjectMembers]);
-
-  // Memoize the collaborators list to prevent unnecessary recalculations
-  const collaboratorsList = useMemo(() => {
-    // If we have collaborators from props, use them directly
-    if (collaborators && collaborators.length > 0) {
-      return collaborators;
-    }
-
-    // Otherwise, derive from projectMembers
-    return (projectMembers || [])
-      .filter(member => member?.user_id && member.user_id !== user?.id)
-      .map(member => {
-        if (!member) return null;
-        
-        // Generate a consistent color based on user ID
-        const stringToColor = (str: string) => {
-          let hash = 0;
-          for (let i = 0; i < str.length; i++) {
-            hash = str.charCodeAt(i) + ((hash << 5) - hash);
-          }
-          const hue = Math.abs(hash % 360);
-          return `hsl(${hue}, 70%, 60%)`;
-        };
-
-        const userId = member.user_id || member.id;
-        if (!userId) return null;
-
-        return {
-          id: Number(userId),
-          name: member.user?.display_name || member.user?.username || 'Unknown',
-          color: stringToColor(userId),
-          cursor: null,
-          isTyping: false,
-          accessLevel: member.role === 'owner' ? 'owner' : 
-                       member.role === 'editor' ? 'edit' : 'view'
-        };
-      })
-      .filter(Boolean) as Collaborator[]; // Filter out any nulls from the map
-  }, [collaborators, projectMembers, user?.id]);
-
-  // Memoize effectiveCollaborators to prevent recreation
-  const effectiveCollaborators = useMemo(() => {
-    return collaborators && collaborators.length > 0 ? collaborators : collaboratorsList;
-  }, [collaborators, collaboratorsList]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
-    };
-  }, []);
+  };
 
   // Utility function to compare member arrays
   const arraysEqual = (a: EnhancedMember[], b: EnhancedMember[]): boolean => {
@@ -536,155 +485,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     }
   };
 
-  // Listen for online/offline events
-  useEffect(() => {
-    window.addEventListener('online', handleConnectionChange);
-    window.addEventListener('offline', handleConnectionChange);
-    
-    return () => {
-      window.removeEventListener('online', handleConnectionChange);
-      window.removeEventListener('offline', handleConnectionChange);
-    };
-  }, []);
-
-  // File management functions (existing functionality)
-  const handleEditorDidMount = (editor: any) => {
-    editorRef.current = editor;
-  };
-
-  const runCode = async () => {
-    setIsRunning(true);
-    setOutput('');
-    const file = openFiles[activeFileIndex];
-    if (!file) {
-      setOutput('No file selected.');
-      setIsRunning(false);
-      return;
-    }
-    // Judge0 language IDs
-    const langMap: { [key: string]: number } = {
-      'cpp': 54,
-      'java': 62,
-      'python': 71,
-      'javascript': 63,
-      'c': 50,
-      'csharp': 51,
-      'plaintext': 43,
-      'markdown': 60,
-      'html': 42
-    };
-    const language_id = langMap[file.language] || 43;
-    const endpoint = 'https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true';
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-RapidAPI-Key': '5e11628ca4msh0cac24bb162a655p1257c7jsnde986d9f6d3a',
-          'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
-        },
-        body: JSON.stringify({
-          source_code: file.content,
-          language_id,
-        })
-      });
-      const data = await response.json();
-      let output = '';
-      if (data.stdout) output += data.stdout;
-      if (data.stderr) output += '\n[stderr]\n' + data.stderr;
-      if (data.compile_output) output += '\n[compiler]\n' + data.compile_output;
-      if (data.message) output += '\n[message]\n' + data.message;
-      setOutput(output || '[No output]');
-    } catch (err: any) {
-      setOutput('Error running code: ' + err.message);
-    }
-    setIsRunning(false);
-  };
-
-  const getLanguageFromFile = (filename: string) => {
-    const extension = filename.split('.').pop();
-    const languageMap: { [key: string]: string } = {
-      'java': 'java',
-      'py': 'python',
-      'js': 'javascript',
-      'c': 'c',
-      'cpp': 'cpp',
-      'cs': 'csharp',
-      'md': 'markdown',
-      'txt': 'plaintext'
-    };
-    return languageMap[extension || ''] || 'plaintext';
-  };
-
-  const openFile = async (filename: string, fileId?: string) => {
-    const existingIndex = openFiles.findIndex(file => file.name === filename);
-    if (existingIndex !== -1) {
-      setActiveFileIndex(existingIndex);
-      return;
-    }
-
-    let fileContent = '';
-    if (fileId) {
-      try {
-        const { data, error } = await projectFilesApi.getFile(fileId);
-        if (error) {
-          console.error('File load error:', error);
-          throw error;
-        }
-        fileContent = data?.content || getDefaultContent(filename);
-      } catch (error: any) {
-        console.error('Failed to load file content:', error);
-        fileContent = getDefaultContent(filename);
-        toast({
-          title: 'Warning',
-          description: `Failed to load file content: ${error?.message || 'Unknown error'}. Using default template.`,
-          variant: 'destructive'
-        });
-      }
-    } else {
-      fileContent = getDefaultContent(filename);
-    }
-
-    const newFile: OpenFile & { id?: string } = {
-      name: filename,
-      content: fileContent,
-      language: getLanguageFromFile(filename),
-      id: fileId
-    };
-
-    setOpenFiles([...openFiles, newFile]);
-    setActiveFileIndex(openFiles.length);
-  };
-
-  const getDefaultContent = (fileName: string): string => {
-    const extension = fileName.split('.').pop()?.toLowerCase();
-    switch (extension) {
-      case 'java': {
-        const className = fileName.replace('.java', '');
-        return `public class ${className} {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}`;
-      }
-      case 'py':
-        return `# ${fileName}\n# Python file\n\nprint(\"Hello, World!\")`;
-      case 'js':
-        return `// ${fileName}\n// JavaScript file\n\nconsole.log(\"Hello, World!\");`;
-      case 'c':
-        return `#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}`;
-      case 'cpp':
-        return `#include <iostream>\n\nint main() {\n    std::cout << \"Hello, World!\" << std::endl;\n    return 0;\n}`;
-      case 'cs':
-        return `using System;\n\nclass Program {\n    static void Main() {\n        Console.WriteLine(\"Hello, World!\");\n    }\n}`;
-      case 'md':
-        return `# ${fileName.replace('.md', '')}\n\nAdd your documentation here.`;
-      case 'txt':
-        return `This is a text file.\nAdd your content here.`;
-      default:
-        return `// ${fileName}\n// Add your code here`;
-    }
-  };
-
+  // Close file handler
   const closeFile = (index: number) => {
-    if (openFiles.length === 1) return;
-    
     const newOpenFiles = openFiles.filter((_, i) => i !== index);
     setOpenFiles(newOpenFiles);
     
@@ -695,11 +497,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     }
   };
 
-  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  const [isSaving, setIsSaving] = useState(false);
-
-  const saveCurrentFile = async (isAutoSave = false) => {
+  // Save file function with auto-save support
+  const saveCurrentFile = useCallback(async (isAutoSave = false) => {
     const currentFile = openFiles[activeFileIndex];
     if (!currentFile?.id) {
       toast({
@@ -739,10 +538,12 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
       };
       setOpenFiles(updatedFiles);
 
-      toast({
-        title: 'File Saved',
-        description: `${currentFile.name} saved successfully`
-      });
+      if (!isAutoSave) {
+        toast({
+          title: 'File Saved',
+          description: `${currentFile.name} saved successfully`
+        });
+      }
     } catch (error: any) {
       console.error('Save failed:', error);
       toast({
@@ -753,8 +554,31 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [activeFileIndex, isSaving, openFiles, projectFilesApi, toast]);
 
+  // Update file content with auto-save
+  const updateFileContent = useCallback((content: string) => {
+    const updatedFiles = [...openFiles];
+    updatedFiles[activeFileIndex] = {
+      ...updatedFiles[activeFileIndex],
+      content: content
+    };
+    setOpenFiles(updatedFiles);
+
+    // Auto-save after a delay
+    if (saveTimeout.current) {
+      clearTimeout(saveTimeout.current);
+    }
+    
+    const currentFile = updatedFiles[activeFileIndex];
+    if (currentFile?.id) {
+      saveTimeout.current = setTimeout(() => {
+        saveCurrentFile(true); // Auto-save with isAutoSave = true
+      }, 2000); // 2 second delay before auto-saving
+    }
+  }, [activeFileIndex, openFiles, saveCurrentFile]);
+
+  // Set up keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Save on Cmd+S (Mac) or Ctrl+S (Windows/Linux)
@@ -765,64 +589,210 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     };
     
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [saveCurrentFile]);
-
-  const updateFileContent = (content: string) => {
-    const updatedFiles = [...openFiles];
-    updatedFiles[activeFileIndex] = {
-      ...updatedFiles[activeFileIndex],
-      content: content
-    };
-    setOpenFiles(updatedFiles);
-
-    const currentFile = updatedFiles[activeFileIndex];
-    if (currentFile?.id) {
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
       if (saveTimeout.current) {
         clearTimeout(saveTimeout.current);
       }
-      saveTimeout.current = setTimeout(async () => {
-        try {
-          const now = new Date().toISOString();
-          const { error } = await projectFilesApi.updateFile(currentFile.id, {
-            content: content,
-            updated_at: now,
-            size_bytes: content.length
-          });
-          if (error) {
-            console.error('Auto-save error:', error);
-            throw error;
-          }
-        } catch (error: any) {
-          console.error('Auto-save failed:', error);
-          toast({
-            title: 'Auto-save Failed',
-            description: `Failed to save ${currentFile.name}: ${error?.message || 'Unknown error'}`,
-            variant: 'destructive'
-          });
-        }
-      }, 1000);
+    };
+  }, [saveCurrentFile]);
+
+  // File management functions
+  const handleEditorDidMount = (editor: any) => {
+    editorRef.current = editor;
+  };
+
+  const runCode = async () => {
+    setIsRunning(true);
+    setOutput('');
+    const file = openFiles[activeFileIndex];
+    if (!file) {
+      setOutput('No file selected.');
+      setIsRunning(false);
+      return;
+    }
+
+    // Judge0 language IDs
+    const langMap: { [key: string]: number } = {
+      'cpp': 54,
+      'java': 62,
+      'python': 71,
+      'javascript': 63,
+      'c': 50,
+      'csharp': 51,
+      'plaintext': 43,
+      'markdown': 60,
+      'html': 42
+    };
+    const language_id = langMap[file.language] || 43;
+    const endpoint = 'https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true';
+    
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RapidAPI-Key': '5e11628ca4msh0cac24bb162a655p1257c7jsnde986d9f6d3a',
+          'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
+        },
+        body: JSON.stringify({
+          source_code: file.content,
+          language_id,
+        })
+      });
+      
+      const data = await response.json();
+      let output = '';
+      if (data.stdout) output += data.stdout;
+      if (data.stderr) output += '\n[stderr]\n' + data.stderr;
+      if (data.compile_output) output += '\n[compiler]\n' + data.compile_output;
+      if (data.message) output += '\n[message]\n' + data.message;
+      setOutput(output || '[No output]');
+    } catch (err: any) {
+      setOutput('Error running code: ' + err.message);
+    } finally {
+      setIsRunning(false);
     }
   };
+
+  const getLanguageFromFile = (filename: string) => {
+    const extension = filename.split('.').pop();
+    const languageMap: { [key: string]: string } = {
+      'java': 'java',
+      'py': 'python',
+      'js': 'javascript',
+      'c': 'c',
+      'cpp': 'cpp',
+      'cs': 'csharp',
+      'md': 'markdown',
+      'txt': 'plaintext',
+      'html': 'html',
+      'css': 'css',
+      'json': 'json',
+      'xml': 'xml',
+      'yaml': 'yaml',
+      'yml': 'yaml'
+    };
+    return languageMap[extension?.toLowerCase() || ''] || 'plaintext';
+  };
+
+  const openFile = async (filename: string, fileId?: string) => {
+    const existingIndex = openFiles.findIndex(file => file.name === filename);
+    if (existingIndex !== -1) {
+      setActiveFileIndex(existingIndex);
+      return;
+    }
+
+    let fileContent = '';
+    if (fileId) {
+      try {
+        const { data, error } = await projectFilesApi.getFile(fileId);
+        if (error) {
+          console.error('File load error:', error);
+          throw error;
+        }
+        fileContent = data?.content || '';
+      } catch (error: any) {
+        console.error('Failed to load file content:', error);
+        toast({
+          title: 'Error',
+          description: `Failed to load file: ${error.message || 'Unknown error'}`,
+          variant: 'destructive'
+        });
+      }
+    }
+
+    const language = getLanguageFromFile(filename);
+    const newFile: OpenFile = {
+      name: filename,
+      content: fileContent,
+      language,
+      id: fileId
+    };
+
+    setOpenFiles([...openFiles, newFile]);
+    setActiveFileIndex(openFiles.length);
+  }, [activeFileIndex, openFiles, saveCurrentFile]);
+
+  const saveCurrentFile = useCallback(async (isAutoSave = false) => {
+    const currentFile = openFiles[activeFileIndex];
+    if (!currentFile?.id) {
+      toast({
+        title: 'Cannot Save',
+        description: 'File must be created before it can be saved',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (isSaving) return;
+    setIsSaving(true);
+
+    try {
+      // Get the latest content directly from the editor view if available
+      const editorView = editorRef.current;
+      const latestContent = editorView?.state?.doc?.toString() || currentFile.content;
+      
+      const now = new Date().toISOString();
+      const { error } = await projectFilesApi.updateFile(currentFile.id, {
+        content: latestContent,
+        updated_at: now,
+        size_bytes: latestContent.length
+      });
+
+      if (error) {
+        console.error('Manual save error:', error);
+        throw error;
+      }
+
+      // Update local state to match saved content
+      const updatedFiles = [...openFiles];
+      updatedFiles[activeFileIndex] = {
+        ...currentFile,
+        content: latestContent,
+        lastSaved: now
+      };
+      setOpenFiles(updatedFiles);
+
+      if (!isAutoSave) {
+        toast({
+          title: 'File Saved',
+          description: `${currentFile.name} saved successfully`
+        });
+      }
+    } catch (error: any) {
+      console.error('Save failed:', error);
+      toast({
+        title: 'Save Failed',
+        description: `Failed to save ${currentFile.name}: ${error.message || 'Unknown error'}`,
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [activeFileIndex, isSaving, openFiles, projectFilesApi, toast]);
 
   // Handle cursor position updates
   const handleCursorChange = useCallback((cursor: { x: number; y: number } | null) => {
     // No-op for now
+    // This function can be used to track cursor position if needed
   }, []);
 
   // Transform project members to chat collaborators format
-  const chatCollaborators = projectMembers
-    .filter(member => member.user_id !== user?.id) // Exclude current user
-    .map(member => ({
-      id: parseInt(member.id.slice(-8), 16), // Convert UUID to number for mock compatibility
-      name: member.user?.display_name || member.user?.username || member.user?.email?.split('@')[0] || 'Unknown',
-      color: '#3B82F6',
-      cursor: null as { line: number; column: number } | null,
-      isTyping: false,
-      accessLevel: member.role as 'owner' | 'edit' | 'view'
-    }));
+  const chatCollaborators = useMemo(() => {
+    return (projectMembers || [])
+      .filter((member: EnhancedMember) => member.user_id !== user?.id) // Exclude current user
+      .map((member: EnhancedMember) => ({
+        id: parseInt(member.id.slice(-8), 16), // Convert UUID to number for mock compatibility
+        name: member.user?.display_name || member.user?.username || member.user?.email?.split('@')[0] || 'Unknown',
+        color: '#3B82F6',
+        cursor: null as { line: number; column: number } | null,
+        isTyping: false,
+        accessLevel: member.role as 'owner' | 'edit' | 'view'
+      }));
+  }, [projectMembers, user?.id]);
 
-  const activeFile = openFiles[activeFileIndex];
+  const currentFile = openFiles[activeFileIndex];
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white">
@@ -897,32 +867,18 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
               )}
               
               {/* Editor Settings Dropdown */}
-              <Popover onOpenChange={setSettingsOpen} open={settingsOpen}>
+              <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 ml-2 text-gray-400 hover:text-white hover:bg-gray-700"
                     aria-label="Editor Settings"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setSettingsOpen(!settingsOpen);
-                    }}
                   >
                     <Settings className="h-4 w-4" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent 
-                  align="end" 
-                  className="w-56 p-4"
-                  onInteractOutside={(e) => {
-                    // Prevent closing when clicking on the trigger button
-                    const target = e.target as HTMLElement;
-                    if (target.closest('[aria-label="Editor Settings"]')) {
-                      e.preventDefault();
-                    }
-                  }}
-                >
+                <PopoverContent align="end" className="w-56 p-4">
                   <div className="space-y-4">
                     <h4 className="font-medium leading-none">Editor Settings</h4>
                     <div className="flex items-center justify-between">
@@ -932,7 +888,6 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                         value={tabSize}
                         onChange={(e) => setTabSize(Number(e.target.value))}
                         className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        onClick={(e) => e.stopPropagation()}
                       >
                         <option value={2}>2 spaces</option>
                         <option value={4}>4 spaces</option>
@@ -944,11 +899,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                       <Switch
                         id="autocomplete"
                         checked={autocomplete}
-                        onCheckedChange={(checked) => {
-                          setAutocomplete(checked);
-                        }}
+                        onCheckedChange={setAutocomplete}
                         className="data-[state=checked]:bg-blue-600"
-                        onClick={(e) => e.stopPropagation()}
                       />
                     </div>
                   </div>

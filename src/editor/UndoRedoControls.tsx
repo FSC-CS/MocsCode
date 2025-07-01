@@ -7,9 +7,10 @@ import { history, undoDepth, redoDepth } from '@codemirror/commands';
 
 interface UndoRedoControlsProps {
   view: EditorView | null;
+  className?: string;
 }
 
-export function UndoRedoControls({ view }: UndoRedoControlsProps) {
+export function UndoRedoControls({ view, className = '' }: UndoRedoControlsProps) {
   const canUndo = view ? undoDepth(view.state) > 0 : false;
   const canRedo = view ? redoDepth(view.state) > 0 : false;
 
@@ -32,33 +33,15 @@ export function UndoRedoControls({ view }: UndoRedoControlsProps) {
   };
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: '10px',
-      right: '10px',
-      zIndex: 10,
-      display: 'flex',
-      gap: '8px',
-      background: 'var(--editor-bg)',
-      padding: '4px',
-      borderRadius: '4px',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-    }}>
+    <div className={`flex items-center gap-2 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-md shadow-md p-1 border border-gray-200 dark:border-gray-700 ${className}`}>
       <button 
         onClick={handleUndo}
+        className={`p-1.5 rounded-md transition-colors ${
+          canUndo 
+            ? 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700' 
+            : 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
+        }`}
         disabled={!canUndo}
-        style={{
-          background: 'none',
-          border: '1px solid var(--border-color)',
-          borderRadius: '4px',
-          padding: '4px 8px',
-          cursor: canUndo ? 'pointer' : 'not-allowed',
-          opacity: canUndo ? 1 : 0.5,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--text-color)'
-        }}
         title="Undo (Ctrl+Z)"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -68,19 +51,12 @@ export function UndoRedoControls({ view }: UndoRedoControlsProps) {
       </button>
       <button 
         onClick={handleRedo}
+        className={`p-1.5 rounded-md transition-colors ${
+          canRedo 
+            ? 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700' 
+            : 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
+        }`}
         disabled={!canRedo}
-        style={{
-          background: 'none',
-          border: '1px solid var(--border-color)',
-          borderRadius: '4px',
-          padding: '4px 8px',
-          cursor: canRedo ? 'pointer' : 'not-allowed',
-          opacity: canRedo ? 1 : 0.5,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--text-color)'
-        }}
         title="Redo (Ctrl+Y)"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

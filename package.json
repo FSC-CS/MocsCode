@@ -4,16 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"vite\"",
-    "test-deploy": "concurrently \"npm run dev\" \"node server/index.js\" \"HOST=localhost PORT=4500 npx y-websocket\"",
-    "server": "node server.js",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
-    "lint": "eslint .",
-    "preview": "vite preview",
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+  "dev": "vite",
+  "build": "vite build",
+  "preview": "vite preview"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

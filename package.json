@@ -6,7 +6,8 @@
   "scripts": {
   "dev": "vite",
   "build": "vite build",
-  "preview": "vite preview"
+  "preview": "vite preview",
+  "dev-full": "concurrently \"npm run dev\" \"node server/index.js\" \"HOST=localhost PORT=4500 npx y-websocket\""
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

@@ -408,7 +408,7 @@ const ChatPanel = ({
     let disconnectTimer: NodeJS.Timeout;
     
     if (!socket) {
-      newSocket = io('http://localhost:3500', {
+      newSocket = io('mocscode-backend-socketio-production.up.railway.app', {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 5,

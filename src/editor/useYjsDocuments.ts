@@ -5,30 +5,35 @@ import { WebsocketProvider } from "y-websocket";
 export function useYjsDocuments() {
   const [docs, setDocs] = useState<{ [roomId: string]: { ydoc: Y.Doc, provider: WebsocketProvider, ytext: Y.Text } }>({});
 
-  const getOrCreateDoc = useCallback((roomId: string, content: string, dbUser: any) => {
+  const getOrCreateDoc = useCallback(async (roomId: string, content: string, dbUser: any) => {
     if (docs[roomId]) {
       return docs[roomId];
     }
 
-    const ydoc = new Y.Doc();
-    const provider = new WebsocketProvider("wss://6b6b-24-231-63-11.ngrok-free.app", roomId, ydoc);
-    const ytext = ydoc.getText("content");
+    return new Promise<{ ydoc: Y.Doc, provider: WebsocketProvider, ytext: Y.Text }>((resolve) => {
+      const ydoc = new Y.Doc();
+      const provider = new WebsocketProvider("wss://d31a-24-231-63-11.ngrok-free.app", roomId, ydoc);
+      const ytext = ydoc.getText("content");
 
-    provider.on('sync', (isSynced) => {
-      if (isSynced && ytext.length === 0) {
-        ytext.insert(0, content);
-      }
+      provider.on('sync', (isSynced: boolean) => {
+        if (isSynced) {
+          if (ytext.length === 0) {
+            ytext.insert(0, content);
+          }
+          // Wait for the insert to be applied before resolving
+          setTimeout(() => {
+            const newDoc = { ydoc, provider, ytext };
+            setDocs(prev => ({ ...prev, [roomId]: newDoc }));
+            resolve(newDoc);
+          }, 0);
+        }
+      });
+
+      provider.awareness.setLocalStateField('user', {
+        name: dbUser.name,
+        color: '#ff0000'
+      });
     });
-
-    provider.awareness.setLocalStateField('user', {
-      name: dbUser.name,
-      color: '#ff0000'
-    });
-
-    const newDoc = { ydoc, provider, ytext };
-    setDocs(prev => ({ ...prev, [roomId]: newDoc }));
-
-    return newDoc;
   }, [docs]);
 
   const destroyDoc = useCallback((roomId: string) => {

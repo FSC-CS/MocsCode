@@ -38,12 +38,23 @@ import {
 import {
   defaultKeymap,
   historyKeymap,
-  indentWithTab
+  indentLess
 } from '@codemirror/commands';
 
 import { syntaxTree } from '@codemirror/language';
 
 import { linter } from "@codemirror/lint";
+
+
+// Prettier Auto-formatters
+import prettier from "prettier/standalone";
+import parserBabel from "prettier/parser-babel";
+import parserTypeScript from "prettier/parser-typescript";
+import parserPostCSS from "prettier/parser-postcss";
+import parserHTML from "prettier/parser-html";
+import parserMarkdown from "prettier/parser-markdown";
+import parserYAML from "prettier/parser-yaml";
+import parserGraphql from "prettier/parser-graphql";
 
 import { yCollab } from 'y-codemirror.next';
 
@@ -56,6 +67,18 @@ import {
   toggleHighlightActiveLine,
   toggleYellowBackground
 } from './toggle-extension.mjs';
+
+const prettierParsers = {
+  javascript: { parser: "babel", plugin: parserBabel },
+  typescript: { parser: "typescript", plugin: parserTypeScript },
+  json: { parser: "json", plugin: parserBabel },
+  html: { parser: "html", plugin: parserHTML },
+  css: { parser: "css", plugin: parserPostCSS },
+  markdown: { parser: "markdown", plugin: parserMarkdown },
+  yaml: { parser: "yaml", plugin: parserYAML },
+  graphql: { parser: "graphql", plugin: parserGraphql },
+};
+
 
 // --- JSDoc completion configuration ---
 function completeJSDoc(context) {
@@ -314,7 +337,37 @@ export function createEditorView({
       },
       {
         key: 'Shift-Tab',
-        run: indentWithTab
+        run: indentLess
+      },
+      {
+        key: 'Ctrl-Alt-F',
+        run: (view) => {
+          try {
+            // Detect language
+            const parserInfo = prettierParsers[language];
+            if (!parserInfo) {
+              // Optionally notify user: language not supported
+              console.log("PARSER NOT SUPPORTED FOR CURRENT LANGUAGE");
+              return true;
+            }
+
+            const unformatted = view.state.doc.toString();
+            const formatted = prettier.format(unformatted, {
+              parser: parserInfo.parser,
+              plugins: [parserInfo.plugin],
+              semi: true,
+              singleQuote: true,
+              trailingComma: 'es5',
+              printWidth: 120,
+              tabWidth: view.state.tabSize,
+            });
+            view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: formatted } });
+          } catch (err) {
+            // Optionally show an error to the user
+            console.error("Formatting failed:", err);
+          }
+          return true;
+        }
       },
       ...defaultKeymap.filter(binding => binding.key !== 'Tab'),
       ...historyKeymap,

@@ -65,10 +65,10 @@ export class ProjectsApi extends ApiClient {
           };
         }
         
-        projects = data || [];
+        let projectsList = data || [];
         
         // Add user role information
-        projects = projects.map(project => ({
+        projectsList = projectsList.map(project => ({
           ...project,
           user_role: project.owner_id === userId ? 'owner' : 'member'
         }));

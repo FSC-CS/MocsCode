@@ -599,11 +599,19 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
       'java': 'java',
       'py': 'python',
       'js': 'javascript',
+      'ts': 'typescript',
       'c': 'c',
       'cpp': 'cpp',
       'cs': 'csharp',
       'md': 'markdown',
-      'txt': 'plaintext'
+      'txt': 'plaintext',
+      'html': 'html',
+      'css': 'css',
+      'json': 'json',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'graphql': 'graphql',
+      'gql': 'graphql',
     };
     return languageMap[extension || ''] || 'plaintext';
   };
@@ -641,7 +649,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
       fileContent = getDefaultContent(filename);
     }
 
-    const { ydoc, provider, ytext } = getOrCreateDoc(fileId, fileContent, dbUser);
+    const { ydoc, provider, ytext } = await getOrCreateDoc(fileId, fileContent, dbUser);
 
     const newFile: OpenFile & { id?: string } = {
       name: filename,
@@ -716,7 +724,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
     try {
       // Get the latest content directly from the editor view if available
-      const { ydoc, provider, ytext } = getOrCreateDoc(currentFile.id, "", dbUser);
+      const { ydoc, provider, ytext } = await getOrCreateDoc(currentFile.id, "", dbUser);
       const latestContent = ytext.toString();
       
       const now = new Date().toISOString();

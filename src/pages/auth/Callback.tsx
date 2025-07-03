@@ -20,17 +20,18 @@ export default function Callback() {
           throw new Error(errorDescription || errorParam)
         }
 
-        const { data: { session }, error } = await supabase.auth.getSession()
-
+        // Use getUser() as primary method - more reliable for OAuth callbacks
+        const { data: { user }, error } = await supabase.auth.getUser()
+        
         if (error) {
           throw error
         }
 
-        if (session) {
-          // Use navigate instead of window.location for a smoother transition
-          navigate('/', { replace: true })
+        if (user) {
+          // User is authenticated, redirect to dashboard
+          navigate('/dashboard', { replace: true })
         } else {
-          throw new Error('No session found after OAuth callback')
+          throw new Error('No user found after OAuth callback')
         }
       } catch (err) {
         console.error('Error in auth callback:', err)

@@ -14,6 +14,7 @@ export function useYjsDocuments() {
       const ydoc = new Y.Doc();
       const provider = new WebsocketProvider("wss://mocscode-backend-yjs-production.up.railway.app", roomId, ydoc);
       const ytext = ydoc.getText("content");
+      console.log("ROOM", roomId);
 
       provider.on('sync', (isSynced: boolean) => {
         if (isSynced) {

@@ -45,7 +45,13 @@ const listProjects = async (
 };
 
 const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
-  // --- Import Project State ---
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading, isSigningOut, isReady } = useAuth();
+  const { projectsApi, projectMembersApi, projectFilesApi } = useApi();
+
+  // --- All state declarations ---
+  // Import Project State
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importProjectName, setImportProjectName] = useState('');
   const [importZipFile, setImportZipFile] = useState<File | null>(null);
@@ -55,7 +61,196 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
   const [importDescription, setImportDescription] = useState('');
   const [importLanguage, setImportLanguage] = useState<string>('JavaScript');
 
-  // Handle ZIP file selection
+  // Project state
+  const [isProjectsLoading, setIsProjectsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'all' | 'owned' | 'shared'>('all');
+  const [isCreating, setIsCreating] = useState(false);
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
+  const [projectCollaborators, setProjectCollaborators] = useState<Record<string, {id: string, email: string, username: string, display_name: string, avatar_url: string | null}[]>>({});
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [currentDeletingId, setCurrentDeletingId] = useState<string | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [currentLeavingId, setCurrentLeavingId] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const supportedLanguages = [
+    { name: 'Java', extension: 'java' },
+    { name: 'Python', extension: 'py' },
+    { name: 'JavaScript', extension: 'js' },
+    { name: 'C', extension: 'c' },
+    { name: 'C++', extension: 'cpp' },
+    { name: 'C#', extension: 'cs' }
+  ];
+
+  // --- Utility functions ---
+  const stringToColor = (str: string): string => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash % 360);
+    return `hsl(${hue}, 70%, 80%)`;
+  };
+
+  const generateUserInitials = (user: { display_name?: string; username?: string; email?: string }): string => {
+    const name = user.display_name || user.username || user.email || 'U';
+    return name
+      .split(' ')
+      .map(part => part[0]?.toUpperCase() || '')
+      .slice(0, 2)
+      .join('');
+  };
+
+  const detectLanguage = (projectName: string): string => {
+    const nameLower = projectName.toLowerCase();
+    for (const lang of supportedLanguages) {
+      if (nameLower.includes(lang.name.toLowerCase())) {
+        return lang.name;
+      }
+    }
+    return 'JavaScript'; // Default language
+  };
+
+  const formatLastModified = (date: string): string => {
+    const now = new Date();
+    const modified = new Date(date);
+    const diffInHours = Math.floor((now.getTime() - modified.getTime()) / (1000 * 60 * 60));
+
+    if (diffInHours < 1) return 'Just now';
+    if (diffInHours < 24) return `${diffInHours} hours ago`;
+    if (diffInHours < 48) return 'Yesterday';
+    if (diffInHours < 168) return `${Math.floor(diffInHours / 24)} days ago`;
+    return '1+ week ago';
+  };
+
+  const getLanguageColor = (language: string) => {
+    const colors: { [key: string]: string } = {
+      'Java': 'bg-orange-100 text-orange-800',
+      'JavaScript': 'bg-yellow-100 text-yellow-800',
+      'Python': 'bg-blue-100 text-blue-800',
+      'C': 'bg-gray-100 text-gray-800',
+      'C++': 'bg-purple-100 text-purple-800',
+      'C#': 'bg-green-100 text-green-800'
+    };
+    return colors[language] || 'bg-gray-100 text-gray-800';
+  };
+
+  // --- Project management functions ---
+  const loadProjectCollaborators = async (projectId: string) => {
+    try {
+      // First get the project to find the owner
+      const { data: projectData } = await projectsApi.getProject(projectId);
+      if (!projectData) return;
+      
+      const ownerId = projectData.owner_id;
+      
+      // Then get all members and filter out the owner
+      const { data } = await projectMembersApi.listProjectMembers(projectId);
+      if (data?.items) {
+        // Filter out the owner and map the remaining members
+        const collaborators = data.items
+          .filter((item: any) => item.user_id !== user.id)
+          .map((item: any) => ({
+            id: item.user_id,
+            email: item.user?.email || '',
+            username: item.user?.username || '',
+            display_name: item.user?.display_name || '',
+            avatar_url: item.user?.avatar_url || null
+          }));
+          
+        setProjectCollaborators(prev => ({
+          ...prev,
+          [projectId]: collaborators
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading project collaborators:', error);
+    }
+  };
+
+  const loadProjects = async () => {
+    setIsProjectsLoading(true);
+    try {
+      const { data, error } = await projectsApi.listUserProjects(user.id);
+      // Check if user is still authenticated
+      if (!user || !dbUser) return;
+      if (error) {
+        console.error('API Error:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load projects. Please try again.',
+          variant: 'destructive'
+        });
+        setProjects([]);
+        return;
+      }
+      if (!data || !data.items || data.items.length === 0) {
+        setProjects([]);
+        return;
+      }
+      
+      const dashboardProjects: DashboardProject[] = [];
+      
+      // First create all projects with basic info
+      for (const p of data.items) {
+        const projectData: DashboardProject = {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          language: detectLanguage(p.name),
+          last_modified: p.updated_at ? formatLastModified(p.updated_at) : 'Unknown',
+          collaborators: 1, // Will be updated after loading members
+          is_owner: p.owner_id === user.id,
+          collaborator_avatars: [], // Will be populated after loading members
+          initials: p.name.substring(0, 2).toUpperCase(),
+          color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 80%)`
+        };
+        dashboardProjects.push(projectData);
+        
+        // Load collaborators for each project
+        loadProjectCollaborators(p.id);
+      }
+      
+      setProjects(dashboardProjects);
+    } catch (err) {
+      console.error('Failed to load projects:', err);
+      if (user && dbUser) {
+        toast({
+          title: 'Error',
+          description: 'Failed to load projects. Please try again.',
+          variant: 'destructive'
+        });
+      }
+      setProjects([]);
+    } finally {
+      setIsProjectsLoading(false);
+    }
+  };
+
+  const getFilteredProjects = () => {
+    let filtered = projects;
+    
+    // Filter by tab
+    switch (activeTab) {
+      case 'owned':
+        filtered = projects.filter(p => p.is_owner);
+        break;
+      case 'shared':
+        filtered = projects.filter(p => !p.is_owner);
+        break;
+      default:
+        filtered = projects;
+    }
+    
+    // Filter by search term
+    return filtered.filter(project =>
+      project.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
+
+  // --- User interaction handlers ---
   const handleZipFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setImportZipFile(e.target.files[0]);
@@ -63,7 +258,6 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
     }
   };
 
-  // Handle import submit
   const handleImportProject = async () => {
     setImportError(null);
     if (!importProjectName.trim()) {
@@ -106,87 +300,16 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
         setImportLanguage('JavaScript');
         setImportProgress(0);
         setIsImporting(false);
-        if (typeof loadProjects === 'function') loadProjects();
       }, 1200);
+      loadProjects();
     } catch (err: any) {
       setImportError('Failed to process ZIP file.');
       setIsImporting(false);
     }
   };
 
-
-
-  // New: project-specific loading state
-  const [isProjectsLoading, setIsProjectsLoading] = useState(false);
-const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'owned' | 'shared'>('all');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [projects, setProjects] = useState<DashboardProject[]>([]);
-  const [projectCollaborators, setProjectCollaborators] = useState<Record<string, {id: string, email: string, username: string, display_name: string, avatar_url: string | null}[]>>({});
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [currentDeletingId, setCurrentDeletingId] = useState<string | null>(null);
-  const [isLeaving, setIsLeaving] = useState(false);
-  const [currentLeavingId, setCurrentLeavingId] = useState<string | null>(null);
-  
-  const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading, isSigningOut, isReady } = useAuth();
-  const { projectsApi, projectMembersApi, projectFilesApi } = useApi();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-
-  const supportedLanguages = [
-    { name: 'Java', extension: 'java' },
-    { name: 'Python', extension: 'py' },
-    { name: 'JavaScript', extension: 'js' },
-    { name: 'C', extension: 'c' },
-    { name: 'C++', extension: 'cpp' },
-    { name: 'C#', extension: 'cs' }
-  ];
-
-  // Generate consistent color from string
-const stringToColor = (str: string): string => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = Math.abs(hash % 360);
-  return `hsl(${hue}, 70%, 80%)`;
-};
-
-// Generate user initials from user object
-const generateUserInitials = (user: { display_name?: string; username?: string; email?: string }): string => {
-  const name = user.display_name || user.username || user.email || 'U';
-  return name
-    .split(' ')
-    .map(part => part[0]?.toUpperCase() || '')
-    .slice(0, 2)
-    .join('');
-};
-
-const detectLanguage = (projectName: string): string => {
-  const nameLower = projectName.toLowerCase();
-  for (const lang of supportedLanguages) {
-    if (nameLower.includes(lang.name.toLowerCase())) {
-      return lang.name;
-    }
-  }
-  return 'JavaScript'; // Default language
-};
-
-  const formatLastModified = (date: string): string => {
-    const now = new Date();
-    const modified = new Date(date);
-    const diffInHours = Math.floor((now.getTime() - modified.getTime()) / (1000 * 60 * 60));
-
-    if (diffInHours < 1) return 'Just now';
-    if (diffInHours < 24) return `${diffInHours} hours ago`;
-    if (diffInHours < 48) return 'Yesterday';
-    if (diffInHours < 168) return `${Math.floor(diffInHours / 24)} days ago`;
-    return '1+ week ago';
-  };
-
   const createProject = async (language: string, name: string): Promise<void> => {
+    console.log("CRE");
     if (!user) {
       toast({
         title: 'Error',
@@ -228,7 +351,6 @@ const detectLanguage = (projectName: string): string => {
         return;
       }
 
-
       const newProject: DashboardProject = {
         id: project.id,
         name: project.name,
@@ -262,9 +384,6 @@ const detectLanguage = (projectName: string): string => {
       setIsCreating(false);
     }
   };
-
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleSignIn = async () => {
     try {
@@ -384,160 +503,9 @@ const detectLanguage = (projectName: string): string => {
     }
   };
 
-  // NEW: Handler for profile picture click
   const handleProfileClick = () => {
     navigate('/profile');
   };
-
-  useEffect(() => {
-  // Reset states when auth changes
-  if (!isReady) {
-    setIsLoading(true);
-    setIsProjectsLoading(false);
-    setHasAttemptedLoad(false);
-    return;
-  }
-
-  if (!user || !dbUser?.id) {
-    setIsLoading(false);
-    setProjects([]);
-    setIsProjectsLoading(false);
-    setHasAttemptedLoad(false);
-    return;
-  }
-
-  // Only start loading if we haven't attempted yet or need to refresh
-  if (hasAttemptedLoad) return;
-
-  const loadProjectCollaborators = async (projectId: string) => {
-    try {
-      // First get the project to find the owner
-      const { data: projectData } = await projectsApi.getProject(projectId);
-      if (!projectData) return;
-      
-      const ownerId = projectData.owner_id;
-      
-      // Then get all members and filter out the owner
-      const { data } = await projectMembersApi.listProjectMembers(projectId);
-      if (data?.items) {
-        // Filter out the owner and map the remaining members
-        const collaborators = data.items
-          .filter((item: any) => item.user_id !== user.id)
-          .map((item: any) => ({
-            id: item.user_id,
-            email: item.user?.email || '',
-            username: item.user?.username || '',
-            display_name: item.user?.display_name || '',
-            avatar_url: item.user?.avatar_url || null
-          }));
-          
-        setProjectCollaborators(prev => ({
-          ...prev,
-          [projectId]: collaborators
-        }));
-      }
-    } catch (error) {
-      console.error('Error loading project collaborators:', error);
-    }
-  };
-
-  const loadProjects = async () => {
-    setIsProjectsLoading(true);
-    setHasAttemptedLoad(true);
-    try {
-      const { data, error } = await projectsApi.listUserProjects(user.id);
-      // Check if user is still authenticated
-      if (!user || !dbUser) return;
-      if (error) {
-        console.error('API Error:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load projects. Please try again.',
-          variant: 'destructive'
-        });
-        setProjects([]);
-        return;
-      }
-      if (!data || !data.items || data.items.length === 0) {
-        setProjects([]);
-        return;
-      }
-      
-      const dashboardProjects: DashboardProject[] = [];
-      
-      // First create all projects with basic info
-      for (const p of data.items) {
-        const projectData: DashboardProject = {
-          id: p.id,
-          name: p.name,
-          description: p.description,
-          language: detectLanguage(p.name),
-          last_modified: p.updated_at ? formatLastModified(p.updated_at) : 'Unknown',
-          collaborators: 1, // Will be updated after loading members
-          is_owner: p.owner_id === user.id,
-          collaborator_avatars: [], // Will be populated after loading members
-          initials: p.name.substring(0, 2).toUpperCase(),
-          color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 80%)`
-        };
-        dashboardProjects.push(projectData);
-        
-        // Load collaborators for each project
-        loadProjectCollaborators(p.id);
-      }
-      
-      setProjects(dashboardProjects);
-    } catch (err) {
-      console.error('Failed to load projects:', err);
-      if (user && dbUser) {
-        toast({
-          title: 'Error',
-          description: 'Failed to load projects. Please try again.',
-          variant: 'destructive'
-        });
-      }
-      setProjects([]);
-    } finally {
-      setIsProjectsLoading(false);
-      setIsLoading(false);
-    }
-  };
-  loadProjects();
-}, [isReady, user, dbUser, hasAttemptedLoad, projectsApi, toast]);
-
-  const getFilteredProjects = () => {
-    let filtered = projects;
-    
-    // Filter by tab
-    switch (activeTab) {
-      case 'owned':
-        filtered = projects.filter(p => p.is_owner);
-        break;
-      case 'shared':
-        filtered = projects.filter(p => !p.is_owner);
-        break;
-      default:
-        filtered = projects;
-    }
-    
-    // Filter by search term
-    return filtered.filter(project =>
-      project.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  };
-
-  const getLanguageColor = (language: string) => {
-    const colors: { [key: string]: string } = {
-      'Java': 'bg-orange-100 text-orange-800',
-      'JavaScript': 'bg-yellow-100 text-yellow-800',
-      'Python': 'bg-blue-100 text-blue-800',
-      'C': 'bg-gray-100 text-gray-800',
-      'C++': 'bg-purple-100 text-purple-800',
-      'C#': 'bg-green-100 text-green-800'
-    };
-    return colors[language] || 'bg-gray-100 text-gray-800';
-  };
-
-  const filteredProjects = getFilteredProjects();
 
   const handleLogout = async () => {
     try {
@@ -552,6 +520,26 @@ const detectLanguage = (projectName: string): string => {
       });
     }
   };
+
+  // --- Effects ---
+  useEffect(() => {
+    // Reset states when auth changes
+    if (!isReady) {
+      setIsProjectsLoading(true);
+      return;
+    }
+
+    if (!user || !dbUser?.id) {
+      setIsProjectsLoading(true);
+      setProjects([]);
+      return;
+    }
+
+    loadProjects();
+  }, [isReady, user, dbUser, projectsApi]);
+
+  // Calculate filtered projects
+  const filteredProjects = getFilteredProjects();
 
   return (
     <div className="min-h-screen dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
@@ -646,142 +634,142 @@ const detectLanguage = (projectName: string): string => {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
-  <div className="flex flex-row gap-2">
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2">
-          <Plus className="h-5 w-5" />
-          <span>Create Project</span>
-          <ChevronDown className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {supportedLanguages.map((lang) => (
-          <DropdownMenuItem 
-            key={lang.name} 
-            onClick={() => createProject(lang.name)}
-            disabled={isCreating}
-          >
-            <div className="flex items-center gap-2">
-              {isCreating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              <span className="text-sm font-medium">{lang.name}</span>
-              <Badge variant="outline" className="text-xs">
-                .{lang.extension}
-              </Badge>
-            </div>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-    {/* Import Project Button */}
-    <Button
-      variant="outline"
-      className="px-6 py-3 rounded-lg flex items-center space-x-2"
-      onClick={() => setImportDialogOpen(true)}
-      disabled={isImporting}
-    >
-      {isImporting ? (
-        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-      ) : (
-        <UploadCloud className="h-5 w-5 mr-2" />
-      )}
-      <span>Import Project</span>
-    </Button>
-    {/* Import Project Dialog */}
-    <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Import Project</DialogTitle>
-          <DialogDescription>
-            Upload a ZIP file containing your project. All files and folders will be imported.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <Input
-            placeholder="Project Name"
-            value={importProjectName}
-            onChange={e => setImportProjectName(e.target.value)}
-            disabled={isImporting}
-            maxLength={64}
-          />
-          <div>
-            <label className="block text-xs font-medium mb-1">Language</label>
-            <Select value={importLanguage} onValueChange={setImportLanguage} disabled={isImporting}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select language" />
-              </SelectTrigger>
-              <SelectContent>
+          <div className="flex flex-row gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2">
+                  <Plus className="h-5 w-5" />
+                  <span>Create Project</span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
                 {supportedLanguages.map((lang) => (
-                  <SelectItem key={lang.name} value={lang.name}>
-                    {lang.name}
-                  </SelectItem>
+                  <DropdownMenuItem 
+                    key={lang.name} 
+                    onClick={() => createProject(lang.name)}
+                    disabled={isCreating}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isCreating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                      <span className="text-sm font-medium">{lang.name}</span>
+                      <Badge variant="outline" className="text-xs">
+                        .{lang.extension}
+                      </Badge>
+                    </div>
+                  </DropdownMenuItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <textarea
-            className="w-full rounded border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Project Description (optional)"
-            rows={2}
-            value={importDescription}
-            onChange={e => setImportDescription(e.target.value)}
-            disabled={isImporting}
-            maxLength={256}
-          />
-          <Input
-            type="file"
-            accept=".zip"
-            onChange={handleZipFileChange}
-            disabled={isImporting}
-          />
-          {importZipFile && (
-            <div className="text-xs text-gray-500">{importZipFile.name}</div>
-          )}
-          {importError && (
-            <div className="text-xs text-red-500">{importError}</div>
-          )}
-          <div className="flex items-center space-x-2">
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Import Project Button */}
             <Button
-              onClick={handleImportProject}
-              disabled={isImporting || !importProjectName.trim() || !importZipFile}
-              className="w-full"
-            >
-              {isImporting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Import
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => setImportDialogOpen(false)}
+              variant="outline"
+              className="px-6 py-3 rounded-lg flex items-center space-x-2"
+              onClick={() => setImportDialogOpen(true)}
               disabled={isImporting}
-              className="w-full"
             >
-              Cancel
+              {isImporting ? (
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+              ) : (
+                <UploadCloud className="h-5 w-5 mr-2" />
+              )}
+              <span>Import Project</span>
             </Button>
+            {/* Import Project Dialog */}
+            <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Import Project</DialogTitle>
+                  <DialogDescription>
+                    Upload a ZIP file containing your project. All files and folders will be imported.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <Input
+                    placeholder="Project Name"
+                    value={importProjectName}
+                    onChange={e => setImportProjectName(e.target.value)}
+                    disabled={isImporting}
+                    maxLength={64}
+                  />
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Language</label>
+                    <Select value={importLanguage} onValueChange={setImportLanguage} disabled={isImporting}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select language" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {supportedLanguages.map((lang) => (
+                          <SelectItem key={lang.name} value={lang.name}>
+                            {lang.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <textarea
+                    className="w-full rounded border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Project Description (optional)"
+                    rows={2}
+                    value={importDescription}
+                    onChange={e => setImportDescription(e.target.value)}
+                    disabled={isImporting}
+                    maxLength={256}
+                  />
+                  <Input
+                    type="file"
+                    accept=".zip"
+                    onChange={handleZipFileChange}
+                    disabled={isImporting}
+                  />
+                  {importZipFile && (
+                    <div className="text-xs text-gray-500">{importZipFile.name}</div>
+                  )}
+                  {importError && (
+                    <div className="text-xs text-red-500">{importError}</div>
+                  )}
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      onClick={handleImportProject}
+                      disabled={isImporting || !importProjectName.trim() || !importZipFile}
+                      className="w-full"
+                    >
+                      {isImporting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                      Import
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setImportDialogOpen(false)}
+                      disabled={isImporting}
+                      className="w-full"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-300"
+                      style={{ width: `${importProgress}%` }}
+                    />
+                  </div>
+                  {isImporting && (
+                    <div className="text-xs text-gray-500">Processing ZIP... ({importProgress}%)</div>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
-          <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
-            <div
-              className="h-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${importProgress}%` }}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Search projects..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
             />
           </div>
-          {isImporting && (
-            <div className="text-xs text-gray-500">Processing ZIP... ({importProgress}%)</div>
-          )}
         </div>
-      </DialogContent>
-    </Dialog>
-  </div>
-  <div className="relative flex-1 max-w-md">
-    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-    <Input
-      type="text"
-      placeholder="Search projects..."
-      value={searchTerm}
-      onChange={(e) => setSearchTerm(e.target.value)}
-      className="pl-10"
-    />
-  </div>
-</div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="p-6 bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700">
@@ -851,7 +839,7 @@ const detectLanguage = (projectName: string): string => {
         </div>
 
         {(() => {
-          const isActuallyLoading = !isReady || isProjectsLoading || (isReady && !hasAttemptedLoad);
+          const isActuallyLoading = !isReady || isProjectsLoading;
           if (isActuallyLoading) {
             return (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

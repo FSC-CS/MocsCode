@@ -240,6 +240,12 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     }
   }, [project?.id, user?.id, projectMembersApi, toast]);
 
+  useEffect(() => {
+    if (project?.id && user?.id) {
+      loadProjectMembers();
+    }
+  }, [project?.id, user?.id, loadProjectMembers]);
+
   // Set up auto-refresh for member list (every 30 seconds when enabled)
   useEffect(() => {
     if (!autoRefreshEnabled || !project?.id || !user?.id) {
@@ -1048,11 +1054,11 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
         <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
           {/* File Tabs */}
           <EditorTabBar
-  openFiles={openFiles}
-  activeFileIndex={activeFileIndex}
-  setActiveFileIndex={setActiveFileIndex}
-  closeFile={closeFile}
-/>
+            openFiles={openFiles}
+            activeFileIndex={activeFileIndex}
+            setActiveFileIndex={setActiveFileIndex}
+            closeFile={closeFile}
+          />
 
           {/* Main Editor and Output Container */}
           <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>

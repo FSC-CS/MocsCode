@@ -669,6 +669,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     setOpenFiles([...openFiles, newFile]);
     setActiveFileIndex(openFiles.length);
 
+    console.log("OPENED FILE", newFile);
+
   };
 
   const getDefaultContent = (fileName: string): string => {
@@ -784,7 +786,6 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   }, [saveCurrentFile]);
 
   const updateFileContent = (content: string) => {
-    console.log("UI AUTO SAVE");
     const updatedFiles = [...openFiles];
     updatedFiles[activeFileIndex] = {
       ...updatedFiles[activeFileIndex],

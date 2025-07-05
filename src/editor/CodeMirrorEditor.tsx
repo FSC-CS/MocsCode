@@ -32,12 +32,15 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   const sessionRef = useRef(0);
   const latestOnChangeRef = useRef(onChange);
 
+  console.log("YTEXT", ytext.toString());
+  console.log("Value", value);
+
   // Always keep latest onChange in the ref
   useEffect(() => {
     latestOnChangeRef.current = onChange;
   }, [onChange]);
 
-  // Only recreate the editor when language, tabSize, or autocomplete changes
+  // Only recreate the editor when provider changes
   useEffect(() => {
     let cancelled = false;
     const thisSession = ++sessionRef.current;
@@ -80,7 +83,7 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         viewRef.current = null;
       }
     };
-  }, []); // Dependency array simplified
+  }, [provider]); // Dependency array simplified
 
   // Update document if value changes externally
   useEffect(() => {

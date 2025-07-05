@@ -6,7 +6,9 @@ export function useYjsDocuments() {
   const [docs, setDocs] = useState<{ [roomId: string]: { ydoc: Y.Doc, provider: WebsocketProvider, ytext: Y.Text } }>({});
 
   const getOrCreateDoc = useCallback(async (roomId: string, content: string, dbUser: any) => {
+    console.log("GET OR CREATE DOC", roomId);
     if (docs[roomId]) {
+      console.log("DOC RETRIEVED", docs[roomId]);
       return docs[roomId];
     }
 
@@ -14,7 +16,6 @@ export function useYjsDocuments() {
       const ydoc = new Y.Doc();
       const provider = new WebsocketProvider("wss://mocscode-backend-yjs-production.up.railway.app", roomId, ydoc);
       const ytext = ydoc.getText("content");
-      console.log("ROOM", roomId);
 
       provider.on('sync', (isSynced: boolean) => {
         if (isSynced) {

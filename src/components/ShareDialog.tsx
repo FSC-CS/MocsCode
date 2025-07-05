@@ -20,13 +20,15 @@ import {
   Edit,
   Users,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Download
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useApi } from '@/contexts/ApiContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ShareableLink } from '@/lib/api/collaboration';
 import { z } from 'zod';
+import { exportProjectAsZip, downloadProjectZip } from '@/export_project';
 
 // Validation schemas
 const emailInviteSchema = z.object({
@@ -56,7 +58,7 @@ interface ShareDialogProps {
 
 const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, project, onMemberAdded }) => {
   const { toast } = useToast();
-  const { projectMembersApi, collaborationApi } = useApi();
+  const { projectMembersApi, collaborationApi, projectsApi, projectFilesApi } = useApi();
   const { user } = useAuth();
   
   // State for email invitation
@@ -78,6 +80,11 @@ const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, project, onM
   const [existingLinks, setExistingLinks] = useState<ShareableLink[]>([]);
   const [isLoadingLinks, setIsLoadingLinks] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  
+  // State for project export
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [includeMetadata, setIncludeMetadata] = useState(true);
 
   // Load existing share links when dialog opens
   useEffect(() => {
@@ -118,74 +125,72 @@ const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, project, onM
     }
   };
 
-  // Updated handleEmailInvite function in ShareDialog.tsx
+  const handleEmailInvite = async () => {
+    if (!user) return;
 
-const handleEmailInvite = async () => {
-  if (!user) return;
-
-  // Validate form
-  try {
-    emailInviteSchema.parse(emailForm);
-    setEmailErrors({});
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      const newErrors: Record<string, string> = {};
-      error.errors.forEach(err => {
-        if (err.path[0]) {
-          newErrors[err.path[0] as string] = err.message;
-        }
-      });
-      setEmailErrors(newErrors);
-      return;
+    // Validate form
+    try {
+      emailInviteSchema.parse(emailForm);
+      setEmailErrors({});
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const newErrors: Record<string, string> = {};
+        error.errors.forEach(err => {
+          if (err.path[0]) {
+            newErrors[err.path[0] as string] = err.message;
+          }
+        });
+        setEmailErrors(newErrors);
+        return;
+      }
     }
-  }
 
-  setIsInviting(true);
-  try {
-    // Calculate expiration date if needed
-    const expiresAt = undefined; // You can add expiration logic here if needed
-    
-    const { data, error } = await collaborationApi.sendEmailInvitation(
-      project.id,
-      emailForm.email,
-      emailForm.role,
-      project.name,
-      emailForm.message || undefined,
-      expiresAt
-    );
+    setIsInviting(true);
+    try {
+      // Calculate expiration date if needed
+      const expiresAt = undefined; // You can add expiration logic here if needed
+      
+      const { data, error } = await collaborationApi.sendEmailInvitation(
+        project.id,
+        emailForm.email,
+        emailForm.role,
+        project.name,
+        emailForm.message || undefined,
+        expiresAt
+      );
 
-    if (error) {
+      if (error) {
+        toast({
+          title: 'Invitation Failed',
+          description: error.message,
+          variant: 'destructive'
+        });
+        return;
+      }
+
       toast({
-        title: 'Invitation Failed',
-        description: error.message,
+        title: 'Invitation Sent! 📧',
+        description: `${emailForm.email} has been sent an invitation email with ${emailForm.role} access.`,
+        duration: 5000
+      });
+
+      // Reset form
+      setEmailForm({ email: '', role: 'viewer', message: '' });
+      
+      // Reload existing links to show the newly created one
+      await loadExistingLinks();
+
+    } catch (error) {
+      console.error('Error sending invitation:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send invitation. Please try again.',
         variant: 'destructive'
       });
-      return;
+    } finally {
+      setIsInviting(false);
     }
-
-    toast({
-      title: 'Invitation Sent! 📧',
-      description: `${emailForm.email} has been sent an invitation email with ${emailForm.role} access.`,
-      duration: 5000
-    });
-
-    // Reset form
-    setEmailForm({ email: '', role: 'viewer', message: '' });
-    
-    // Reload existing links to show the newly created one
-    await loadExistingLinks();
-
-  } catch (error) {
-    console.error('Error sending invitation:', error);
-    toast({
-      title: 'Error',
-      description: 'Failed to send invitation. Please try again.',
-      variant: 'destructive'
-    });
-  } finally {
-    setIsInviting(false);
-  }
-};
+  };
 
   // Share link handlers
   const handleLinkInputChange = (field: keyof ShareLinkForm, value: string) => {
@@ -341,30 +346,70 @@ const handleEmailInvite = async () => {
   };
 
   const getPermissionColor = (permission: string) => {
-    return permission === 'editor' 
-      ? 'bg-green-100 text-green-800' 
-      : 'bg-blue-100 text-blue-800';
+    return permission === 'editor' ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' : 'bg-green-100 text-green-800 hover:bg-green-200';
+  };
+
+  // Handle project export
+  const handleExportProject = async () => {
+    if (!user) return;
+    
+    setIsExporting(true);
+    setExportProgress(0);
+    
+    try {
+      const { zipBlob, error } = await exportProjectAsZip({
+        projectId: project.id,
+        projectsApi,
+        projectFilesApi,
+        onProgress: (percent) => setExportProgress(percent),
+        includeMetadata
+      });
+      
+      if (error || !zipBlob) {
+        throw error || new Error('Failed to generate ZIP file');
+      }
+      
+      // Download the ZIP file
+      downloadProjectZip(zipBlob, `${project.name}.zip`);
+      
+      toast({
+        title: 'Export Successful',
+        description: 'Your project has been exported successfully',
+        variant: 'default'
+      });
+    } catch (error) {
+      console.error('Error exporting project:', error);
+      toast({
+        title: 'Export Failed',
+        description: error instanceof Error ? error.message : 'Failed to export project',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsExporting(false);
+      setExportProgress(0);
+    }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <Users className="h-5 w-5" />
-            <span>Share "{project.name}"</span>
-          </DialogTitle>
+          <DialogTitle className="text-xl">Share Project: {project.name}</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="email" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="email" className="flex items-center space-x-2">
-              <Mail className="h-4 w-4" />
-              <span>Invite by Email</span>
+        <Tabs defaultValue="email">
+          <TabsList className="grid grid-cols-3 mb-4">
+            <TabsTrigger value="email">
+              <Mail className="h-4 w-4 mr-2" />
+              Invite by Email
             </TabsTrigger>
-            <TabsTrigger value="link" className="flex items-center space-x-2">
-              <Link className="h-4 w-4" />
-              <span>Shareable Link</span>
+            <TabsTrigger value="link">
+              <Link className="h-4 w-4 mr-2" />
+              Shareable Link
+            </TabsTrigger>
+            <TabsTrigger value="export">
+              <Download className="h-4 w-4 mr-2" />
+              Export Project
             </TabsTrigger>
           </TabsList>
 
@@ -595,6 +640,63 @@ const handleEmailInvite = async () => {
                   </div>
                 )}
               </div>
+            </div>
+          </TabsContent>
+
+          {/* Export Project Tab */}
+          <TabsContent value="export">
+            <div className="space-y-6">
+              <Card className="p-4">
+                <h3 className="font-medium mb-4">Export Project as ZIP</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Download your project as a ZIP file to back it up or share it offline.
+                </p>
+
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="include-metadata"
+                      checked={includeMetadata}
+                      onChange={(e) => setIncludeMetadata(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <Label htmlFor="include-metadata">Include project metadata</Label>
+                  </div>
+
+                  {isExporting && (
+                    <div className="w-full mb-8">
+                      <div className="bg-gray-200 rounded-full h-2.5">
+                        <div 
+                          className="bg-blue-600 h-2.5 rounded-full" 
+                          style={{ width: `${exportProgress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1 text-right">
+                        {exportProgress}% complete
+                      </p>
+                    </div>
+                  )}
+
+                  <Button 
+                    onClick={handleExportProject}
+                    disabled={isExporting}
+                    className="w-full"
+                  >
+                    {isExporting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Export as ZIP
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>

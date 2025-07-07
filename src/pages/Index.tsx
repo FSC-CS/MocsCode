@@ -4,10 +4,11 @@ import { Navigate } from 'react-router-dom';
 import Dashboard from '../components/Dashboard';
 
 const Index = () => {
-  const { user, isReady } = useAuth();
+  console.log("Index");
+  const { user, isLoading } = useAuth(); 
 
   // Wait for auth to be ready
-  if (!isReady) {
+  if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

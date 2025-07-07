@@ -50,6 +50,14 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
   const { user, dbUser, signInWithGoogle, signOut, isLoading: isAuthLoading, isSigningOut, isReady } = useAuth();
   const { projectsApi, projectMembersApi, projectFilesApi } = useApi();
 
+  // Redirect to landing page if not authenticated
+  useEffect(() => {
+    console.log("STATUS", isAuthLoading, user);
+    if (!isAuthLoading && !user) {
+      navigate('/landing');
+    }
+  }, [user, isAuthLoading, navigate]);
+
   // --- All state declarations ---
   // Import Project State
   const [importDialogOpen, setImportDialogOpen] = useState(false);

@@ -146,7 +146,7 @@ const JoinProject = () => {
           <h2 className="text-xl font-semibold mb-2">Join Project</h2>
           <p className="text-gray-600 mb-6">
             You've been invited to collaborate on a project. 
-            Please sign in to continue.
+            Please sign in to continue and try again.
           </p>
           <div className="space-y-3">
             <Button onClick={() => navigate('/signin')} className="w-full">

@@ -6,9 +6,7 @@ export function useYjsDocuments() {
   const [docs, setDocs] = useState<{ [roomId: string]: { ydoc: Y.Doc, provider: WebsocketProvider, ytext: Y.Text } }>({});
 
   const getOrCreateDoc = useCallback(async (roomId: string, content: string, dbUser: any) => {
-    console.log("GET OR CREATE DOC", roomId);
     if (docs[roomId]) {
-      console.log("DOC RETRIEVED", docs[roomId]);
       return docs[roomId];
     }
 
@@ -41,13 +39,19 @@ export function useYjsDocuments() {
   const destroyDoc = useCallback((roomId: string) => {
     const doc = docs[roomId];
     if (doc) {
-      doc.provider.destroy();
-      doc.ydoc.destroy();
-      setDocs(prev => {
-        const newDocs = { ...prev };
-        delete newDocs[roomId];
-        return newDocs;
-      });
+      // Clear awareness information before destroying the provider
+      doc.provider.awareness.setLocalState(null);
+      
+      // Give a small delay to allow awareness update to propagate
+      setTimeout(() => {
+        doc.provider.destroy();
+        doc.ydoc.destroy();
+        setDocs(prev => {
+          const newDocs = { ...prev };
+          delete newDocs[roomId];
+          return newDocs;
+        });
+      }, 50);
     }
   }, [docs]);
 

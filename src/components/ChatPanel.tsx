@@ -468,7 +468,6 @@ const ChatPanel = ({
         const isInRoom = joinedRooms.includes(currentRoom);
         
         if (!isInRoom) {
-          console.log('Joining room: ', currentRoom);
           newSocket.emit('join_room', { 
             userId: currentUser.id,
             userName: currentUser.name || 'Anonymous',

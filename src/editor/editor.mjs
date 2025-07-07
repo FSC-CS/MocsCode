@@ -9,6 +9,8 @@ import {
   closeBrackets
 } from '@codemirror/autocomplete';
 
+import { toast } from '../hooks/use-toast';
+
 // Language support
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
@@ -46,16 +48,18 @@ import { syntaxTree } from '@codemirror/language';
 import { linter } from "@codemirror/lint";
 
 
-// Prettier Auto-formatters
+// Prettier 
 import prettier from "prettier/standalone";
-import parserBabel from "prettier/parser-babel";
-import parserTypeScript from "prettier/parser-typescript";
-import parserPostCSS from "prettier/parser-postcss";
-import parserHTML from "prettier/parser-html";
-import parserMarkdown from "prettier/parser-markdown";
-import parserYAML from "prettier/parser-yaml";
-import parserGraphql from "prettier/parser-graphql";
-import prettierPluginJava from 'prettier-plugin-java';
+// Prettier parser plugins (Autoformatter)
+import parserBabel from "prettier/plugins/babel";
+import parserTypeScript from "prettier/plugins/typescript";
+import parserPostCSS from "prettier/plugins/postcss";
+import parserHTML from "prettier/plugins/html";
+import parserMarkdown from "prettier/plugins/markdown";
+import parserYAML from "prettier/plugins/yaml";
+import parserGraphql from "prettier/plugins/graphql";
+import prettierPluginJava from "prettier-plugin-java";
+import parserEstree from "prettier/plugins/estree";
 
 import { yCollab } from 'y-codemirror.next';
 
@@ -70,15 +74,15 @@ import {
 } from './toggle-extension.mjs';
 
 const prettierParsers = {
-  javascript: { parser: "babel", plugin: parserBabel },
-  typescript: { parser: "typescript", plugin: parserTypeScript },
-  json: { parser: "json", plugin: parserBabel },
-  html: { parser: "html", plugin: parserHTML },
-  css: { parser: "css", plugin: parserPostCSS },
-  markdown: { parser: "markdown", plugin: parserMarkdown },
-  yaml: { parser: "yaml", plugin: parserYAML },
-  graphql: { parser: "graphql", plugin: parserGraphql },
-  java: { parser: "java", plugin: prettierPluginJava },
+  javascript: { parser: "babel", plugin: [parserBabel, parserEstree] },
+  typescript: { parser: "typescript", plugin: [parserTypeScript, parserEstree] },
+  json: { parser: "json", plugin: [parserBabel, parserEstree] },
+  html: { parser: "html", plugin: [parserHTML] },
+  css: { parser: "css", plugin: [parserPostCSS] },
+  markdown: { parser: "markdown", plugin: [parserMarkdown] },
+  yaml: { parser: "yaml", plugin: [parserYAML] },
+  graphql: { parser: "graphql", plugin: [parserGraphql] },
+  java: { parser: "java", plugin: [prettierPluginJava] },
 };
 
 
@@ -342,38 +346,54 @@ export function createEditorView({
       {
         key: 'Mod-Shift-f',
         run: (view) => {
-          console.log("FORMAT");
           try {
             // Detect language
             const parserInfo = prettierParsers[language];
-            if (!parserInfo) {
+            if (!parserInfo.parser || !parserInfo.plugin) {
               // Optionally notify user: language not supported
-              console.log("PARSER NOT SUPPORTED FOR CURRENT LANGUAGE");
+              toast({
+                title: 'Error',
+                description: 'Failed to format code. Current language is not supported.',
+                variant: 'destructive'
+              });
               return true;
             }
 
-            const unformatted = view.state.doc.toString();
-
             async function formatCode(unformatted) {
+              console.log("FORMAT CODE", parserInfo);
               const formatted = await prettier.format(unformatted, {
                 parser: parserInfo.parser,
-                plugins: [parserInfo.plugin],
+                plugins: parserInfo.plugin,
                 semi: true,
                 singleQuote: true,
                 trailingComma: 'es5',
                 printWidth: 120,
                 tabWidth: view.state.tabSize,
               });
-              console.log(formatted);
+              return formatted;
             }
             
-            formatCode();
+            const unformatted = view.state.doc.toString();
 
-            console.log("FORMATTED", formatted);
-            view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: formatted } });
+            formatCode(unformatted)
+              .then(formatted => {
+                console.log("FORMATTED", formatted);
+                view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: formatted } });
+              })
+              .catch(err => {
+                toast({
+                  title: 'Error',
+                  description: 'Failed to format code. Please fix any syntax errors and try again.',
+                  variant: 'destructive'
+                });
+                console.error(err);
+              });
           } catch (err) {
-            // Optionally show an error to the user
-            console.error("Formatting failed:", err);
+            toast({
+              title: 'Error',
+              description: 'Failed to format code. Please fix any syntax errors and try again.',
+              variant: 'destructive'
+            });
           }
           return true;
         }

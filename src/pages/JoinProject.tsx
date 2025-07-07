@@ -137,6 +137,30 @@ const JoinProject = () => {
       : 'You can view and comment on this project';
   };
 
+  // Auth required state
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md p-8 text-center">
+          <Users className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Join Project</h2>
+          <p className="text-gray-600 mb-6">
+            You've been invited to collaborate on a project. 
+            Please sign in to continue.
+          </p>
+          <div className="space-y-3">
+            <Button onClick={() => navigate('/signin')} className="w-full">
+              Sign In
+            </Button>
+            <Button onClick={() => navigate('/register')} variant="outline" className="w-full">
+              Create Account
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   // Loading/Validating state
   if (joinStep === 'validating') {
     return (
@@ -192,30 +216,6 @@ const JoinProject = () => {
             </p>
           </div>
           <p className="text-sm text-gray-500">Redirecting to project...</p>
-        </Card>
-      </div>
-    );
-  }
-
-  // Auth required state
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Card className="w-full max-w-md p-8 text-center">
-          <Users className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Join Project Collaboration</h2>
-          <p className="text-gray-600 mb-6">
-            You've been invited to collaborate on "{shareLink?.project?.name}". 
-            Please sign in to continue.
-          </p>
-          <div className="space-y-3">
-            <Button onClick={() => navigate('/signin')} className="w-full">
-              Sign In
-            </Button>
-            <Button onClick={() => navigate('/register')} variant="outline" className="w-full">
-              Create Account
-            </Button>
-          </div>
         </Card>
       </div>
     );

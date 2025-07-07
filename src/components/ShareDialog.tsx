@@ -279,6 +279,7 @@ const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, project, onM
   const copyToClipboard = async (token: string) => {
     try {
       const shareUrl = `${window.location.origin}/join/${token}`;
+      console.log(window.location.origin);
       await navigator.clipboard.writeText(shareUrl);
       setCopiedToken(token);
       toast({

@@ -42,9 +42,7 @@ interface ProjectMemberUser {
   name: string;
   email: string;
   username: string;
-  display_name?: string;
   avatar_url?: string;
-  avatar?: string;
 }
 
 interface BaseProjectMember {
@@ -295,7 +293,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
         return {
           id: Number(userId),
-          name: member.user?.display_name || member.user?.username || 'Unknown',
+          name: member.user?.username || 'Unknown',
           color: stringToColor(userId),
           cursor: null,
           isTyping: false,
@@ -668,8 +666,6 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
     setOpenFiles([...openFiles, newFile]);
     setActiveFileIndex(openFiles.length);
-
-    console.log("OPENED FILE", newFile);
 
   };
 
@@ -1175,7 +1171,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
               <ChatPanel 
                 collaborators={collaborators}
                 projectMembers={projectMembers}
-                currentUser={user}
+                currentUser={dbUser}
                 isLoadingMembers={isLoadingMembers}
                 memberOperationStatus={memberOperationStatus}
                 onMemberClick={handleMemberClick}

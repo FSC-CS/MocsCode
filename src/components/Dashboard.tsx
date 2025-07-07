@@ -67,7 +67,7 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
   const [activeTab, setActiveTab] = useState<'all' | 'owned' | 'shared'>('all');
   const [isCreating, setIsCreating] = useState(false);
   const [projects, setProjects] = useState<DashboardProject[]>([]);
-  const [projectCollaborators, setProjectCollaborators] = useState<Record<string, {id: string, email: string, username: string, display_name: string, avatar_url: string | null}[]>>({});
+  const [projectCollaborators, setProjectCollaborators] = useState<Record<string, {id: string, email: string, username: string, avatar_url: string | null}[]>>({});
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentDeletingId, setCurrentDeletingId] = useState<string | null>(null);
   const [isLeaving, setIsLeaving] = useState(false);
@@ -94,8 +94,8 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
     return `hsl(${hue}, 70%, 80%)`;
   };
 
-  const generateUserInitials = (user: { display_name?: string; username?: string; email?: string }): string => {
-    const name = user.display_name || user.username || user.email || 'U';
+  const generateUserInitials = (user: { username?: string; email?: string }): string => {
+    const name = user.username || user.email || 'U';
     return name
       .split(' ')
       .map(part => part[0]?.toUpperCase() || '')
@@ -155,9 +155,8 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
           .map((item: any) => ({
             id: item.user_id,
             email: item.user?.email || '',
-            username: item.user?.username || '',
-            display_name: item.user?.display_name || '',
-            avatar_url: item.user?.avatar_url || null
+            username: item.user?.name || '',
+            avatar_url: item.user?.avatar_url || null,
           }));
           
         setProjectCollaborators(prev => ({
@@ -541,6 +540,14 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
   // Calculate filtered projects
   const filteredProjects = getFilteredProjects();
 
+  const getInitials = (dbUser: any): string => {
+    if (!dbUser || !dbUser.name) {
+      return 'U'; // Default fallback if dbUser or dbUser.name is null/undefined
+    }
+    const name = dbUser.name;
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+  };
+
   return (
     <div className="min-h-screen dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
       <header className="bg-white dark:bg-slate-900/95 dark:backdrop-blur-sm shadow-lg dark:shadow-indigo-900/20 border-b dark:border-slate-700">
@@ -614,6 +621,7 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
                       avatar_url={dbUser?.avatar_url}
                       size="sm"
                       className="ring-2 ring-transparent hover:ring-blue-300 transition-all duration-200"
+                      fallbackInitials={getInitials(dbUser)}
                     />
                   </div>
                 ) : (
@@ -867,7 +875,7 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
                       id: user.id,
                       initials: generateUserInitials(user),
                       color: stringToColor(user.email || user.id),
-                      name: user.display_name || user.username || user.email || 'U',
+                      name: user.username || user.email || 'U',
                       email: user.email
                     })) || []
                   }}

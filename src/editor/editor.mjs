@@ -55,6 +55,7 @@ import parserHTML from "prettier/parser-html";
 import parserMarkdown from "prettier/parser-markdown";
 import parserYAML from "prettier/parser-yaml";
 import parserGraphql from "prettier/parser-graphql";
+import prettierPluginJava from 'prettier-plugin-java';
 
 import { yCollab } from 'y-codemirror.next';
 
@@ -77,6 +78,7 @@ const prettierParsers = {
   markdown: { parser: "markdown", plugin: parserMarkdown },
   yaml: { parser: "yaml", plugin: parserYAML },
   graphql: { parser: "graphql", plugin: parserGraphql },
+  java: { parser: "java", plugin: prettierPluginJava },
 };
 
 
@@ -264,8 +266,6 @@ export function createEditorView({
 }) {
   const langExt = getLanguageExtension(language);
 
-  console.log("DATA", ytext, provider, yCollab);
-
   // Compose extensions
   const extensions = [
     basicSetup,
@@ -340,8 +340,9 @@ export function createEditorView({
         run: indentLess
       },
       {
-        key: 'Ctrl-Alt-F',
+        key: 'Mod-Shift-f',
         run: (view) => {
+          console.log("FORMAT");
           try {
             // Detect language
             const parserInfo = prettierParsers[language];
@@ -352,15 +353,23 @@ export function createEditorView({
             }
 
             const unformatted = view.state.doc.toString();
-            const formatted = prettier.format(unformatted, {
-              parser: parserInfo.parser,
-              plugins: [parserInfo.plugin],
-              semi: true,
-              singleQuote: true,
-              trailingComma: 'es5',
-              printWidth: 120,
-              tabWidth: view.state.tabSize,
-            });
+
+            async function formatCode(unformatted) {
+              const formatted = await prettier.format(unformatted, {
+                parser: parserInfo.parser,
+                plugins: [parserInfo.plugin],
+                semi: true,
+                singleQuote: true,
+                trailingComma: 'es5',
+                printWidth: 120,
+                tabWidth: view.state.tabSize,
+              });
+              console.log(formatted);
+            }
+            
+            formatCode();
+
+            console.log("FORMATTED", formatted);
             view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: formatted } });
           } catch (err) {
             // Optionally show an error to the user

@@ -277,6 +277,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
                   <UserAvatar 
                     avatar_url={currentUser.user.avatar_url}
                     size="sm"
+                    fallbackInitials={getInitials(currentUser)}
                   />
                 ) : (
                   getInitials(currentUser)

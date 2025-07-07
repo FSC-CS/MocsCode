@@ -32,9 +32,6 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   const sessionRef = useRef(0);
   const latestOnChangeRef = useRef(onChange);
 
-  console.log("YTEXT", ytext.toString());
-  console.log("Value", value);
-
   // Always keep latest onChange in the ref
   useEffect(() => {
     latestOnChangeRef.current = onChange;

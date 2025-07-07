@@ -13,7 +13,7 @@ import { ApiConfig, ChatMessage } from '@/lib/api/types';
 type SocketMessage = {
   id: string;
   user_id: string;
-  user: string;
+  username: string;
   content: string;
   timestamp: string;
   room: string;
@@ -97,7 +97,14 @@ const ChatPanel = ({
   const [currentRoom, setCurrentRoom] = useState('General Discussion');
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [isConnected, setIsConnected] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loadingStates, setLoadingStates] = useState<{
+    sending: boolean;
+    messageIds: { [key: string]: { editing?: boolean; deleting?: boolean } };
+  }>({
+    sending: false,
+    messageIds: {},
+  });
+  const [joinedRooms, setJoinedRooms] = useState<string[]>([]); // Add state to track joined rooms
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null); // Ref for scrollable chat container
 
@@ -121,14 +128,14 @@ const ChatPanel = ({
     let mounted = true;
     
     async function fetchMessages() {
-      setLoading(true);
+      setLoadingMore(true);
       
       try {
         // Get room id using project id and room name
         const { data: roomId } = await chatRoomApi.getRoomIdByNameAndProject(currentRoom, projectId);
         
         if (!projectId || !projectMembers || projectMembers.length === 0) {
-          setLoading(false);
+          setLoadingMore(false);
           return;
         }
 
@@ -156,7 +163,7 @@ const ChatPanel = ({
       } catch (error) {
         console.error('Error fetching messages:', error);
       } finally {
-        setLoading(false);
+        setLoadingMore(false);
       }
     }
     
@@ -174,13 +181,13 @@ const ChatPanel = ({
     if (e) e.preventDefault();
     if (!message.trim() || !currentUser) return;
     
-    setLoading(true);
+    setLoadingStates(prev => ({ ...prev, sending: true }));
     
     try {
       // Get projectId from ChatPanel prop      
       if (!projectId) {
         console.error('No project ID available');
-        setLoading(false);
+        setLoadingStates(prev => ({ ...prev, sending: false }));
         return;
       }
 
@@ -189,7 +196,7 @@ const ChatPanel = ({
       
       if (!roomId) {
         console.error('Could not resolve room ID');
-        setLoading(false);
+        setLoadingStates(prev => ({ ...prev, sending: false }));
         return;
       }
 
@@ -219,10 +226,10 @@ const ChatPanel = ({
         
         // Also emit to socket for real-time updates to other users
         if (socket && isConnected) {
-          socket.emit('message', {
+          socket.emit('send_message', {
             id: res.data.id,
             user_id: currentUser.id,
-            user: currentUser.name,
+            username: currentUser.name,
             content: message,
             timestamp: new Date().toISOString(),
             room: currentRoom,
@@ -234,7 +241,7 @@ const ChatPanel = ({
     } catch (error) {
       console.error('Error sending message:', error);
     } finally {
-      setLoading(false);
+      setLoadingStates(prev => ({ ...prev, sending: false }));
     }
   };
 
@@ -326,22 +333,25 @@ const ChatPanel = ({
   const saveEdit = async (messageId: string) => {
     if (!editText.trim()) return;
     
-    setLoading(true);
+    setLoadingStates(prev => ({
+      ...prev,
+      messageIds: {
+        ...prev.messageIds,
+        [messageId]: { ...prev.messageIds[messageId], editing: true }
+      }
+    }));
     
     try {
-      const msg = messages.find((m) => m.id === messageId);
-      if (!msg) return;
-
-      const res = await chatApi.update<ChatMessage>(messageId, { content: editText });
+      const result = await chatApi.update<ChatMessage>(messageId, {
+        content: editText,
+      });
       
-      if (res?.data) {
-        setMessages((msgs) => 
-          msgs.map((m) => 
-            m.id === messageId 
-              ? { ...m, message: editText, content: editText } 
-              : m
-          )
-        );
+      if (result?.data) {
+        setMessages(messages.map(msg => 
+          msg.id === messageId 
+            ? { ...msg, content: editText } 
+            : msg
+        ));
       }
       
       setEditingId(null);
@@ -349,21 +359,39 @@ const ChatPanel = ({
     } catch (error) {
       console.error('Error updating message:', error);
     } finally {
-      setLoading(false);
+      setLoadingStates(prev => ({
+        ...prev,
+        messageIds: {
+          ...prev.messageIds,
+          [messageId]: { ...prev.messageIds[messageId], editing: false }
+        }
+      }));
     }
   };
 
   // Soft-delete a message in Supabase
   const deleteMessage = async (messageId: string) => {
-    setLoading(true);
+    setLoadingStates(prev => ({
+      ...prev,
+      messageIds: {
+        ...prev.messageIds,
+        [messageId]: { ...prev.messageIds[messageId], deleting: true }
+      }
+    }));
     
     try {
-      await chatApi.softDelete(messageId);
-      setMessages((msgs) => msgs.filter((m) => m.id !== messageId));
+      await chatApi.update<ChatMessage>(messageId, { is_deleted: true });
+      setMessages(messages.filter(msg => msg.id !== messageId));
     } catch (error) {
       console.error('Error deleting message:', error);
     } finally {
-      setLoading(false);
+      setLoadingStates(prev => ({
+        ...prev,
+        messageIds: {
+          ...prev.messageIds,
+          [messageId]: { ...prev.messageIds[messageId], deleting: false }
+        }
+      }));
     }
   };
 
@@ -408,7 +436,7 @@ const ChatPanel = ({
     let disconnectTimer: NodeJS.Timeout;
     
     if (!socket) {
-      newSocket = io('mocscode-backend-socketio-production.up.railway.app', {
+      newSocket = io('https://mocscode-backend-socketio-production.up.railway.app', {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 5,
@@ -436,18 +464,20 @@ const ChatPanel = ({
     const onConnect = () => {
       setIsConnected(true);
       if (currentUser) {
-        // Check if we're already in a room by looking at the socket's rooms
-        // The socket is always in a room with its own ID, so we need to check for other rooms
-        const room = Object.keys(newSocket.rooms || {});
-        const isInRoom = room.some(room => room !== newSocket.id);
+        // Check if we're already in the current room using our local state
+        const isInRoom = joinedRooms.includes(currentRoom);
         
         if (!isInRoom) {
-          newSocket.emit('enterRoom', { 
-            name: currentUser.name || 'Anonymous',
-            room: 'general',
-            user: currentUser.id,
-            email: currentUser.email
+          console.log('Joining room: ', currentRoom);
+          newSocket.emit('join_room', { 
+            userId: currentUser.id,
+            userName: currentUser.name || 'Anonymous',
+            projectId: projectId,
+            room: currentRoom,
           });
+          
+          // Update our local state to track that we've joined this room
+          setJoinedRooms(prev => [...prev, currentRoom]);
         }
       }
     };
@@ -522,8 +552,9 @@ const ChatPanel = ({
     if (!socket || !currentUser) return;
 
     const handleMessage = (msg: SocketMessage) => {
+      console.log('Received message:', msg);
       // Don't add our own messages from socket (they're already added when sending)
-      if (msg.user === currentUser.id) return;
+      if (msg.username === currentUser.id) return;
       
       // Use the server-provided ID if available, otherwise generate a new one
       const messageId = msg.id || generateMessageId();
@@ -536,10 +567,10 @@ const ChatPanel = ({
         
         const newMessage: UIMessage = {
           id: messageId,
-          user: msg.user,
+          user: msg.username,
           content: msg.content,
           timestamp: msg.timestamp,
-          color: getAvatarColor({ user_id: msg.user }),
+          color: getAvatarColor({ user_id: msg.user_id }),
           isOwn: false,
           room: msg.room,
         };
@@ -575,12 +606,12 @@ const ChatPanel = ({
       });
     };
 
-    socket.on('message', handleMessage);
+    socket.on('new_message', handleMessage);
     socket.on('userList', handleUserList);
     socket.on('activity', handleActivity);
 
     return () => {
-      socket.off('message', handleMessage);
+      socket.off('new_message', handleMessage);
       socket.off('userList', handleUserList);
       socket.off('activity', handleActivity);
     };
@@ -596,7 +627,7 @@ const ChatPanel = ({
     if (socket && currentUser && isConnected) {
       if (!isTyping) {
         setIsTyping(true);
-        socket.emit('activity', currentUser.username || currentUser.email || 'Anonymous');
+        socket.emit('typing', currentUser.username || currentUser.email || 'Anonymous');
         
         // Reset typing state after a delay
         setTimeout(() => {
@@ -702,7 +733,7 @@ const ChatPanel = ({
 
       {/* Messages */}
       <div ref={chatListRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-        {loading && messages.length === 0 && (
+        {loadingMore && messages.length === 0 && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             <span className="ml-2 text-gray-400">Loading messages...</span>
@@ -740,9 +771,9 @@ const ChatPanel = ({
                       <button
                         onClick={() => saveEdit(msg.id)}
                         className="px-3 py-1 text-sm rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                        disabled={loading}
+                        disabled={loadingStates.messageIds[msg.id]?.editing}
                       >
-                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                        {loadingStates.messageIds[msg.id]?.editing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                       </button>
                       <button
                         onClick={cancelEdit}
@@ -762,16 +793,16 @@ const ChatPanel = ({
                           <button 
                             onClick={() => startEditing(msg.id, msg.content || '')}
                             className="text-gray-300 hover:text-white p-1 rounded"
-                            disabled={loading}
+                            disabled={loadingStates.messageIds[msg.id]?.editing || loadingStates.messageIds[msg.id]?.deleting}
                           >
                             <Edit className="h-3 w-3" />
                           </button>
                           <button 
                             onClick={() => deleteMessage(msg.id)}
                             className="text-red-400 hover:bg-red-900/50 hover:text-red-300 h-6 w-6 p-1 flex items-center justify-center rounded"
-                            disabled={loading}
+                            disabled={loadingStates.messageIds[msg.id]?.editing || loadingStates.messageIds[msg.id]?.deleting}
                           >
-                            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash className="h-3 w-3" />}
+                            {loadingStates.messageIds[msg.id]?.deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash className="h-3 w-3" />}
                           </button>
                         </div>
                       )}
@@ -806,14 +837,14 @@ const ChatPanel = ({
                 sendMessage(e);
               }
             }}
-            disabled={loading || !isConnected}
+            disabled={loadingStates.sending || !isConnected}
           />
           <Button 
             type="submit" 
             className="bg-blue-600 hover:bg-blue-700"
-            disabled={!message.trim() || loading || !isConnected}
+            disabled={!message.trim() || loadingStates.sending || !isConnected}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {loadingStates.sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </form>
       </div>

@@ -45,7 +45,7 @@ import {
 
 import { syntaxTree } from '@codemirror/language';
 
-import { linter } from "@codemirror/lint";
+import { linter, lintGutter } from "@codemirror/lint";
 
 // Prettier 
 import prettier from "prettier/standalone";
@@ -114,6 +114,7 @@ function completeJSDoc(context) {
 const languageCompartment = new Compartment();
 const themeCompartment = new Compartment();
 const tabSizeCompartment = new Compartment();
+const lintCompartment = new Compartment();
 const readOnlyCompartment = new Compartment();
 const autocompleteCompartment = new Compartment();
 
@@ -229,15 +230,73 @@ const darkTheme = EditorView.theme({
 
 // --- Utility: Get language extension by name ---
 function getLanguageExtension(language) {
-  switch (language.toLowerCase()) {
-    case 'python': return python();
-    case 'java': return java();
-    case 'cpp':
-    case 'c++': return cpp();
-    case 'html': return html();
-    case 'javascript':
-    case 'js':
-    default: return javascript();
+  const lang = language.toLowerCase();
+  let extension;
+  
+  if (lang === 'javascript' || lang === 'js') {
+    extension = javascript({ jsx: true, typescript: false });
+  } else if (lang === 'typescript' || lang === 'ts') {
+    extension = javascript({ jsx: true, typescript: true });
+  } else if (lang === 'python' || lang === 'py') {
+    extension = python();
+  } else if (lang === 'java') {
+    extension = java();
+  } else if (lang === 'cpp' || lang === 'c++') {
+    extension = cpp();
+  } else if (lang === 'html') {
+    extension = html();
+  } else {
+    // Default to JavaScript if language not recognized
+    extension = javascript({ jsx: true });
+  }
+  
+  return [
+    extension,
+    // Add linting for supported languages
+    lintCompartment.of(getLinterForLanguage(lang))
+  ];
+}
+
+// Import our custom linters
+import { createJSHintLinter } from './jshint-linter.mjs';
+import { getLinterForLanguage as getLangLinter, cleanup as cleanupLinters } from './language-linters-fixed.mjs';
+
+// Get linter for a specific language
+function getLinterForLanguage(language) {
+  try {
+    const lang = language.toLowerCase();
+    
+    // Use JSHint for JavaScript/TypeScript files
+    if (['javascript', 'js', 'typescript', 'ts', 'jsx', 'tsx'].includes(lang)) {
+      try {
+        return [
+          lintGutter(),
+          createJSHintLinter()
+        ];
+      } catch (error) {
+        console.warn('Failed to initialize JSHint linter:', error);
+        return [];
+      }
+    }
+    
+    // Use language-specific linters for other languages
+    try {
+      const linters = getLangLinter(lang);
+      if (linters && linters.length > 0) {
+        return [
+          lintGutter(),
+          ...linters
+        ];
+      }
+    } catch (error) {
+      console.warn(`Failed to initialize linter for ${language}:`, error);
+    }
+    
+    // No linter available for this language
+    return [];
+  } catch (error) {
+    console.error('Error setting up linter:', error);
+    return [];
   }
 }
 

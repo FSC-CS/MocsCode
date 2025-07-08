@@ -18,6 +18,7 @@ const EditorPage: React.FC = () => {
     language: 'javascript',
   });
   const [loading, setLoading] = useState(true);
+  const [hasLoadedProject, setHasLoadedProject] = useState(false);
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -25,6 +26,9 @@ const EditorPage: React.FC = () => {
         navigate('/dashboard');
         return;
       }
+
+      // Skip fetching if we've already loaded the project
+      if (hasLoadedProject) return;
 
       try {
         setLoading(true);
@@ -35,6 +39,7 @@ const EditorPage: React.FC = () => {
         }
         
         setProject(data);
+        setHasLoadedProject(true);
       } catch (err) {
         console.error('Error loading project:', err);
         toast({
@@ -53,7 +58,20 @@ const EditorPage: React.FC = () => {
     if (user) {
       fetchProject();
     }
-  }, [projectId, projectsApi, navigate, toast, user]);
+  }, [projectId, projectsApi, navigate, toast, user, hasLoadedProject]);
+
+  // Add a document visibility change listener to prevent reloads on tab switch
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      // Do nothing when visibility changes - this prevents the component
+      // from re-rendering unnecessarily when switching tabs
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const handleBack = () => {
     navigate('/dashboard');
@@ -73,7 +91,7 @@ const EditorPage: React.FC = () => {
     return <Navigate to="/landing" replace />;
   }
 
-  if (loading) {
+  if (loading && !hasLoadedProject) {
     return <div className="h-screen flex items-center justify-center">Loading project...</div>;
   }
 

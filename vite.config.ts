@@ -12,6 +12,14 @@ export default defineConfig(({ mode, command }) => ({
   plugins: [
     react(),
   ],
+  define: {
+    // Define global constants
+    'process.env': {},
+    'process.platform': '"browser"',
+    'process.version': JSON.stringify('18.0.0'),
+    'global': 'window',
+    'browser': 'true',
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

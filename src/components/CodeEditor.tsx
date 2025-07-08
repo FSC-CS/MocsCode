@@ -1025,7 +1025,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Resizable File Explorer with Source Control */}
+        {/* Resizable File Explorer with Collaborators */}
         <ResizablePanel
           direction="horizontal"
           initialSize={fileExplorerWidth}
@@ -1034,7 +1034,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
           onResize={setFileExplorerWidth}
           className="bg-gray-800 border-r border-gray-700 flex flex-col"
         >
-          <div className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <FileExplorer 
               currentFile={openFiles[activeFileIndex]?.name || ''} 
               onFileSelect={openFile}
@@ -1042,8 +1042,14 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
               projectId={project.id}
             />
           </div>
-          <div className="h-64">
-            <SourceControlPanel />
+          <div className="border-t border-gray-700 h-64 overflow-y-auto">
+            <CollaboratorPanel 
+              projectId={project.id}
+              onMemberClick={handleMemberClick}
+              onInviteClick={() => setShowShareDialog(true)}
+              refreshTrigger={memberRefreshTrigger}
+              onlineUsers={onlineUsers}
+            />
           </div>
         </ResizablePanel>
 
@@ -1062,28 +1068,28 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
             {/* Editor Section */}
             <div className="overflow-hidden" style={{ height: editorHeight, minHeight: 100 }}>
               {openFiles.length === 0 ? (
-  <div className="flex flex-col items-center justify-center h-full w-full text-center select-none">
-    <div className="mx-auto max-w-md p-8 rounded-lg bg-gray-900/80 border border-gray-700 shadow-lg">
-      <h2 className="text-2xl font-bold mb-2 text-blue-400">Welcome to the Code Editor</h2>
-      <p className="text-gray-300 mb-4">To get started, open or create a file from the file explorer panel on the left.</p>
-      <div className="flex justify-center">
-        <FileText className="h-10 w-10 text-blue-400" />
-      </div>
-    </div>
-  </div>
-) : (
-  activeFile && (
-    <CodeMirrorEditor
-      value={activeFile.content.toString()}
-      language={activeFile.language}
-      tabSize={tabSize}
-      autocomplete={autocomplete}
-      ytext={activeFile.ytext}
-      provider={activeFile.provider}
-      onChange={updateFileContent}
-    />
-  )
-)}
+                <div className="flex flex-col items-center justify-center h-full w-full text-center select-none">
+                  <div className="mx-auto max-w-md p-8 rounded-lg bg-gray-900/80 border border-gray-700 shadow-lg">
+                    <h2 className="text-2xl font-bold mb-2 text-blue-400">Welcome to the Code Editor</h2>
+                    <p className="text-gray-300 mb-4">To get started, open or create a file from the file explorer panel on the left.</p>
+                    <div className="flex justify-center">
+                      <FileText className="h-10 w-10 text-blue-400" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                activeFile && (
+                  <CodeMirrorEditor
+                    value={activeFile.content.toString()}
+                    language={activeFile.language}
+                    tabSize={tabSize}
+                    autocomplete={autocomplete}
+                    ytext={activeFile.ytext}
+                    provider={activeFile.provider}
+                    onChange={updateFileContent}
+                  />
+                )
+              )}
             </div>
 
             {/* Resize Handle */}
@@ -1132,7 +1138,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
           </div>
         </div>
 
-        {/* Resizable Tabbed Panel for Chat/Collaborators */}
+        {/* Permanent Chat Panel */}
         <ResizablePanel
           direction="horizontal"
           initialSize={chatPanelWidth}
@@ -1141,53 +1147,21 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
           onResize={setChatPanelWidth}
           className="bg-gray-800 border-l border-gray-700 flex flex-col"
         >
-          {/* Tab Bar */}
-          <div className="flex items-center border-b border-gray-700">
-            <button
-              className={cn(
-                'flex-1 px-4 py-2 text-sm font-medium transition-all',
-                activeSidebarTab === 'chat' ? 'bg-gray-900 text-blue-400' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              )}
-              onClick={() => setActiveSidebarTab('chat')}
-              type="button"
-            >
-              Chat
-            </button>
-            <button
-              className={cn(
-                'flex-1 px-4 py-2 text-sm font-medium transition-all',
-                activeSidebarTab === 'collaborators' ? 'bg-gray-900 text-blue-400' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              )}
-              onClick={() => setActiveSidebarTab('collaborators')}
-              type="button"
-            >
-              Collaborators
-            </button>
+          <div className="px-3 py-2 text-sm font-medium text-gray-300 bg-gray-800 border-b border-gray-700">
+            Chat
           </div>
-
-          {/* Tab Content */}
           <div className="flex-1 min-h-0 overflow-y-auto">
-            {activeSidebarTab === 'chat' ? (
-              <ChatPanel 
-                collaborators={collaborators}
-                projectMembers={projectMembers}
-                currentUser={dbUser}
-                isLoadingMembers={isLoadingMembers}
-                memberOperationStatus={memberOperationStatus}
-                onMemberClick={handleMemberClick}
-                onInviteClick={() => setShowShareDialog(true)}
-                canManageMembers={canManageProject()}
-                projectId={project.id}
-              />
-            ) : (
-              <CollaboratorPanel 
-                projectId={project.id}
-                onMemberClick={handleMemberClick}
-                onInviteClick={() => setShowShareDialog(true)}
-                refreshTrigger={memberRefreshTrigger}
-                onlineUsers={onlineUsers}
-              />
-            )}
+            <ChatPanel 
+              collaborators={collaborators}
+              projectMembers={projectMembers}
+              currentUser={dbUser}
+              isLoadingMembers={isLoadingMembers}
+              memberOperationStatus={memberOperationStatus}
+              onMemberClick={handleMemberClick}
+              onInviteClick={() => setShowShareDialog(true)}
+              canManageMembers={canManageProject()}
+              projectId={project.id}
+            />
           </div>
         </ResizablePanel>
       </div>

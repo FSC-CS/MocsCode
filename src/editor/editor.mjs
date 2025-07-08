@@ -47,7 +47,6 @@ import { syntaxTree } from '@codemirror/language';
 
 import { linter } from "@codemirror/lint";
 
-
 // Prettier 
 import prettier from "prettier/standalone";
 // Prettier parser plugins (Autoformatter)

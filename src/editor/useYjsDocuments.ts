@@ -10,6 +10,8 @@ export function useYjsDocuments() {
       return docs[roomId];
     }
 
+    console.log("TEST");
+
     return new Promise<{ ydoc: Y.Doc, provider: WebsocketProvider, ytext: Y.Text }>((resolve) => {
       const ydoc = new Y.Doc();
       const provider = new WebsocketProvider("wss://mocscode-backend-yjs-production.up.railway.app", roomId, ydoc);

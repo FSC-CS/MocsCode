@@ -55,6 +55,8 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
           viewRef.current.destroy();
         }
 
+        console.log("CURSOR");
+
         const view = mod.createEditorView({
           parent: editorRef.current,
           doc: value,

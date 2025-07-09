@@ -20,6 +20,22 @@ export default function Callback() {
           throw new Error(errorDescription || errorParam)
         }
 
+        // Check if we have a hash with access_token (common after domain changes)
+        if (window.location.hash && window.location.hash.includes('access_token')) {
+          // Let Supabase handle the hash fragment
+          const { data, error } = await supabase.auth.getSession()
+          
+          if (error) {
+            throw error
+          }
+          
+          if (data?.session) {
+            // User is authenticated, redirect to dashboard
+            navigate('/dashboard', { replace: true })
+            return
+          }
+        }
+
         // Use getUser() as primary method - more reliable for OAuth callbacks
         const { data: { user }, error } = await supabase.auth.getUser()
         

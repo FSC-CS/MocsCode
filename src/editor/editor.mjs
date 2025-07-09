@@ -418,7 +418,6 @@ export function createEditorView({
             }
 
             async function formatCode(unformatted) {
-              console.log("FORMAT CODE", parserInfo);
               const formatted = await prettier.format(unformatted, {
                 parser: parserInfo.parser,
                 plugins: parserInfo.plugin,
@@ -435,7 +434,6 @@ export function createEditorView({
 
             formatCode(unformatted)
               .then(formatted => {
-                console.log("FORMATTED", formatted);
                 view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: formatted } });
               })
               .catch(err => {

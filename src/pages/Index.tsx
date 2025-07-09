@@ -4,7 +4,6 @@ import { Navigate } from 'react-router-dom';
 import Dashboard from '../components/Dashboard';
 
 const Index = () => {
-  console.log("Index");
   const { user, isLoading } = useAuth(); 
 
   // Wait for auth to be ready

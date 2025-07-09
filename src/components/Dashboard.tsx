@@ -316,7 +316,6 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
   };
 
   const createProject = async (language: string, name: string): Promise<void> => {
-    console.log("CRE");
     if (!user) {
       toast({
         title: 'Error',

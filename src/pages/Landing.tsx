@@ -153,8 +153,7 @@ const Landing = () => {
             <span className="text-lg font-semibold">MocsCode</span>
           </div>
           <p className="text-slate-400">
-            2024 MocsCode. Empowering collaborative development.
-            © 2024 MocsCode. Empowering collaborative development.
+            © {new Date().getFullYear()} MocsCode. Empowering collaborative development.
           </p>
         </div>
       </footer>

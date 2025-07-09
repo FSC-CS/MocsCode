@@ -106,9 +106,12 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [output, setOutput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
-  const [showCollaborators, setShowCollaborators] = useState(false);
-  const [editorHeight, setEditorHeight] = useState(400);
-  const [fileExplorerWidth, setFileExplorerWidth] = useState(256);
+  const [showCollaborators, setShowCollaborators] = useState(false); // State for resizable panels and sidebar
+  const [fileExplorerWidth, setFileExplorerWidth] = useState(250);
+  const [editorHeight, setEditorHeight] = useState(70); // Percentage as number for easier calculations
+  const [outputHeight, setOutputHeight] = useState(30); // Percentage as number for easier calculations
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const collapsedSidebarWidth = 40; // Width when collapsed
   const [chatPanelWidth, setChatPanelWidth] = useState(320);
 
   const { getOrCreateDoc, destroyDoc } = useYjsDocuments();
@@ -911,76 +914,78 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                   )}
                 </div>
               )}
-              <Badge className="bg-orange-100 text-orange-800">{project?.language}</Badge>
-              {currentUserRole && (
-                <Badge variant="outline" className="text-gray-300 border-gray-500">
-                  {currentUserRole === 'owner' ? 'Owner' : 
-                   currentUserRole === 'editor' ? 'Editor' : 'Viewer'}
-                </Badge>
-              )}
-              
-              {/* Editor Settings Dropdown */}
-              <Popover onOpenChange={setSettingsOpen} open={settingsOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 ml-2 text-gray-400 hover:text-white hover:bg-gray-700"
-                    aria-label="Editor Settings"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setSettingsOpen(!settingsOpen);
-                    }}
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent 
-                  align="end" 
-                  className="w-56 p-4"
-                  onInteractOutside={(e) => {
-                    // Prevent closing when clicking on the trigger button
-                    const target = e.target as HTMLElement;
-                    if (target.closest('[aria-label="Editor Settings"]')) {
-                      e.preventDefault();
-                    }
-                  }}
-                >
-                  <div className="space-y-4">
-                    <h4 className="font-medium leading-none">Editor Settings</h4>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="tab-size">Tab Size</Label>
-                      <select
-                        id="tab-size"
-                        value={tabSize}
-                        onChange={(e) => setTabSize(Number(e.target.value))}
-                        className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <option value={2}>2 spaces</option>
-                        <option value={4}>4 spaces</option>
-                        <option value={8}>8 spaces</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="autocomplete">Autocomplete</Label>
-                      <Switch
-                        id="autocomplete"
-                        checked={autocomplete}
-                        onCheckedChange={(checked) => {
-                          setAutocomplete(checked);
-                        }}
-                        className="data-[state=checked]:bg-blue-600"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
+            </div>
+          </div>
+
+          {/* MocsCode Branding */}
+          <div className="absolute left-1/2 transform -translate-x-1/2">
+            <div className="flex items-center">
+              <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent px-4 py-1">
+                MocsCode
+              </span>
             </div>
           </div>
 
           <div className="flex items-center space-x-3">
+            {/* Editor Settings Dropdown */}
+            <Popover onOpenChange={setSettingsOpen} open={settingsOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-700"
+                  aria-label="Editor Settings"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setSettingsOpen(!settingsOpen);
+                  }}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent 
+                align="end" 
+                className="w-56 p-4"
+                onInteractOutside={(e) => {
+                  // Prevent closing when clicking on the trigger button
+                  const target = e.target as HTMLElement;
+                  if (target.closest('[aria-label="Editor Settings"]')) {
+                    e.preventDefault();
+                  }
+                }}
+              >
+                <div className="space-y-4">
+                  <h4 className="font-medium leading-none">Editor Settings</h4>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="tab-size">Tab Size</Label>
+                    <select
+                      id="tab-size"
+                      value={tabSize}
+                      onChange={(e) => setTabSize(Number(e.target.value))}
+                      className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <option value={2}>2 spaces</option>
+                      <option value={4}>4 spaces</option>
+                      <option value={8}>8 spaces</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="autocomplete">Autocomplete</Label>
+                    <Switch
+                      id="autocomplete"
+                      checked={autocomplete}
+                      onCheckedChange={(checked) => {
+                        setAutocomplete(checked);
+                      }}
+                      className="data-[state=checked]:bg-blue-600"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
             {/* Only show run button if user has edit permissions */}
             {(currentUserRole === 'owner' || currentUserRole === 'editor') && (
               <Button
@@ -1025,36 +1030,91 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Resizable File Explorer with Collaborators */}
-        <ResizablePanel
-          direction="horizontal"
-          initialSize={fileExplorerWidth}
-          minSize={180}
-          maxSize={600}
-          onResize={setFileExplorerWidth}
-          className="bg-gray-800 border-r border-gray-700 flex flex-col"
-        >
-          <div className="flex-1 overflow-y-auto">
-            <FileExplorer 
-              currentFile={openFiles[activeFileIndex]?.name || ''} 
-              onFileSelect={openFile}
-              onFileRenamed={handleFileRenamed}
-              projectId={project.id}
-            />
+        {/* Left Sidebar with Toggle */}
+        <div className="flex flex-row h-full">
+          {/* Sidebar Content */}
+          <div 
+            className={`bg-gray-800 border-r border-gray-700 flex flex-col transition-all duration-200 ${
+              isSidebarCollapsed ? 'overflow-hidden' : ''
+            }`}
+            style={{
+              width: isSidebarCollapsed ? 0 : fileExplorerWidth - 8,
+              minWidth: isSidebarCollapsed ? 0 : 172,
+              maxWidth: isSidebarCollapsed ? 0 : 592,
+              flexShrink: 0,
+            }}
+          >
+            {!isSidebarCollapsed && (
+              <>
+                <div className="flex-1 overflow-y-auto">
+                  <FileExplorer 
+                    currentFile={openFiles[activeFileIndex]?.name || ''} 
+                    onFileSelect={openFile}
+                    onFileRenamed={handleFileRenamed}
+                    projectId={project.id}
+                  />
+                </div>
+                <div className="border-t border-gray-700 h-64 overflow-y-auto">
+                  <CollaboratorPanel 
+                    projectId={project.id}
+                    onMemberClick={handleMemberClick}
+                    onInviteClick={() => setShowShareDialog(true)}
+                    refreshTrigger={memberRefreshTrigger}
+                    onlineUsers={onlineUsers}
+                  />
+                </div>
+              </>
+            )}
           </div>
-          <div className="border-t border-gray-700 h-64 overflow-y-auto">
-            <CollaboratorPanel 
-              projectId={project.id}
-              onMemberClick={handleMemberClick}
-              onInviteClick={() => setShowShareDialog(true)}
-              refreshTrigger={memberRefreshTrigger}
-              onlineUsers={onlineUsers}
-            />
+          
+          {/* Toggle Button Column */}
+          <div className="w-8 h-full flex flex-col bg-gray-800 border-r border-gray-700">
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="w-full h-16 flex items-center justify-center bg-gray-700 hover:bg-blue-600 text-white transition-all duration-200"
+              aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <div className={`transform transition-transform duration-200 ${isSidebarCollapsed ? 'rotate-180' : ''}`}>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="16" 
+                  height="16" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 18l-6-6 6-6"/>
+                </svg>
+              </div>
+            </button>
+            
+            {!isSidebarCollapsed && (
+              <div className="flex-1 w-full flex items-center justify-center">
+                <div className="h-16 w-px bg-gray-600"></div>
+              </div>
+            )}
+            
+            {isSidebarCollapsed && (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="transform -rotate-90 whitespace-nowrap text-xs font-medium text-gray-400 tracking-wider">
+                  {project.name}
+                </span>
+              </div>
+            )}
           </div>
-        </ResizablePanel>
+        </div>
 
-        {/* Editor and Output */}
-        <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
+        {/* Main Editor Area */}
+        <div 
+          className="flex-1 flex flex-col overflow-hidden relative"
+          style={{
+            minWidth: 0,
+            width: `calc(100% - ${isSidebarCollapsed ? '40px' : `${fileExplorerWidth}px`})`,
+          }}
+        >
           {/* File Tabs */}
           <EditorTabBar
             openFiles={openFiles}
@@ -1066,7 +1126,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
           {/* Main Editor and Output Container */}
           <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
             {/* Editor Section */}
-            <div className="overflow-hidden" style={{ height: editorHeight, minHeight: 100 }}>
+            <div className="overflow-hidden" style={{ height: `${editorHeight}%`, minHeight: 100 }}>
               {openFiles.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full w-full text-center select-none">
                   <div className="mx-auto max-w-md p-8 rounded-lg bg-gray-900/80 border border-gray-700 shadow-lg">
@@ -1125,7 +1185,13 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
             />
 
             {/* Output Panel */}
-            <div className="bg-gray-800 border-t border-gray-700 flex-1 min-h-[100px] overflow-auto" style={{ minHeight: 100 }}>
+            <ResizablePanel
+              direction="vertical"
+              initialSize={200}
+              minSize={100}
+              maxSize={500}
+              className="bg-gray-800 border-t border-gray-700 flex flex-col"
+            >
               <OutputPanel 
                 output={output} 
                 isRunning={isRunning}
@@ -1134,7 +1200,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                 runScript={runScript}
                 setRunScript={setRunScript} 
               />
-            </div>
+            </ResizablePanel>
           </div>
         </div>
 

@@ -2,10 +2,16 @@
 
 import { ApiClient } from './client';
 import { ApiConfig, ApiResponse, Project, PaginatedResponse, PaginationParams, SortParams } from './types';
+import { ProjectFilesApi } from './project-files';
+import { createLanguageSpecificFiles } from './project-templates';
+import { supabase } from '@/lib/supabase';
 
 export class ProjectsApi extends ApiClient {
+  private config: ApiConfig;
+
   constructor(config: ApiConfig) {
     super(config, 'projects');
+    this.config = config;
   }
 
   async getProject(id: string): Promise<ApiResponse<Project & { user_role?: string; can_edit?: boolean }>> {
@@ -158,6 +164,7 @@ export class ProjectsApi extends ApiClient {
             description: data.description,
             owner_id: data.owner_id,
             is_public: data.is_public,
+            language: data.language
           }
         ])
         .select()
@@ -179,6 +186,31 @@ export class ProjectsApi extends ApiClient {
       return {
         data: null,
         error: error instanceof Error ? error : new Error('An unexpected error occurred')
+      };
+    }
+  }
+
+  async createProjectTemplate(projectId: string, language: string): Promise<ApiResponse<Project>> {
+    try {
+      // Get project to ensure it exists and we have permissions
+      const { data: project, error: projectError } = await this.getProject(projectId);
+      if (projectError || !project) {
+        return { data: null, error: projectError || new Error('Project not found') };
+      }
+      
+      // Create project files based on language
+      const projectFilesApi = new ProjectFilesApi(this.config);
+      
+      // Create template files based on language
+      await createLanguageSpecificFiles(projectId, language, projectFilesApi);
+      
+      // Return the project
+      return { data: project, error: null };
+    } catch (error) {
+      console.error('Error creating project template:', error);
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error('Failed to create project template')
       };
     }
   }

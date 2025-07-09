@@ -23,6 +23,7 @@ import ResizablePanel from './ResizablePanel';
 import CollaboratorPanel from '@/components/CollaboratorPanel';
 import { useYjsDocuments } from '@/editor/useYjsDocuments';
 import { runJudge0Code } from '@/lib/api/judge0';
+import { getLanguageScripts } from '@/lib/utils/script-templates';
 import EditorTabBar from './editor/EditorTabBar';
 
 // Types
@@ -133,8 +134,9 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   const editorRef = useRef(null);
 
   // Bash scripts config state
-  const [compileScript, setCompileScript] = useState('javac Main.java');
-  const [runScript, setRunScript] = useState('java Main');
+  // Initialize with empty scripts - will be set based on project language
+  const [compileScript, setCompileScript] = useState('');
+  const [runScript, setRunScript] = useState('');
 
   // At the top of your CodeEditor component
   const collaborativeInstanceRef = useRef<any>(null); // No re-renders
@@ -308,6 +310,16 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   const effectiveCollaborators = useMemo(() => {
     return collaborators && collaborators.length > 0 ? collaborators : collaboratorsList;
   }, [collaborators, collaboratorsList]);
+
+  // Initialize scripts based on project language
+  useEffect(() => {
+    console.log("LANGUAGE: ", project?.language);
+    if (project?.language) {
+      const scripts = getLanguageScripts(project.language);
+      setCompileScript(scripts.compile);
+      setRunScript(scripts.run);
+    }
+  }, [project?.language]);
 
   // Cleanup on unmount
   useEffect(() => {

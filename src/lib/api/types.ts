@@ -34,7 +34,6 @@ export type ProjectFile = {
   content?: string;
   file_type: 'file' | 'directory';
   mime_type?: string;
-  size_bytes: number;
   parent_id?: string;
   created_at: string;
   updated_at: string;

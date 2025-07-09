@@ -334,7 +334,8 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
         name: projectName,
         description: `A new ${language} project`,
         owner_id: user.id,
-        is_public: false
+        is_public: false,
+        language: language,
       });
 
       if (error) {
@@ -356,6 +357,9 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
         });
         return;
       }
+
+      // Project template API
+      await projectsApi.createProjectTemplate(project.id, language);
 
       const newProject: DashboardProject = {
         id: project.id,

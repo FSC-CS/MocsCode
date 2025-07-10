@@ -52,9 +52,10 @@ export default function ResetPassword() {
 
   // Check if user is authenticated
   if (!user) {
-    navigate('/signin');
+    //navigate('/signin');
     return null;
   }
+  console.log("User is authenticated", user);
 
   // Handle password reset submission
   async function onSubmit(data: ResetPasswordForm) {

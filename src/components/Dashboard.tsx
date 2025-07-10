@@ -83,6 +83,7 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
   const [currentLeavingId, setCurrentLeavingId] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [activeProjectsCount, setActiveProjectsCount] = useState<number>(0);
 
   const supportedLanguages = [
     { name: 'Java', extension: 'java' },
@@ -192,14 +193,30 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
           variant: 'destructive'
         });
         setProjects([]);
+        setActiveProjectsCount(0);
         return;
       }
       if (!data || !data.items || data.items.length === 0) {
         setProjects([]);
+        setActiveProjectsCount(0);
         return;
       }
       
       const dashboardProjects: DashboardProject[] = [];
+      
+      // Calculate projects active within last 24 hours
+      const now = new Date();
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1); // 24 hours ago
+      
+      // Count projects updated in the last 24 hours
+      const activeProjects = data.items.filter(p => {
+        if (!p.updated_at) return false;
+        const updatedDate = new Date(p.updated_at);
+        return updatedDate >= yesterday;
+      });
+      
+      setActiveProjectsCount(activeProjects.length);
       
       // First create all projects with basic info
       for (const p of data.items) {
@@ -232,6 +249,7 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
         });
       }
       setProjects([]);
+      setActiveProjectsCount(0);
     } finally {
       setIsProjectsLoading(false);
     }
@@ -819,7 +837,7 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-white">Active Today</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">2</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{activeProjectsCount}</p>
               </div>
               <Clock className="h-12 w-12 text-purple-500" />
             </div>

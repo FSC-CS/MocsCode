@@ -407,170 +407,84 @@ const ChatPanel = ({
     setEditText('');
   };
 
-  // Handle visibility change for socket reconnection
+  // Initialize socket connection and handle project/room changes
   useEffect(() => {
-    if (!socket) return;
+    if (!currentUser || !projectId) return;
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // Only reconnect if actually disconnected
-        if (socket.disconnected && !isConnected) {
-          socket.connect();
-        }
+    // Create a new socket instance when project changes or user changes
+    const newSocket = io('https://mocscode-backend-socketio-production.up.railway.app', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+      autoConnect: true,
+      forceNew: true, // Force new connection to ensure fresh state
+      rememberUpgrade: true,
+      upgrade: true,
+      query: {
+        user: currentUser.id,
+        username: currentUser.name || 'Anonymous',
+        clientType: 'web',
+        projectId: projectId // Include projectId in the connection query
       }
-      // Don't force disconnect when tab becomes hidden
-    };
+    });
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [socket, isConnected]);
-
-  // Initialize socket connection
-  useEffect(() => {
-    if (!currentUser) return;
-
-    // Create a single socket instance if it doesn't exist
-    let newSocket: typeof Socket;
-    let disconnectTimer: NodeJS.Timeout;
-    
-    if (!socket) {
-      newSocket = io('https://mocscode-backend-socketio-production.up.railway.app', {
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 20000,
-        autoConnect: true,
-        forceNew: false,
-        rememberUpgrade: true,
-        upgrade: true,
-        // Add a unique connection ID to help with debugging
-        query: {
-          user: currentUser.id,
-          username: currentUser.name || 'Anonymous',
-          clientType: 'web'
-        }
-      });
+    // Join room function
+    const joinRoom = () => {
+      if (!currentUser || !projectId) return;
       
-      setSocket(newSocket);
-    } else {
-      newSocket = socket;
-    }
-
-    // Join the general room when connected
-    const onConnect = () => {
-      setIsConnected(true);
-      if (currentUser) {
-        // Check if we're already in the current room using our local state
-        const isInRoom = joinedRooms.includes(currentRoom);
-        
-        if (!isInRoom) {
-          newSocket.emit('join_room', { 
-            userId: currentUser.id,
-            userName: currentUser.name || 'Anonymous',
-            projectId: projectId,
-            room: currentRoom,
-          });
-          
-          // Update our local state to track that we've joined this room
-          setJoinedRooms(prev => [...prev, currentRoom]);
-        }
-      }
+      const roomData = {
+        userId: currentUser.id,
+        userName: currentUser.name || 'Anonymous',
+        projectId: projectId,
+        room: currentRoom
+      };
+      
+      newSocket.emit('join_room', roomData);
+      setJoinedRooms(prev => 
+        prev.includes(currentRoom) ? prev : [...prev, currentRoom]
+      );
     };
 
     // Handle connection
-    newSocket.on('connect', onConnect);
-    
+    const onConnect = () => {
+      setIsConnected(true);
+      joinRoom();
+    };
+
     // Handle disconnection
-    newSocket.on('disconnect', (reason) => {
+    const onDisconnect = (reason: string) => {
       setIsConnected(false);
-    });
-
-    // Handle reconnection attempts
-    newSocket.on('reconnect_attempt', (attempt) => {
-    });
-
-    newSocket.on('reconnect_failed', () => {
-      console.error('Failed to reconnect to socket server');
-    });
-
-    // Handle connection errors
-    const onConnectError = (error: Error) => {
-      console.error('Socket connection error:', error);
-    };
-    newSocket.on('connect_error', onConnectError);
-
-    // Cleanup function for when the component unmounts
-    const cleanup = () => {
-      if (!newSocket) return;
-      
-      // Only cleanup if we're the last tab
-      const isLastTab = !window.localStorage.getItem('socket:disconnecting');
-      
-      if (isLastTab) {
-        window.localStorage.setItem('socket:disconnecting', 'true');
-        
-        // Clean up listeners
-        newSocket.off('connect');
-        newSocket.off('disconnect');
-        newSocket.off('connect_error', onConnectError);
-        
-        // Disconnect after a delay to allow other tabs to take over
-        disconnectTimer = setTimeout(() => {
-          if (window.localStorage.getItem('socket:disconnecting')) {
-            newSocket.disconnect();
-            window.localStorage.removeItem('socket:disconnecting');
-          }
-        }, 1000);
+      // Attempt to reconnect if this was an unexpected disconnect
+      if (reason === 'io server disconnect' || reason === 'io client disconnect') {
+        newSocket.connect();
       }
     };
+
+    // Set up event listeners
+    newSocket.on('connect', onConnect);
+    newSocket.on('disconnect', onDisconnect);
     
-    // Set up cleanup on window unload
-    window.addEventListener('beforeunload', cleanup);
-    
-    // Return cleanup function
-    return () => {
-      window.removeEventListener('beforeunload', cleanup);
-      if (disconnectTimer) {
-        clearTimeout(disconnectTimer);
-      }
-      cleanup();
-    };
-  }, [socket, currentUser]);
+    // Join room on initial connection
+    if (newSocket.connected) {
+      joinRoom();
+    }
 
-  // Generate a unique ID for messages
-  const generateMessageId = () => {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  };
-
-  // Listen for messages and update state
-  useEffect(() => {
-    if (!socket || !currentUser) return;
-
+    // Set up message handler
     const handleMessage = (msg: SocketMessage) => {
-      console.log('Received message:', msg);
-      // Don't add our own messages from socket (they're already added when sending)
-      if (msg.username === currentUser.id) return;
-      
-      // Use the server-provided ID if available, otherwise generate a new one
-      const messageId = msg.id || generateMessageId();
-      
       setMessages(prev => {
-        // Check if message with this ID already exists to prevent duplicates
-        if (prev.some(m => m.id === messageId)) {
-          return prev;
-        }
+        // Check if message already exists
+        if (prev.some(m => m.id === msg.id)) return prev;
         
         const newMessage: UIMessage = {
-          id: messageId,
+          id: msg.id,
           user: msg.username,
           content: msg.content,
           timestamp: msg.timestamp,
           color: getAvatarColor({ user_id: msg.user_id }),
-          isOwn: false,
+          isOwn: msg.user_id === currentUser?.id,
           room: msg.room,
         };
         
@@ -578,14 +492,76 @@ const ChatPanel = ({
       });
     };
 
-    const handleUserList = (data: { users: Array<{ id: string; name: string }> }) => {
-      // Update typing indicators based on user list
-      // You can extend this to show who's online
+    // Set up socket event listeners
+    newSocket.on('new_message', handleMessage);
+    
+    // Set up typing indicators
+    const handleUserTyping = (data: { userId: string; isTyping: boolean }) => {
+      setTypingUsers(prev => {
+        if (data.isTyping) {
+          return new Set([...prev, data.userId]);
+        } else {
+          const newSet = new Set(prev);
+          newSet.delete(data.userId);
+          return newSet;
+        }
+      });
     };
+    newSocket.on('user_typing', handleUserTyping);
+
+    // Set up user list updates
+    const handleUserList = (users: Array<{ id: string; name: string }>) => {
+      // Update online users if needed
+    };
+    newSocket.on('user_list', handleUserList);
+
+    // Set the socket in state
+    setSocket(newSocket);
+
+    // Clean up function
+    return () => {
+      // Remove all event listeners
+      newSocket.off('connect', onConnect);
+      newSocket.off('disconnect', onDisconnect);
+      newSocket.off('new_message', handleMessage);
+      newSocket.off('user_typing', handleUserTyping);
+      newSocket.off('user_list', handleUserList);
+      
+      // Disconnect the socket
+      if (newSocket.connected) {
+        newSocket.disconnect();
+      }
+    };
+  }, [currentUser, projectId, currentRoom]);
+
+  // Handle member added event and refresh chat state
+  useEffect(() => {
+    if (memberOperationStatus.type === 'adding' && memberOperationStatus.memberId) {
+      // When a new member is added, trigger a reconnection to update permissions
+      if (socket) {
+        if (socket.connected) {
+          // If already connected, rejoin the room to refresh permissions
+          socket.emit('join_room', {
+            userId: currentUser?.id,
+            userName: currentUser?.name || 'Anonymous',
+            projectId: projectId,
+            room: currentRoom,
+          });
+        } else {
+          // If disconnected, reconnect
+          socket.connect();
+        }
+      }
+    }
+  }, [memberOperationStatus, socket, currentUser, projectId, currentRoom]);
+
+  // Handle typing indicators
+  useEffect(() => {
+    if (!socket) return;
 
     const handleActivity = (username: string) => {
       // Don't show typing indicator for current user
-      if (username === (currentUser.username || currentUser.email)) return;
+      if (username === (currentUser?.username || currentUser?.email)) return;
       
       // Handle typing indicators
       setTypingUsers(prev => {
@@ -605,18 +581,16 @@ const ChatPanel = ({
       });
     };
 
-    socket.on('new_message', handleMessage);
-    socket.on('userList', handleUserList);
+    // Set up socket event listeners
     socket.on('activity', handleActivity);
 
+    // Clean up function
     return () => {
-      socket.off('new_message', handleMessage);
-      socket.off('userList', handleUserList);
       socket.off('activity', handleActivity);
     };
   }, [socket, currentUser]);
 
-  // Auto-scroll to bottom of messages
+  // Auto-scroll to bottom of messages when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);

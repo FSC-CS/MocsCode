@@ -322,25 +322,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       clearError();
       setIsLoading(true);
 
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      // Call our custom edge function instead of Supabase's built-in method
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-password-reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ email }),
       });
 
-      if (error) {
-        const errorMessage = error.message || 'Failed to send password reset email';
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        const errorMessage = result.error || 'Failed to send password reset email';
         setError(errorMessage);
         toast({
-          title: 'Password reset failed',
+          title: 'Password Reset Failed',
           description: errorMessage,
           variant: 'destructive',
         });
-        throw error;
+        throw new Error(errorMessage);
       }
 
       toast({
-        title: 'Password reset email sent',
-        description: 'Check your email for instructions to reset your password.',
+        title: 'Password Reset Email Sent',
+        description: 'Please check your email for instructions to reset your password.',
       });
+
     } catch (error) {
       console.error('Error sending password reset email:', error);
       setError(error instanceof Error ? error.message : 'An unknown error occurred');

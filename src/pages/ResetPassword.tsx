@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Code, Loader2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { Code, Loader2, KeyRound, ShieldCheck } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { z } from 'zod';
+import { supabase } from '@/lib/supabase';
 
 // Form validation schema
 const resetPasswordSchema = z.object({
@@ -25,6 +26,8 @@ type FormData = z.infer<typeof resetPasswordSchema>;
 
 const ResetPassword = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user, isLoading } = useAuth();
   const { toast } = useToast();
   const [formData, setFormData] = useState<FormData>({
     password: '',
@@ -32,70 +35,109 @@ const ResetPassword = () => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isProcessingToken, setIsProcessingToken] = useState(true);
-  const [hasValidToken, setHasValidToken] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isTokenValid, setIsTokenValid] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // Check if we have a valid token on component mount
+  // Parse hash fragment to extract access_token
   useEffect(() => {
-    const checkResetToken = async () => {
+    const checkAuth = async () => {
+      setCheckingAuth(true);
       try {
-        setIsProcessingToken(true);
-        
-        // Supabase can include auth data in multiple ways
-        // First check URL hash fragment
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        let type = hashParams.get('type');
-        let accessToken = hashParams.get('access_token');
-        
-        // If not in hash, check URL query parameters
-        if (!type || !accessToken) {
-          const queryParams = new URLSearchParams(window.location.search);
-          type = queryParams.get('type');
-          accessToken = queryParams.get('access_token');
+        // Check if user is already authenticated
+        if (user) {
+          setIsAuthenticated(true);
+          setIsTokenValid(true);
+          setCheckingAuth(false);
+          return;
         }
+
+        // First check for recovery token in URL query parameters
+        const queryParams = new URLSearchParams(window.location.search);
+        const recoveryToken = queryParams.get('token');
+        const type = queryParams.get('type');
         
-        // Validate token with Supabase
-        if (type === 'recovery' && accessToken) {
-          // Set session with the token
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: '',
-          });
-          
-          if (error) {
-            console.error('Error validating token:', error);
-            setHasValidToken(false);
+        // If we have a recovery token in query params
+        if (recoveryToken && type === 'recovery') {
+          try {
+            // Exchange the recovery token for a session
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash: recoveryToken,
+              type: 'recovery',
+            });
+            
+            if (error || !data.session) {
+              toast({
+                title: 'Invalid or expired token',
+                description: 'Your password reset link is invalid or has expired. Please request a new link.',
+                variant: 'destructive',
+              });
+              console.error('Error validating token:', error);
+              setIsTokenValid(false);
+            } else {
+              // Set authenticated with token
+              setIsTokenValid(true);
+              
+              toast({
+                title: 'Token verified',
+                description: 'You can now reset your password.',
+              });
+            }
+          } catch (err) {
+            console.error('Error verifying OTP:', err);
+            setIsTokenValid(false);
             toast({
-              title: 'Invalid or expired token',
-              description: 'The password reset link is invalid or has expired. Please request a new one.',
+              title: 'Error validating token',
+              description: 'An error occurred while validating your reset token. Please try again.',
               variant: 'destructive',
             });
-          } else {
-            setHasValidToken(true);
           }
         } else {
-          toast({
-            title: 'Invalid or expired link',
-            description: 'The password reset link is invalid or has expired. Please request a new one.',
-            variant: 'destructive',
-          });
-          setHasValidToken(false);
+          // Fall back to checking hash params (for compatibility)
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+
+          if (accessToken) {
+            const { data, error } = await supabase.auth.getUser(accessToken);
+            
+            if (error || !data.user) {
+              toast({
+                title: 'Invalid or expired token',
+                description: 'Your password reset link is invalid or has expired. Please request a new link.',
+                variant: 'destructive',
+              });
+              setIsTokenValid(false);
+            } else {
+              // Set authenticated with token
+              setIsTokenValid(true);
+              
+              // The session is now established with the token
+              toast({
+                title: 'Token verified',
+                description: 'You can now reset your password.',
+              });
+            }
+          } else {
+            // No token found, check if user is logged in
+            const { data } = await supabase.auth.getSession();
+            if (data.session) {
+              setIsAuthenticated(true);
+              setIsTokenValid(true);
+            } else {
+              setIsTokenValid(false);
+            }
+          }
         }
       } catch (error) {
-        console.error('Error validating reset token:', error);
-        setHasValidToken(false);
-        toast({
-          title: 'Error',
-          description: 'An error occurred while processing your request. Please try again.',
-          variant: 'destructive',
-        });
+        console.error('Error checking authentication:', error);
+        setIsTokenValid(false);
       } finally {
-        setIsProcessingToken(false);
+        setCheckingAuth(false);
       }
     };
 
-    checkResetToken();
-  }, [toast]);
+    checkAuth();
+  }, [user, toast]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -137,28 +179,30 @@ const ResetPassword = () => {
     try {
       setIsSubmitting(true);
       
+      // Update password in Supabase Auth
       const { error } = await supabase.auth.updateUser({
-        password: formData.password
+        password: formData.password,
       });
 
       if (error) {
         throw error;
       }
-
+      
       toast({
         title: 'Password updated successfully',
-        description: 'Your password has been reset. You can now sign in with your new password.',
+        description: 'Your password has been reset.',
       });
       
-      // Redirect to login page
+      // Redirect after successful password reset
       setTimeout(() => {
-        navigate('/signin');
-      }, 2000);
+        navigate(isAuthenticated ? '/dashboard' : '/signin');
+      }, 1500);
+      
     } catch (error: any) {
-      console.error('Error resetting password:', error);
+      console.error('Password reset error:', error);
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to reset password. Please try again.',
+        title: 'Password reset failed',
+        description: error.message || 'An error occurred while resetting your password.',
         variant: 'destructive',
       });
     } finally {
@@ -166,34 +210,25 @@ const ResetPassword = () => {
     }
   };
 
-  if (isProcessingToken) {
+  if (checkingAuth) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg text-center">
-          <Loader2 className="h-8 w-8 mx-auto animate-spin text-blue-600" />
-          <h2 className="text-xl font-semibold text-gray-900 mt-4">Verifying your request</h2>
-          <p className="text-gray-600 mt-2">Please wait while we verify your password reset request...</p>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-lg">Verifying authentication...</span>
       </div>
     );
   }
 
-  if (!hasValidToken) {
+  if (!isTokenValid && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
         <Card className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg text-center">
-          <div className="text-red-600 mx-auto mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="15" y1="9" x2="9" y2="15" />
-              <line x1="9" y1="9" x2="15" y2="15" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900">Invalid or Expired Link</h2>
-          <p className="text-gray-600 mt-2">The password reset link is invalid or has expired.</p>
+          <ShieldCheck className="h-16 w-16 mx-auto mb-4 text-red-500" />
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Invalid or Expired Link</h2>
+          <p className="text-gray-600 mb-6">Your password reset link is invalid or has expired.</p>
           <Button 
-            className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => navigate('/signin')}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
           >
             Return to Sign In
           </Button>
@@ -210,8 +245,15 @@ const ResetPassword = () => {
             <Code className="h-8 w-8 text-blue-600" />
             <h1 className="text-2xl font-bold text-gray-900">MocsCode</h1>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900">Reset Your Password</h2>
-          <p className="text-gray-600 mt-2">Create a new secure password</p>
+          <KeyRound className="h-10 w-10 mx-auto mb-2 text-blue-600" />
+          <h2 className="text-xl font-semibold text-gray-900">
+            {isAuthenticated ? 'Change Your Password' : 'Reset Your Password'}
+          </h2>
+          <p className="text-gray-600 mt-2">
+            {isAuthenticated 
+              ? 'Enter a new secure password for your account' 
+              : 'Enter a new password to regain access to your account'}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -237,7 +279,7 @@ const ResetPassword = () => {
 
           <div>
             <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-              Confirm New Password
+              Confirm Password
             </label>
             <Input
               id="confirmPassword"
@@ -266,20 +308,19 @@ const ResetPassword = () => {
                 Updating Password...
               </>
             ) : (
-              'Reset Password'
+              'Update Password'
             )}
           </Button>
 
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Remember your password?{' '}
-              <Link 
-                to="/signin" 
-                className="font-medium text-blue-600 hover:text-blue-500 hover:underline"
-              >
-                Sign in
-              </Link>
-            </p>
+            <Button
+              type="button"
+              variant="link"
+              className="text-sm font-medium text-blue-600 hover:text-blue-500"
+              onClick={() => navigate(isAuthenticated ? '/dashboard' : '/signin')}
+            >
+              {isAuthenticated ? 'Back to Dashboard' : 'Return to Sign In'}
+            </Button>
           </div>
         </form>
       </Card>

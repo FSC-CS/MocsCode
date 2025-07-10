@@ -96,7 +96,7 @@ const Landing = () => {
           </div>
         </div>
 
-        {/* Features Section */}
+       {/* Features Section */}
         <div className="py-20">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
             Why Choose MocsCode?
@@ -114,6 +114,13 @@ const Landing = () => {
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Real-time Collaboration</h3>
               <p className="text-gray-600">
                 Work together with your team in real-time. See changes instantly and communicate seamlessly.
+              </p>
+            </Card>
+            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow flex-1 min-w-[280px] max-w-[320px]">
+              <FolderOpen className="h-12 w-12 text-purple-500 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">Project Management</h3>
+              <p className="text-gray-600">
+                Import and export projects seamlessly. Track usage and view detailed statistics for all your coding projects.
               </p>
             </Card>
           </div>

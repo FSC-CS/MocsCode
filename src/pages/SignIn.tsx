@@ -27,6 +27,7 @@ const SignIn = () => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -99,7 +100,7 @@ const SignIn = () => {
     }
 
     try {
-      setIsSubmitting(true);
+      setIsResettingPassword(true);
       // Use resetPassword from the already obtained useAuth hook
       await resetPassword(formData.email);
       
@@ -112,7 +113,7 @@ const SignIn = () => {
       console.error('Error sending password reset email:', error);
       // Error is handled in the auth context
     } finally {
-      setIsSubmitting(false);
+      setIsResettingPassword(false);
     }
   };
 
@@ -158,9 +159,9 @@ const SignIn = () => {
                 type="button"
                 onClick={handleForgotPassword}
                 className="text-sm font-medium text-blue-600 hover:text-blue-500 focus:outline-none"
-                disabled={isSubmitting}
+                disabled={isResettingPassword}
               >
-                Forgot password?
+                {isResettingPassword ? 'Sending...' : 'Forgot password?'}
               </button>
             </div>
             <Input

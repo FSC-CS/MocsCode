@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import GoogleLoginButton from '@/components/auth/GoogleLoginButton';
 import { useToast } from '@/components/ui/use-toast';
 import { z } from 'zod';
+import { resetPassword } from '@/contexts/AuthContext';
 
 // Form validation schema
 const signInSchema = z.object({

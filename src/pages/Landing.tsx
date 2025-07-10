@@ -31,8 +31,10 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
-              <Code className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">MocsCode</h1>
+              <Code className="h-6 w-6 text-blue-500" />
+              <h1 className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent whitespace-nowrap">
+                MocsCode
+              </h1>
             </div>
             <div className="flex items-center space-x-4">
               {user ? (

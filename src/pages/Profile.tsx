@@ -367,7 +367,7 @@ useEffect(() => {
               )}
             </div>
 
-            {/* Action Button */}
+            {/* Action Buttons */}
             <div className="flex flex-col space-y-2">
               {isEditing ? (
                 <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white">
@@ -375,10 +375,20 @@ useEffect(() => {
                   Save Changes
                 </Button>
               ) : (
-                <Button onClick={() => setIsEditing(true)} variant="outline" className="border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-indigo-400 dark:text-indigo-400 dark:hover:bg-indigo-950/50">
-                  <Edit2 className="h-4 w-4 mr-2" />
-                  Edit Profile
-                </Button>
+                <>
+                  <Button onClick={() => setIsEditing(true)} variant="outline" className="border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-indigo-400 dark:text-indigo-400 dark:hover:bg-indigo-950/50">
+                    <Edit2 className="h-4 w-4 mr-2" />
+                    Edit Profile
+                  </Button>
+                  <Button 
+                    onClick={() => navigate("/reset-password")} 
+                    variant="outline" 
+                    className="border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-indigo-400 dark:text-indigo-400 dark:hover:bg-indigo-950/50"
+                  >
+                    <span className="mr-2">🔐</span>
+                    Change Password
+                  </Button>
+                </>
               )}
             </div>
           </div>

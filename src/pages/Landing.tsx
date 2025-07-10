@@ -31,10 +31,8 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
-              <Code className="h-6 w-6 text-blue-500" />
-              <h1 className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent whitespace-nowrap">
-                MocsCode
-              </h1>
+              <Code className="h-8 w-8 text-blue-600" />
+              <h1 className="text-2xl font-bold text-gray-900">MocsCode</h1>
             </div>
             <div className="flex items-center space-x-4">
               {user ? (
@@ -96,27 +94,29 @@ const Landing = () => {
           </div>
         </div>
 
-       {/* Features Section */}
+        {/* Features Section */}
         <div className="py-20">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
             Why Choose MocsCode?
           </h2>
-          <div className="flex flex-wrap justify-center gap-8 max-w-4xl mx-auto">
-            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow flex-1 min-w-[280px] max-w-[320px]">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <Code className="h-12 w-12 text-blue-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Multi-Language Support</h3>
               <p className="text-gray-600">
                 Code in Java, Python, JavaScript, C, C++, and C# with full syntax highlighting and error detection.
               </p>
             </Card>
-            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow flex-1 min-w-[280px] max-w-[320px]">
+            
+            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <Users className="h-12 w-12 text-green-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Real-time Collaboration</h3>
               <p className="text-gray-600">
                 Work together with your team in real-time. See changes instantly and communicate seamlessly.
               </p>
             </Card>
-            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow flex-1 min-w-[280px] max-w-[320px]">
+            
+            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <FolderOpen className="h-12 w-12 text-purple-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Project Management</h3>
               <p className="text-gray-600">

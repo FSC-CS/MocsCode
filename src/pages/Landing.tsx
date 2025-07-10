@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Code, Users, Shield, Zap } from 'lucide-react';
+import { Code, Users, Shield, Zap, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 

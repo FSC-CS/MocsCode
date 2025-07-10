@@ -104,7 +104,7 @@ const Landing = () => {
               <Code className="h-12 w-12 text-blue-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Multi-Language Support</h3>
               <p className="text-gray-600">
-                Code in Java, Python, JavaScript, C, C++, and C# with full syntax highlighting and IntelliSense.
+                Code in Java, Python, JavaScript, C, C++, and C# with full syntax highlighting and error detection.
               </p>
             </Card>
             
@@ -113,14 +113,6 @@ const Landing = () => {
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Real-time Collaboration</h3>
               <p className="text-gray-600">
                 Work together with your team in real-time. See changes instantly and communicate seamlessly.
-              </p>
-            </Card>
-            
-            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <Shield className="h-12 w-12 text-purple-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Version Control</h3>
-              <p className="text-gray-600">
-                Built-in source control helps you track changes and collaborate without conflicts.
               </p>
             </Card>
           </div>

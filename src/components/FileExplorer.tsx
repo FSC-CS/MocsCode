@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Folder, FolderOpen, Plus, MoreHorizontal, Edit, Trash, Loader2 } from 'lucide-react';
+import { FileText, Folder, FolderOpen, Plus, MoreHorizontal, Edit, Trash, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +12,7 @@ import { useApi } from '@/contexts/ApiContext';
 import { useToast } from '@/components/ui/use-toast';
 import { ProjectFile } from '@/lib/api/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { getTemplateForLanguage } from '@/templates/languageTemplates';
 
 interface FileItem extends ProjectFile {
   type: 'file' | 'folder';
@@ -254,31 +256,40 @@ const FileExplorer = ({ currentFile, onFileSelect, onFileRenamed, projectId }: F
   };
 
   // Helper: Generate default content based on file extension
-const getDefaultContent = (fileName: string): string => {
-  const extension = fileName.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'java': {
-      const className = fileName.replace('.java', '');
-      return `public class ${className} {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}`;
+  const getDefaultContent = (fileName: string): string => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    const template = getTemplateForLanguage(extension || '').find(t => 
+      t.filename.endsWith(`.${extension}`)
+    );
+    
+    if (template) {
+      return template.content;
     }
-    case 'py':
-      return `# ${fileName}\n# Python file\n\nprint(\"Hello, World!\")`;
-    case 'js':
-      return `// ${fileName}\n// JavaScript file\n\nconsole.log(\"Hello, World!\");`;
-    case 'c':
-      return `#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}`;
-    case 'cpp':
-      return `#include <iostream>\n\nint main() {\n    std::cout << \"Hello, World!\" << std::endl;\n    return 0;\n}`;
-    case 'cs':
-      return `using System;\n\nclass Program {\n    static void Main() {\n        Console.WriteLine(\"Hello, World!\");\n    }\n}`;
-    case 'md':
-      return `# ${fileName.replace('.md', '')}\n\nAdd your documentation here.`;
-    case 'txt':
-      return `This is a text file.\nAdd your content here.`;
-    default:
-      return `// ${fileName}\n// Add your code here`;
-  }
-};
+    
+    // Fallback to default templates if no specific template found
+    switch (extension) {
+      case 'java': {
+        const className = fileName.replace('.java', '');
+        return `public class ${className} {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}`;
+      }
+      case 'py':
+        return `# ${fileName}\n# Python file\n\nprint(\"Hello, World!\")`;
+      case 'js':
+        return `// ${fileName}\n// JavaScript file\n\nconsole.log(\"Hello, World!\");`;
+      case 'c':
+        return `#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}`;
+      case 'cpp':
+        return `#include <iostream>\n\nint main() {\n    std::cout << \"Hello, World!\" << std::endl;\n    return 0;\n}`;
+      case 'cs':
+        return `using System;\n\nclass Program {\n    static void Main() {\n        Console.WriteLine(\"Hello, World!\");\n    }\n}`;
+      case 'md':
+        return `# ${fileName.replace('.md', '')}\n\nAdd your documentation here.`;
+      case 'txt':
+        return `This is a text file.\nAdd your content here.`;
+      default:
+        return `// ${fileName}\n// Add your code here`;
+    }
+  };
 
   // Helper function to generate a unique name for new files/folders
   const generateUniqueName = (baseName: string, isFile: boolean, parentId?: string): string => {
@@ -311,7 +322,7 @@ const getDefaultContent = (fileName: string): string => {
     return newName;
   };
 
-  const createNewItem = async (type: 'file' | 'folder', parentId?: string) => {
+  const createNewItem = async (type: 'file' | 'folder' | 'template', parentId?: string, template?: { filename: string, content: string }, customName?: string) => {
     // Check if user is authenticated
     if (!currentUserId) {
       toast({
@@ -321,24 +332,41 @@ const getDefaultContent = (fileName: string): string => {
       });
       return;
     }
+    
+    if (type === 'template' && !template) {
+      console.error('Template is required when type is template');
+      return;
+    }
+    
     setIsCreating(true);
     try {
-      const baseName = type === 'file' ? 'new-file.txt' : 'new-folder';
-      const name = generateUniqueName(baseName, type === 'file', parentId);
+      let name: string;
+      let content: string | undefined;
+      
+      if (type === 'template' && template) {
+        const baseName = customName || template.filename;
+        name = generateUniqueName(baseName, true, parentId);
+        content = template.content;
+      } else {
+        const baseName = type === 'file' ? 'new-file.txt' : 'new-folder';
+        name = generateUniqueName(baseName, type === 'file', parentId);
+        content = type === 'file' ? getDefaultContent(name) : undefined;
+      }
+      
       const parent = parentId ? findItemById(fileStructure, parentId) : null;
       const parentPath = parent?.path || '/';
       const filePath = generatePath(parentPath, name);
-      const defaultContent = type === 'file' ? getDefaultContent(name) : undefined;
       const now = new Date().toISOString();
+      
       const { data, error } = await projectFilesApi.createFile({
         project_id: projectId,
         name,
         path: filePath,
         file_type: type === 'folder' ? 'directory' : 'file',
-        mime_type: type === 'file' ? 'text/plain' : undefined,
-        size_bytes: defaultContent ? defaultContent.length : 0,
+        mime_type: type === 'folder' ? undefined : 'text/plain',
+        size_bytes: content ? new TextEncoder().encode(content).length : 0,
         parent_id: parentId || null,
-        content: defaultContent,
+        content,
         created_at: now,
         updated_at: now,
         created_by: currentUserId
@@ -419,6 +447,11 @@ const getDefaultContent = (fileName: string): string => {
   const [editingText, setEditingText] = useState('');
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [dropTargets, setDropTargets] = useState<Set<string>>(new Set()); // For visual feedback
+  const [showNewFileDialog, setShowNewFileDialog] = useState(false);
+  const [showFileNameDialog, setShowFileNameDialog] = useState(false);
+  const [newFileParentId, setNewFileParentId] = useState<string | undefined>(undefined);
+  const [newFileName, setNewFileName] = useState('');
+  const [selectedFileType, setSelectedFileType] = useState<{name: string, ext: string, icon: React.ReactNode} | null>(null);
 
   // Load project files on component mount
   useEffect(() => {
@@ -609,7 +642,12 @@ const getDefaultContent = (fileName: string): string => {
                   {item.type === 'folder' && (
                     <>
                       <DropdownMenuItem 
-                        onClick={() => createNewItem('file', item.id)} 
+                        onClick={() => {
+                          setNewFileParentId(item.id);
+                          setSelectedFileType(null);
+                          setNewFileName('');
+                          setShowNewFileDialog(true);
+                        }}
                         className="text-gray-200 hover:bg-gray-600"
                       >
                         <FileText className="h-3 w-3 mr-2" />
@@ -670,7 +708,12 @@ const getDefaultContent = (fileName: string): string => {
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-gray-700 border-gray-600">
               <DropdownMenuItem 
-                onClick={() => createNewItem('file')} 
+                onClick={() => {
+                  setNewFileParentId(undefined);
+                  setSelectedFileType(null);
+                  setNewFileName('');
+                  setShowNewFileDialog(true);
+                }} 
                 className="text-gray-200 hover:bg-gray-600"
                 disabled={isCreating}
               >
@@ -711,6 +754,171 @@ const getDefaultContent = (fileName: string): string => {
           renderFileStructure(fileStructure)
         )}
       </div>
+
+      {/* New File Type Selection Dialog */}
+      <Dialog open={showNewFileDialog} onOpenChange={setShowNewFileDialog}>
+        <DialogContent className="sm:max-w-[425px] bg-gray-800 border-gray-700">
+          <DialogHeader>
+            <div className="flex justify-between items-center">
+              <DialogTitle className="text-white">Create New File</DialogTitle>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 w-8 p-0 text-gray-400 hover:text-white"
+                onClick={() => setShowNewFileDialog(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <DialogDescription className="text-gray-400">
+              Select a file type to create
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-4">
+            {Object.entries({
+              'Text File': { ext: 'txt', icon: <FileText className="h-4 w-4 mr-2" /> },
+              'JavaScript': { ext: 'js', icon: <FileText className="h-4 w-4 mr-2 text-yellow-400" /> },
+              'Python': { ext: 'py', icon: <FileText className="h-4 w-4 mr-2 text-blue-400" /> },
+              'Java': { ext: 'java', icon: <FileText className="h-4 w-4 mr-2 text-red-400" /> },
+              'C': { ext: 'c', icon: <FileText className="h-4 w-4 mr-2 text-blue-500" /> },
+              'C++': { ext: 'cpp', icon: <FileText className="h-4 w-4 mr-2 text-blue-600" /> },
+              'C#': { ext: 'cs', icon: <FileText className="h-4 w-4 mr-2 text-purple-400" /> },
+              'Markdown': { ext: 'md', icon: <FileText className="h-4 w-4 mr-2 text-blue-300" /> },
+            }).map(([name, fileType]) => {
+              const { ext, icon } = fileType;
+              return (
+                <Button
+                  key={ext}
+                  variant="ghost"
+                  className="w-full justify-start text-gray-200 hover:bg-gray-700"
+                  onClick={() => {
+                    setSelectedFileType({ name, ext, icon });
+                    setNewFileName(`new-file.${ext}`);
+                    setShowNewFileDialog(false);
+                    setShowFileNameDialog(true);
+                  }}
+                  disabled={isCreating}
+                >
+                  {icon}
+                  {name} (.{ext})
+                </Button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* File Name Input Dialog */}
+      <Dialog open={showFileNameDialog} onOpenChange={setShowFileNameDialog}>
+        <DialogContent className="sm:max-w-[425px] bg-gray-800 border-gray-700">
+          <DialogHeader>
+            <div className="flex justify-between items-center">
+              <DialogTitle className="text-white">Name Your File</DialogTitle>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 w-8 p-0 text-gray-400 hover:text-white"
+                onClick={() => {
+                  setShowFileNameDialog(false);
+                  setSelectedFileType(null);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <DialogDescription className="text-gray-400">
+              Enter a name for your {selectedFileType?.name.toLowerCase() || 'file'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="flex items-center gap-2 mb-4">
+              {selectedFileType?.icon}
+              <span className="text-sm text-gray-300">
+                {selectedFileType?.name} (.{selectedFileType?.ext})
+              </span>
+            </div>
+            <input
+              type="text"
+              value={newFileName}
+              onChange={(e) => setNewFileName(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={`Enter ${selectedFileType?.name.toLowerCase() || 'file'} name`}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const template = getTemplateForLanguage(selectedFileType?.ext || '').find(t => 
+                    t.filename.endsWith(`.${selectedFileType?.ext}`)
+                  );
+                  
+                  if (template) {
+                    createNewItem('template', newFileParentId, {
+                      ...template,
+                      filename: newFileName.endsWith(`.${selectedFileType?.ext}`) 
+                        ? newFileName 
+                        : `${newFileName}.${selectedFileType?.ext}`
+                    }, newFileName);
+                  } else {
+                    createNewItem('file', newFileParentId, undefined, newFileName);
+                  }
+                  setShowFileNameDialog(false);
+                  setSelectedFileType(null);
+                  setNewFileName('');
+                } else if (e.key === 'Escape') {
+                  setShowFileNameDialog(false);
+                  setSelectedFileType(null);
+                  setNewFileName('');
+                }
+              }}
+            />
+            <div className="mt-2 text-xs text-gray-400">
+              Press Enter to create, Esc to cancel
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowFileNameDialog(false);
+                setSelectedFileType(null);
+                setNewFileName('');
+              }}
+              className="text-gray-200 border-gray-600 hover:bg-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={async () => {
+                const template = getTemplateForLanguage(selectedFileType?.ext || '').find(t => 
+                  t.filename.endsWith(`.${selectedFileType?.ext}`)
+                );
+                
+                if (template) {
+                  await createNewItem('template', newFileParentId, {
+                    ...template,
+                    filename: newFileName.endsWith(`.${selectedFileType?.ext}`) 
+                      ? newFileName 
+                      : `${newFileName}.${selectedFileType?.ext}`
+                  }, newFileName);
+                } else {
+                  await createNewItem('file', newFileParentId, undefined, newFileName);
+                }
+                setShowFileNameDialog(false);
+                setSelectedFileType(null);
+                setNewFileName('');
+              }}
+              disabled={!newFileName.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : 'Create File'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

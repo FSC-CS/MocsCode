@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { UserAvatar } from '@/components/UserAvatar';
 import { PaginationParams, SortParams, Project, PaginatedResponse } from '@/lib/api/types';
+import { getTemplateForLanguage } from '@/templates/languageTemplates';
 
 interface DashboardProject {
   id: string;
@@ -316,7 +317,6 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
   };
 
   const createProject = async (language: string, name: string): Promise<void> => {
-    console.log("CRE");
     if (!user) {
       toast({
         title: 'Error',
@@ -331,6 +331,7 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
       const timestamp = format(new Date(), 'yyyy-MM-dd-HH-mm');
       const projectName = name || `${language} Project - ${timestamp}`;
 
+      // Create the project first
       const { data: project, error } = await projectsApi.createProject({
         name: projectName,
         description: `A new ${language} project`,
@@ -356,6 +357,29 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
           variant: 'destructive'
         });
         return;
+      }
+
+      // Add default template files for the selected language
+      const templateFiles = getTemplateForLanguage(language);
+      if (templateFiles.length > 0 && projectFilesApi) {
+        try {
+          for (const file of templateFiles) {
+            await projectFilesApi.createFile({
+              project_id: project.id,
+              name: file.filename,
+              path: `/${file.filename}`,
+              file_type: 'file',
+              mime_type: 'text/plain',
+              size_bytes: new TextEncoder().encode(file.content).length,
+              parent_id: null,
+              content: file.content,
+              created_by: user.id,
+            });
+          }
+        } catch (fileError) {
+          console.error('Error creating template files:', fileError);
+          // Continue even if template files can't be created
+        }
       }
 
       const newProject: DashboardProject = {
@@ -665,7 +689,7 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
                 {supportedLanguages.map((lang) => (
                   <DropdownMenuItem 
                     key={lang.name} 
-                    onClick={() => createProject(lang.name)}
+                    onClick={() => createProject(lang.name, '')}
                     disabled={isCreating}
                   >
                     <div className="flex items-center gap-2">

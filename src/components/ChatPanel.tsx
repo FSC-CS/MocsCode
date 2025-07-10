@@ -713,20 +713,10 @@ const ChatPanel = ({
             </span>
           </div>
         </h2>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center">
           <span className="text-sm text-gray-400">
             {projectMembers.length} {projectMembers.length === 1 ? 'member' : 'members'}
           </span>
-          {canManageMembers && onInviteClick && (
-            <button
-              onClick={onInviteClick}
-              className="ml-2 h-8 px-3 text-sm font-medium rounded-md border border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors flex items-center"
-              disabled={memberOperationStatus.type === 'adding'}
-            >
-              <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-              Invite
-            </button>
-          )}
         </div>
       </div>
 

@@ -235,75 +235,47 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
     loadCollaborators();
   };
 
-  const currentUser = getCurrentUser();
-  const otherCollaborators = getOtherCollaborators();
+  const allCollaborators = React.useMemo(() => {
+    const current = getCurrentUser();
+    const others = getOtherCollaborators();
+    return current ? [current, ...others] : others;
+  }, [collaborators]);
 
   return (
     <div className="h-full flex flex-col bg-gray-800">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-300">
-            Collaborators
+      <div className="p-3 border-b border-gray-700">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <h3 className="text-sm font-medium text-gray-300">
+              Collaborators
+            </h3>
             {!isLoading && (
               <div className="flex items-center ml-2">
-              <Wifi className="h-3 w-3 text-green-400 mr-1" />
-              <span className="text-xs text-green-400">{onlineUsers.size} online</span>
-            </div>
+                <Wifi className="h-3 w-3 text-green-400 mr-1" />
+                <span className="text-xs text-green-400">{onlineUsers.size} online</span>
+              </div>
             )}
-          </h3>
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+          </div>
+          
+          {onInviteClick && canManageMembers && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-gray-700"
+              onClick={onInviteClick}
+            >
+              <UserPlus className="h-3 w-3 mr-1" />
+              Invite
+            </Button>
+          )}
+          
+          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-400 ml-2" />}
         </div>
-        
-        {/* Current User */}
-        {isLoading ? (
-          <Card className="p-3 bg-gray-700 border-gray-600 animate-pulse">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gray-600 rounded-full" />
-              <div className="flex-1">
-                <div className="h-4 bg-gray-600 rounded w-16 mb-1" />
-                <div className="h-3 bg-gray-600 rounded w-20" />
-              </div>
-            </div>
-          </Card>
-        ) : currentUser ? (
-          <Card className="p-3 bg-gray-700 border-gray-600">
-            <div className="flex items-center space-x-3">
-              <div 
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium"
-                style={{ backgroundColor: getAvatarColor(currentUser) }}
-              >
-                {currentUser.user?.avatar_url ? (
-                  <UserAvatar 
-                    avatar_url={currentUser.user.avatar_url}
-                    size="sm"
-                    fallbackInitials={getInitials(currentUser)}
-                  />
-                ) : (
-                  getInitials(currentUser)
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm font-medium text-white">You</span>
-                  {getRoleIcon(currentUser.role)}
-                </div>
-                <span className="text-xs text-gray-400">{getRoleText(currentUser.role)}</span>
-              </div>
-            </div>
-          </Card>
-        ) : error ? (
-          <Card className="p-3 bg-red-900/20 border-red-700">
-            <div className="flex items-center space-x-2 text-red-400">
-              <AlertCircle className="h-4 w-4" />
-              <span className="text-sm">Failed to load your role</span>
-            </div>
-          </Card>
-        ) : null}
       </div>
 
-      {/* Other Collaborators */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {/* Collaborators List */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {isLoading ? (
           // Loading skeletons
           <>
@@ -339,7 +311,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
           </Card>
         ) : (
           // Collaborators list
-          otherCollaborators.map((collaborator) => (
+          allCollaborators.map((collaborator) => (
             <Card 
               key={collaborator.id} 
               className={`p-3 bg-gray-700 border-gray-600 transition-colors group ${
@@ -378,8 +350,8 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
                 
                 <div className="flex-1">
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-white">
-                      {getDisplayName(collaborator)}
+                    <span className={`text-sm font-medium ${collaborator.user_id === user?.id ? 'text-blue-400' : 'text-white'}`}>
+                      {collaborator.user_id === user?.id ? 'You' : getDisplayName(collaborator)}
                     </span>
                     {collaborator.isTyping && (
                       <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
@@ -436,20 +408,6 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
           ))
         )}
       </div>
-
-      {/* Invite Button */}
-      {canManageMembers && onInviteClick && (
-        <div className="p-4 border-t border-gray-700">
-          <Button 
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={onInviteClick}
-            disabled={isLoading}
-          >
-            <UserPlus className="h-4 w-4 mr-2" />
-            Invite Collaborator
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

@@ -109,11 +109,12 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   const [isRunning, setIsRunning] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false); // State for resizable panels and sidebar
   const [fileExplorerWidth, setFileExplorerWidth] = useState(250);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isChatPanelCollapsed, setIsChatPanelCollapsed] = useState(false);
+  const [chatPanelWidth, setChatPanelWidth] = useState(300);
   const [editorHeight, setEditorHeight] = useState(70); // Percentage as number for easier calculations
   const [outputHeight, setOutputHeight] = useState(30); // Percentage as number for easier calculations
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const collapsedSidebarWidth = 40; // Width when collapsed
-  const [chatPanelWidth, setChatPanelWidth] = useState(320);
 
   const { getOrCreateDoc, destroyDoc } = useYjsDocuments();
   
@@ -1165,8 +1166,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
           className="flex-1 flex flex-col overflow-hidden relative bg-gray-900"
           style={{
             minWidth: 0,
-            width: `calc(100% - ${isSidebarCollapsed ? '16px' : `${fileExplorerWidth}px`})`,
-            transition: 'width 0.2s ease-out',
+            width: `calc(100% - ${isSidebarCollapsed ? '16px' : `${fileExplorerWidth}px`} - ${isChatPanelCollapsed ? '16px' : `${chatPanelWidth}px`})`,
+            transition: 'width 0.2s ease-out, margin 0.2s ease-out',
             marginLeft: isSidebarCollapsed ? '0' : '0',
           }}
         >
@@ -1241,7 +1242,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
               {/* Output panel content */}
               <div className="flex-1 overflow-auto">
                 <OutputPanel 
-                  output={output} 
+                  output={output}
+                  setOutput={setOutput}
                   isRunning={isRunning}
                   compileScript={compileScript}
                   setCompileScript={setCompileScript}
@@ -1253,32 +1255,105 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
           </div>
         </div>
 
-        {/* Permanent Chat Panel */}
-        <ResizablePanel
-          direction="horizontal"
-          initialSize={chatPanelWidth}
-          minSize={200}
-          maxSize={600}
-          onResize={setChatPanelWidth}
-          className="bg-gray-800 border-l border-gray-700 flex flex-col"
-        >
-          <div className="px-3 py-2 text-sm font-medium text-gray-300 bg-gray-800 border-b border-gray-700">
-            Chat
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <ChatPanel 
-              collaborators={collaborators}
-              projectMembers={projectMembers}
-              currentUser={dbUser}
-              isLoadingMembers={isLoadingMembers}
-              memberOperationStatus={memberOperationStatus}
-              onMemberClick={handleMemberClick}
-              onInviteClick={() => setShowShareDialog(true)}
-              canManageMembers={canManageProject()}
-              projectId={project.id}
+        {/* Right Sidebar with Toggle */}
+        <div className="flex flex-row h-full bg-gray-800" style={{ width: isChatPanelCollapsed ? '16px' : `${chatPanelWidth}px` }}>
+          {/* Toggle button and resize handle column */}
+          <div className="relative h-full flex-shrink-0">
+            {/* Resize handle - now on the left */}
+            <div 
+              className="absolute left-0 top-0 bottom-0 w-1 bg-gray-600 hover:bg-blue-500 cursor-col-resize active:bg-blue-600 z-20"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const startX = e.clientX;
+                const startWidth = chatPanelWidth;
+                
+                const onMouseMove = (moveEvent: MouseEvent) => {
+                  const delta = startX - moveEvent.clientX; // Invert delta for right panel
+                  const newWidth = startWidth + delta;
+                  // Constrain between 200px and 600px
+                  setChatPanelWidth(Math.max(200, Math.min(600, newWidth)));
+                };
+
+                const onMouseUp = () => {
+                  document.removeEventListener('mousemove', onMouseMove);
+                  document.removeEventListener('mouseup', onMouseUp);
+                };
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp, { once: true });
+              }}
             />
+            
+            {/* Toggle Button - on the right */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsChatPanelCollapsed(!isChatPanelCollapsed);
+              }}
+              className={`absolute right-0 top-0 bottom-0 w-4 flex items-center justify-center ${isChatPanelCollapsed ? 'bg-gray-800' : 'bg-gray-700'} hover:bg-blue-600 text-white transition-all duration-200 z-10`}
+              aria-label={isChatPanelCollapsed ? 'Expand chat' : 'Collapse chat'}
+            >
+              <div className={`transform transition-transform duration-200 ${isChatPanelCollapsed ? 'rotate-0' : 'rotate-180'}`}>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="12" 
+                  height="12" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                  className="text-gray-400 hover:text-white"
+                >
+                  <path d="M15 18l-6-6 6-6"/>
+                </svg>
+              </div>
+            </button>
+            
+            {/* Chat label when collapsed */}
+            {isChatPanelCollapsed && (
+              <div className="absolute left-0 right-0 bottom-4 flex items-center justify-center">
+                <span className="transform -rotate-90 whitespace-nowrap text-[10px] font-medium text-gray-500 tracking-wider">
+                  Chat
+                </span>
+              </div>
+            )}
           </div>
-        </ResizablePanel>
+          
+          {/* Chat Panel Content */}
+          <div 
+            className="bg-gray-800 border-l border-gray-700 flex flex-col h-full flex-shrink-0 overflow-hidden"
+            style={{
+              width: isChatPanelCollapsed ? 0 : '100%',
+              minWidth: isChatPanelCollapsed ? 0 : 200,
+              maxWidth: isChatPanelCollapsed ? 0 : '100%',
+            }}
+          >
+            {!isChatPanelCollapsed && (
+              <>
+                <div className="px-3 py-2 text-sm font-medium text-gray-300 bg-gray-800 border-b border-gray-700">
+                  Chat
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  <ChatPanel 
+                    collaborators={collaborators}
+                    projectMembers={projectMembers}
+                    currentUser={dbUser}
+                    isLoadingMembers={isLoadingMembers}
+                    memberOperationStatus={memberOperationStatus}
+                    onMemberClick={handleMemberClick}
+                    onInviteClick={() => setShowShareDialog(true)}
+                    canManageMembers={canManageProject()}
+                    projectId={project.id}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
       
       {/* Share Dialog - Enhanced with real project data */}

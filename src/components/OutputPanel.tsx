@@ -6,6 +6,7 @@ import { Play, Square, Trash2 } from 'lucide-react';
 
 interface OutputPanelProps {
   output: string;
+  setOutput: React.Dispatch<React.SetStateAction<string>>;
   isRunning: boolean;
   compileScript: string;
   setCompileScript: React.Dispatch<React.SetStateAction<string>>;
@@ -15,12 +16,13 @@ interface OutputPanelProps {
 
 const OutputPanel = ({ 
   output,
+  setOutput,
   isRunning,
   compileScript,
   setCompileScript,
   runScript,
   setRunScript,
- }: OutputPanelProps) => {
+}: OutputPanelProps) => {
   const [activeTab, setActiveTab] = React.useState<'output' | 'config'>('output');
 
   return (
@@ -28,7 +30,7 @@ const OutputPanel = ({
       {/* Tabs Header */}
       <div className="px-4 py-2 border-b border-gray-700 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex space-x-4">
+          <div className="flex space-x-4 pl-2">
             <button
               className={`text-sm font-medium px-2 py-1 rounded transition-colors ${activeTab === 'output' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}
               onClick={() => setActiveTab('output')}

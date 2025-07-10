@@ -99,7 +99,7 @@ const Landing = () => {
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
             Why Choose MocsCode?
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 justify-center items-center">
             <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
               <Code className="h-12 w-12 text-blue-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Multi-Language Support</h3>

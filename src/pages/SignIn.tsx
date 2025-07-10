@@ -8,7 +8,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import GoogleLoginButton from '@/components/auth/GoogleLoginButton';
 import { useToast } from '@/components/ui/use-toast';
 import { z } from 'zod';
-import { resetPassword } from '@/contexts/AuthContext';
 
 // Form validation schema
 const signInSchema = z.object({
@@ -20,7 +19,7 @@ type FormData = z.infer<typeof signInSchema>;
 
 const SignIn = () => {
   const navigate = useNavigate();
-  const { user, signInWithEmail, isSigningIn } = useAuth();
+  const { user, signInWithEmail, isSigningIn, resetPassword } = useAuth();
   const { toast } = useToast();
   const [formData, setFormData] = useState<FormData>({
     email: '',

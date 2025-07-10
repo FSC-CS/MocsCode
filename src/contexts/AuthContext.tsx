@@ -317,6 +317,46 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const resetPassword = async (email: string) => {
+    try {
+      clearError();
+      setIsLoading(true);
+
+      // Call the edge function to send password reset email
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-password-reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send password reset email');
+      }
+
+      toast({
+        title: 'Password reset email sent',
+        description: 'Check your email for instructions to reset your password.',
+      });
+
+    } catch (error: any) {
+      console.error('Error sending password reset:', error);
+      const errorMessage = error.message || 'Failed to send password reset email';
+      setError(errorMessage);
+      toast({
+        title: 'Password reset failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const signOut = async () => {
     setIsSigningOut(true)
     

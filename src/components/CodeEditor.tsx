@@ -853,20 +853,23 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onBack}
-              className="text-gray-300 hover:text-white hover:bg-gray-700"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
-            </Button>
+      <header className="bg-gray-800 border-b border-gray-700 px-2 sm:px-4 py-2">
+        <div className="flex items-center justify-between w-full">
+          {/* Left section - Back button and project name */}
+          <div className="flex-1 flex items-center space-x-2 sm:space-x-4 min-w-0">
+            <div className="flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onBack}
+                className="text-gray-300 hover:text-white hover:bg-gray-700 px-2 sm:px-3"
+              >
+                <ArrowLeft className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Back to Dashboard</span>
+              </Button>
+            </div>
             
-            <div className="flex items-center space-x-3">
+            <div className="hidden md:flex items-center space-x-3 min-w-0">
               {isRenaming ? (
                 <div className="flex items-center space-x-2">
                   <Input
@@ -897,8 +900,19 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center group">
-                  <h1 className="text-lg font-semibold text-white">{project?.name}</h1>
+                <div className="flex items-center group min-w-0">
+                  <h1 className="text-lg font-semibold text-white truncate max-w-[200px] md:max-w-none" title={project?.name}>
+                    {project?.name.length > 10 ? (
+                      <>
+                        <span className="hidden lg:inline">{project?.name}</span>
+                        <span className="lg:hidden">
+                          {project?.name.length > 10 ? `${project?.name.substring(0, 10)}...` : project?.name}
+                        </span>
+                      </>
+                    ) : (
+                      project?.name
+                    )}
+                  </h1>
                   {canManageProject() && (
                     <Button
                       variant="ghost"
@@ -917,18 +931,20 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
             </div>
           </div>
 
-          {/* MocsCode Branding */}
-          <div className="absolute left-1/2 transform -translate-x-1/2">
-            <div className="flex items-center">
-              <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent px-4 py-1">
+          {/* MocsCode Branding - Center section */}
+          <div className="flex-1 flex items-center justify-center px-2">
+            <div className="text-center">
+              <span className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent whitespace-nowrap">
                 MocsCode
               </span>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          {/* Right section - Action buttons */}
+          <div className="flex-1 flex items-center justify-end space-x-1 sm:space-x-2 md:space-x-3 overflow-x-auto py-1">
             {/* Editor Settings Dropdown */}
-            <Popover onOpenChange={setSettingsOpen} open={settingsOpen}>
+            <div className="flex-shrink-0">
+              <Popover onOpenChange={setSettingsOpen} open={settingsOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
@@ -984,28 +1000,29 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                   </div>
                 </div>
               </PopoverContent>
-            </Popover>
+              </Popover>
+            </div>
 
             {/* Only show run button if user has edit permissions */}
             {(currentUserRole === 'owner' || currentUserRole === 'editor') && (
               <Button
                 onClick={runCode}
                 disabled={isRunning}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2"
+                className="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-2 whitespace-nowrap overflow-hidden text-ellipsis"
               >
-                <Play className="h-4 w-4 mr-2" />
-                {isRunning ? 'Running...' : 'Run Code'}
+                <Play className="h-4 w-4 sm:mr-2 flex-shrink-0" />
+                <span className="hidden sm:inline">{isRunning ? 'Running...' : 'Run Code'}</span>
               </Button>
             )}
             
             {/* Only show share button if user can manage members */}
             {canManageMembers() && (
               <Button
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 whitespace-nowrap overflow-hidden text-ellipsis"
                 onClick={() => setShowShareDialog(true)}
               >
-                <Share className="h-4 w-4 mr-2" />
-                Share
+                <Share className="h-4 w-4 sm:mr-2 flex-shrink-0" />
+                <span className="hidden sm:inline">Share</span>
               </Button>
             )}
 
@@ -1018,10 +1035,10 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                   saveCurrentFile(false);
                 }}
                 variant="outline"
-                className="border-gray-600 text-gray-600 hover:bg-gray-700 hover:text-white"
+                className="border-gray-600 text-gray-600 hover:bg-gray-700 hover:text-white px-3 sm:px-4 py-2 whitespace-nowrap overflow-hidden text-ellipsis"
               >
-                <Check className="h-4 w-4 mr-2" />
-                Save
+                <Check className="h-4 w-4 sm:mr-2 flex-shrink-0" />
+                <span className="hidden sm:inline">Save</span>
               </Button>
             )}
           </div>

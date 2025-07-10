@@ -561,9 +561,11 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
       <header className="bg-white dark:bg-slate-900/95 dark:backdrop-blur-sm shadow-lg dark:shadow-indigo-900/20 border-b dark:border-slate-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Code className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">MocsCode</h1>
+            <div className="flex items-center space-x-2">
+              <Code className="h-6 w-6 text-blue-500" />
+              <h1 className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent whitespace-nowrap">
+                MocsCode
+              </h1>
             </div>
             <div className="flex items-center space-x-4">
               {isAuthLoading ? (

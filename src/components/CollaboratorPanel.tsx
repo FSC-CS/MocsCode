@@ -251,9 +251,9 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
               Collaborators
             </h3>
             {!isLoading && (
-              <div className="flex items-center ml-2">
+              <div className="flex items-center ml-2" title={`${onlineUsers.size} online`}>
                 <Wifi className="h-3 w-3 text-green-400 mr-1" />
-                <span className="text-xs text-green-400">{onlineUsers.size} online</span>
+                <span className="text-xs text-green-400">{onlineUsers.size}</span>
               </div>
             )}
           </div>
@@ -275,7 +275,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
       </div>
 
       {/* Collaborators List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 min-w-0">
         {isLoading ? (
           // Loading skeletons
           <>
@@ -283,7 +283,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
               <Card key={index} className="p-3 bg-gray-700 border-gray-600 animate-pulse">
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 bg-gray-600 rounded-full" />
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="h-4 bg-gray-600 rounded w-24 mb-1" />
                     <div className="h-3 bg-gray-600 rounded w-16" />
                   </div>
@@ -348,9 +348,9 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
                   )}
                 </div>
                 
-                <div className="flex-1">
+                <div className="flex-1 min-w-0 overflow-hidden">
                   <div className="flex items-center space-x-2">
-                    <span className={`text-sm font-medium ${collaborator.user_id === user?.id ? 'text-blue-400' : 'text-white'}`}>
+                    <span className={`text-sm font-medium ${collaborator.user_id === user?.id ? 'text-blue-400' : 'text-white'} truncate`}>
                       {collaborator.user_id === user?.id ? 'You' : getDisplayName(collaborator)}
                     </span>
                     {collaborator.isTyping && (
@@ -374,21 +374,23 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
                   )}
                   
                   {collaborator.user?.email && (
-                    <div className="text-xs text-gray-500 truncate">
+                    <div className="text-xs text-gray-500 truncate w-full">
                       {collaborator.user.email}
                     </div>
                   )}
                 </div>
               </div>
               
-              <div className="flex items-center justify-between mt-2">
-                <Badge 
-                  variant="outline" 
-                  className={`text-xs border-gray-500 ${getRoleBadgeColor(collaborator.role)}`}
-                >
-                  {getRoleIcon(collaborator.role)}
-                  <span className="ml-1">{getRoleText(collaborator.role)}</span>
-                </Badge>
+              <div className="flex items-center justify-between mt-2 overflow-hidden">
+                <div className="overflow-hidden">
+                  <Badge 
+                    variant="outline" 
+                    className={`text-xs border-gray-500 ${getRoleBadgeColor(collaborator.role)} max-w-full truncate`}
+                  >
+                    {getRoleIcon(collaborator.role)}
+                    <span className="ml-1 truncate">{getRoleText(collaborator.role)}</span>
+                  </Badge>
+                </div>
                 
                 {canManageMembers && collaborator.role !== 'owner' && (
                   <Button 

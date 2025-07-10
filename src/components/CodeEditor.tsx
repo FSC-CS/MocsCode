@@ -1060,22 +1060,19 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar with Toggle */}
-        <div className="flex flex-row h-full">
+        <div className="flex flex-row h-full bg-gray-800" style={{ width: isSidebarCollapsed ? '16px' : `${fileExplorerWidth}px` }}>
           {/* Sidebar Content */}
           <div 
-            className={`bg-gray-800 border-r border-gray-700 flex flex-col transition-all duration-200 ${
-              isSidebarCollapsed ? 'overflow-hidden' : ''
-            }`}
+            className="bg-gray-800 border-r border-gray-700 flex flex-col h-full flex-shrink-0 overflow-hidden"
             style={{
-              width: isSidebarCollapsed ? 0 : fileExplorerWidth - 8,
+              width: isSidebarCollapsed ? 0 : '100%',
               minWidth: isSidebarCollapsed ? 0 : 172,
-              maxWidth: isSidebarCollapsed ? 0 : 592,
-              flexShrink: 0,
+              maxWidth: isSidebarCollapsed ? 0 : '100%',
             }}
           >
             {!isSidebarCollapsed && (
               <>
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto" style={{ height: 'calc(100% - 16rem)' }}>
                   <FileExplorer 
                     currentFile={openFiles[activeFileIndex]?.name || ''} 
                     onFileSelect={openFile}
@@ -1083,7 +1080,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                     projectId={project.id}
                   />
                 </div>
-                <div className="border-t border-gray-700 h-64 overflow-y-auto">
+                <div className="border-t border-gray-700 h-64 overflow-y-auto" style={{ height: '16rem' }}>
                   <CollaboratorPanel 
                     projectId={project.id}
                     onMemberClick={handleMemberClick}
@@ -1096,39 +1093,66 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
             )}
           </div>
           
-          {/* Toggle Button Column */}
-          <div className="w-8 h-full flex flex-col bg-gray-800 border-r border-gray-700">
+          {/* Toggle button and resize handle column */}
+          <div className="relative h-full flex-shrink-0">
+            {/* Toggle Button - now on the left */}
             <button
-              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="w-full h-16 flex items-center justify-center bg-gray-700 hover:bg-blue-600 text-white transition-all duration-200"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsSidebarCollapsed(!isSidebarCollapsed);
+              }}
+              className={`absolute left-0 top-0 bottom-0 w-4 flex items-center justify-center ${isSidebarCollapsed ? 'bg-gray-800' : 'bg-gray-700'} hover:bg-blue-600 text-white transition-all duration-200 z-10`}
               aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              <div className={`transform transition-transform duration-200 ${isSidebarCollapsed ? 'rotate-180' : ''}`}>
+              <div className={`transform transition-transform duration-200 ${isSidebarCollapsed ? 'rotate-180' : 'rotate-0'}`}>
                 <svg 
                   xmlns="http://www.w3.org/2000/svg" 
-                  width="16" 
-                  height="16" 
+                  width="12" 
+                  height="12" 
                   viewBox="0 0 24 24" 
                   fill="none" 
                   stroke="currentColor" 
                   strokeWidth="2" 
                   strokeLinecap="round" 
                   strokeLinejoin="round"
+                  className="text-gray-400 hover:text-white"
                 >
                   <path d="M15 18l-6-6 6-6"/>
                 </svg>
               </div>
             </button>
             
-            {!isSidebarCollapsed && (
-              <div className="flex-1 w-full flex items-center justify-center">
-                <div className="h-16 w-px bg-gray-600"></div>
-              </div>
-            )}
+            {/* Resize handle - now on the right */}
+            <div 
+              className="absolute right-0 top-0 bottom-0 w-1 bg-gray-600 hover:bg-blue-500 cursor-col-resize active:bg-blue-600 z-20"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const startX = e.clientX;
+                const startWidth = fileExplorerWidth;
+                
+                const onMouseMove = (moveEvent: MouseEvent) => {
+                  const delta = moveEvent.clientX - startX;
+                  const newWidth = startWidth + delta;
+                  // Constrain between 172px and 600px
+                  setFileExplorerWidth(Math.max(172, Math.min(600, newWidth)));
+                };
+
+                const onMouseUp = () => {
+                  document.removeEventListener('mousemove', onMouseMove);
+                  document.removeEventListener('mouseup', onMouseUp);
+                };
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp, { once: true });
+              }}
+            />
             
+            {/* Project name when collapsed */}
             {isSidebarCollapsed && (
-              <div className="flex-1 flex items-center justify-center">
-                <span className="transform -rotate-90 whitespace-nowrap text-xs font-medium text-gray-400 tracking-wider">
+              <div className="absolute left-0 right-0 bottom-4 flex items-center justify-center">
+                <span className="transform -rotate-90 whitespace-nowrap text-[10px] font-medium text-gray-500 tracking-wider">
                   {project.name}
                 </span>
               </div>
@@ -1138,10 +1162,12 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
         {/* Main Editor Area */}
         <div 
-          className="flex-1 flex flex-col overflow-hidden relative"
+          className="flex-1 flex flex-col overflow-hidden relative bg-gray-900"
           style={{
             minWidth: 0,
-            width: `calc(100% - ${isSidebarCollapsed ? '40px' : `${fileExplorerWidth}px`})`,
+            width: `calc(100% - ${isSidebarCollapsed ? '16px' : `${fileExplorerWidth}px`})`,
+            transition: 'width 0.2s ease-out',
+            marginLeft: isSidebarCollapsed ? '0' : '0',
           }}
         >
           {/* File Tabs */}

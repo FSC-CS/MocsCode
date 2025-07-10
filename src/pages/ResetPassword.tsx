@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Password reset form schema
 const resetPasswordSchema = z.object({
@@ -33,12 +34,12 @@ const resetPasswordSchema = z.object({
 type ResetPasswordForm = z.infer<typeof resetPasswordSchema>;
 
 export default function ResetPassword() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   // Reset password form
   const form = useForm<ResetPasswordForm>({
@@ -49,29 +50,19 @@ export default function ResetPassword() {
     },
   });
 
-  // Extract token from URL on mount
-  const token = searchParams.get('token');
-  const type = searchParams.get('type');
-
-  // Validate that we have a recovery token
-  useEffect(() => {
-    if (!token || type !== 'recovery') {
-      setError('Invalid or missing reset token. Please request a new password reset link.');
-    }
-  }, [token, type]);
+  // Check if user is authenticated
+  if (!user) {
+    navigate('/signin');
+    return null;
+  }
 
   // Handle password reset submission
   async function onSubmit(data: ResetPasswordForm) {
-    if (!token) {
-      setError('No reset token found. Please request a new password reset link.');
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      // Update password using the token
+      // Update password for authenticated user
       const { error } = await supabase.auth.updateUser({
         password: data.password
       });
@@ -83,20 +74,21 @@ export default function ResetPassword() {
       // Show success state
       setSuccess(true);
       toast({
-        title: 'Password reset successful',
-        description: 'Your password has been changed. You can now sign in with your new password.',
+        title: 'Password changed successfully',
+        description: 'Your password has been updated. Redirecting to dashboard...',
       });
 
       // Redirect after a delay
       setTimeout(() => {
-        navigate('/signin');
+        navigate('/dashboard');
       }, 3000);
     } catch (error: any) {
-      console.error('Error resetting password:', error);
-      setError(error.message || 'Failed to reset password. The link may have expired or is invalid.');
+      console.error('Error changing password:', error);
+      setError(error.message || 'Failed to update your password. Please try again.');
       toast({
-        title: 'Password reset failed',
-        description: error.message || 'Failed to reset password. Please try again or request a new link.',
+        title: 'Password change failed',
+        description: error.message || 'Failed to update your password. Please try again.',
+
         variant: 'destructive',
       });
     } finally {
@@ -108,7 +100,7 @@ export default function ResetPassword() {
     <div className="flex items-center justify-center min-h-screen bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Reset Password</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">Change Password</CardTitle>
           <CardDescription className="text-center">
             Enter your new password below
           </CardDescription>
@@ -128,7 +120,7 @@ export default function ResetPassword() {
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <AlertTitle>Success!</AlertTitle>
                 <AlertDescription>
-                  Your password has been reset successfully. You will be redirected to the sign in page shortly.
+                  Your password has been changed successfully. You will be redirected to your dashboard shortly.
                 </AlertDescription>
               </Alert>
             </div>
@@ -178,7 +170,7 @@ export default function ResetPassword() {
                   className="w-full" 
                   disabled={loading || !!error}
                 >
-                  {loading ? 'Resetting Password...' : 'Reset Password'}
+                  {loading ? 'Updating Password...' : 'Update Password'}
                 </Button>
               </form>
             </Form>
@@ -187,10 +179,10 @@ export default function ResetPassword() {
         <CardFooter className="flex justify-center">
           <Button
             variant="link"
-            onClick={() => navigate('/signin')}
+            onClick={() => navigate('/dashboard')}
             className="px-0"
           >
-            Back to Sign In
+            Back to Dashboard
           </Button>
         </CardFooter>
       </Card>

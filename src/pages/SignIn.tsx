@@ -99,9 +99,11 @@ const SignIn = () => {
     }
 
     try {
-      // The resetPassword method is now available in the AuthContext
-      await useAuth().resetPassword(formData.email);
+      setIsSubmitting(true);
+      // Use resetPassword from the already obtained useAuth hook
+      await resetPassword(formData.email);
       
+      // Toast is already shown in the auth context, but we can keep this for clarity
       toast({
         title: 'Password reset email sent',
         description: 'Check your email for instructions to reset your password.',
@@ -109,6 +111,8 @@ const SignIn = () => {
     } catch (error) {
       console.error('Error sending password reset email:', error);
       // Error is handled in the auth context
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

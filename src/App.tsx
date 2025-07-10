@@ -12,6 +12,7 @@ import SignIn from "./pages/SignIn";
 import Register from "./pages/Register";
 import Callback from "./pages/auth/Callback";
 import JoinProject from "./pages/JoinProject.tsx";
+import ResetPassword from "./pages/ResetPassword";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ApiProvider } from "./contexts/ApiContext";
 
@@ -42,7 +43,8 @@ const App = () => (
               <Route path="/editor/:projectId/:projectName?" element={<EditorPage />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/auth/callback" element={<Callback />} />
-              <Route path="/join/:token" element={<JoinProject />} /> {/* Add this route */}
+              <Route path="/join/:token" element={<JoinProject />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

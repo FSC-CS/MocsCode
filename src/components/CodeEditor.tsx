@@ -1181,55 +1181,49 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
               )}
             </div>
 
-            {/* Resize Handle */}
-            <div 
-              className="h-2 w-full bg-gray-700 hover:bg-blue-500 cursor-row-resize active:bg-blue-600 relative z-10"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                const startY = e.clientY;
-                const startHeight = editorHeight;
-                const container = e.currentTarget.parentElement?.getBoundingClientRect();
-                if (!container) return;
-                
-                const onMouseMove = (moveEvent: MouseEvent) => {
-                  const delta = moveEvent.clientY - startY;
-                  const newHeight = startHeight + delta;
-                  // Ensure we don't go below min height or above max height
-                  const minHeight = 100;
-                  const maxHeight = window.innerHeight - 200; // Leave some space for other UI
-                  const constrainedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-                  setEditorHeight(constrainedHeight);
-                };
+            {/* Output Panel with custom resize handle */}
+            <div className="relative flex flex-col bg-gray-800 border-t border-gray-700" style={{ height: `${100 - editorHeight}%` }}>
+              {/* Resize handle */}
+              <div 
+                className="h-2 w-full bg-gray-700 hover:bg-blue-500 cursor-row-resize active:bg-blue-600 relative z-10"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  
+                  const startY = e.clientY;
+                  const startHeight = editorHeight;
+                  const container = e.currentTarget.parentElement?.parentElement?.getBoundingClientRect();
+                  if (!container) return;
+                  
+                  const onMouseMove = (moveEvent: MouseEvent) => {
+                    const delta = moveEvent.clientY - startY;
+                    const newEditorHeight = startHeight + (delta / container.height * 100);
+                    // Constrain between 10% and 90% of container height
+                    setEditorHeight(Math.max(10, Math.min(90, newEditorHeight)));
+                  };
 
-                const onMouseUp = () => {
-                  document.removeEventListener('mousemove', onMouseMove);
-                  document.removeEventListener('mouseup', onMouseUp);
-                };
+                  const onMouseUp = () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                  };
 
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp, { once: true });
-              }}
-            />
-
-            {/* Output Panel */}
-            <ResizablePanel
-              direction="vertical"
-              initialSize={200}
-              minSize={100}
-              maxSize={500}
-              className="bg-gray-800 border-t border-gray-700 flex flex-col"
-            >
-              <OutputPanel 
-                output={output} 
-                isRunning={isRunning}
-                compileScript={compileScript}
-                setCompileScript={setCompileScript}
-                runScript={runScript}
-                setRunScript={setRunScript} 
+                  document.addEventListener('mousemove', onMouseMove);
+                  document.addEventListener('mouseup', onMouseUp, { once: true });
+                }}
               />
-            </ResizablePanel>
+              
+              {/* Output panel content */}
+              <div className="flex-1 overflow-auto">
+                <OutputPanel 
+                  output={output} 
+                  isRunning={isRunning}
+                  compileScript={compileScript}
+                  setCompileScript={setCompileScript}
+                  runScript={runScript}
+                  setRunScript={setRunScript} 
+                />
+              </div>
+            </div>
           </div>
         </div>
 

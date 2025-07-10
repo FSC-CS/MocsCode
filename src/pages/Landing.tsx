@@ -31,8 +31,10 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
-              <Code className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">MocsCode</h1>
+              <Code className="h-6 w-6 text-blue-500" />
+              <h1 className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent whitespace-nowrap">
+                MocsCode
+              </h1>
             </div>
             <div className="flex items-center space-x-4">
               {user ? (
@@ -99,16 +101,15 @@ const Landing = () => {
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
             Why Choose MocsCode?
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 justify-center">
-            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex flex-wrap justify-center gap-8 max-w-4xl mx-auto">
+            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow flex-1 min-w-[280px] max-w-[320px]">
               <Code className="h-12 w-12 text-blue-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Multi-Language Support</h3>
               <p className="text-gray-600">
                 Code in Java, Python, JavaScript, C, C++, and C# with full syntax highlighting and error detection.
               </p>
             </Card>
-            
-            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
+            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow flex-1 min-w-[280px] max-w-[320px]">
               <Users className="h-12 w-12 text-green-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Real-time Collaboration</h3>
               <p className="text-gray-600">

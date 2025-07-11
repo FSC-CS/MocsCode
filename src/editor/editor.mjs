@@ -35,7 +35,12 @@ import {
   syntaxHighlighting,
   defaultHighlightStyle,
   bracketMatching,
+  HighlightStyle
 } from '@codemirror/language';
+
+// Import tag definitions from language packages
+import { tags as jsTags } from '@lezer/highlight';
+import { javascriptLanguage } from '@codemirror/lang-javascript';
 
 import {
   defaultKeymap,
@@ -156,9 +161,25 @@ const lightTheme = EditorView.theme({
   }
 });
 
+// Custom highlight style that makes syntax more visible
+const customHighlightStyle = HighlightStyle.define([
+  { tag: jsTags.keyword, color: "#c678dd" },
+  { tag: jsTags.comment, color: "#5c6370", fontStyle: "italic" },
+  { tag: jsTags.string, color: "#98c379" },
+  { tag: jsTags.number, color: "#d19a66" },
+  { tag: jsTags.variableName, color: "#e06c75" },
+  { tag: jsTags.operator, color: "#56b6c2" },
+  { tag: jsTags.bracket, color: "#abb2bf" },
+  { tag: jsTags.meta, color: "#61afef" },
+  { tag: jsTags.function(jsTags.variableName), color: "#61afef" },
+  { tag: jsTags.className, color: "#e5c07b" },
+  { tag: jsTags.propertyName, color: "#e06c75" },
+  { tag: jsTags.definition(jsTags.typeName), color: "#e5c07b" }
+]);
+
 const darkTheme = EditorView.theme({
   "&": {
-    backgroundColor: "#1a1f2e",
+    backgroundColor: "#0f131f",
     color: "#e2e8f0",
     height: "100%"
   },
@@ -167,6 +188,16 @@ const darkTheme = EditorView.theme({
     fontSize: "14px",
     minHeight: "100%",
     caretColor: "#60a5fa"
+  },
+  
+  // Barely visible selection background (1% opacity)
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+    backgroundColor: "rgba(255, 255, 255, 0.01)"  // Set to 1% opacity
+  },
+  
+  // Very subtle active line background
+  ".cm-activeLine": {
+    backgroundColor: "rgba(255, 255, 255, 0.015)"  // Reduced from 0.03 to 0.015
   },
   ".cm-scroller": {
     overflow: "auto",
@@ -187,12 +218,12 @@ const darkTheme = EditorView.theme({
     }
   },
   ".cm-gutters": {
-    backgroundColor: "#1a1f2e",
+    backgroundColor: "#0f131f",
     color: "#64748b",
-    borderRight: "1px solid #1e293b"
+    borderRight: "1px solid #1a202c"
   },
   ".cm-activeLine": {
-    backgroundColor: "#1e293b"
+    backgroundColor: "#1a202c"
   },
   "&.cm-focused .cm-cursor": {
     borderLeft: "2px solid #60a5fa"
@@ -340,7 +371,7 @@ export function createEditorView({
     rectangularSelection(),
     crosshairCursor(),
     indentOnInput(),
-    syntaxHighlighting(defaultHighlightStyle),
+    syntaxHighlighting(customHighlightStyle),
     bracketMatching(),
     closeBrackets(),
     

@@ -782,7 +782,6 @@ const FileExplorer = ({ currentFile, onFileSelect, onFileRenamed, projectId }: F
               'Java': { ext: 'java', icon: <FileText className="h-4 w-4 mr-2 text-red-400" /> },
               'C': { ext: 'c', icon: <FileText className="h-4 w-4 mr-2 text-blue-500" /> },
               'C++': { ext: 'cpp', icon: <FileText className="h-4 w-4 mr-2 text-blue-600" /> },
-              'C#': { ext: 'cs', icon: <FileText className="h-4 w-4 mr-2 text-purple-400" /> },
               'Markdown': { ext: 'md', icon: <FileText className="h-4 w-4 mr-2 text-blue-300" /> },
             }).map(([name, fileType]) => {
               const { ext, icon } = fileType;

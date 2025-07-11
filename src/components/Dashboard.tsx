@@ -90,7 +90,6 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
     { name: 'JavaScript', extension: 'js' },
     { name: 'C', extension: 'c' },
     { name: 'C++', extension: 'cpp' },
-    { name: 'C#', extension: 'cs' }
   ];
 
   // --- Utility functions ---
@@ -141,7 +140,6 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
       'Python': 'bg-blue-100 text-blue-800',
       'C': 'bg-gray-100 text-gray-800',
       'C++': 'bg-purple-100 text-purple-800',
-      'C#': 'bg-green-100 text-green-800'
     };
     return colors[language] || 'bg-gray-100 text-gray-800';
   };

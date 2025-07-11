@@ -28,7 +28,7 @@ export function getLanguageScripts(language: string | undefined): ScriptTemplate
     case 'java':
       return {
         compile: 'javac src/Main.java',
-        run: 'java src/Main'
+        run: 'java src/Main.java'
       };
     
     case 'python':

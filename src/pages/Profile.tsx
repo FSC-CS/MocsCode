@@ -29,7 +29,7 @@ const Profile = () => {
   const [avatarError, setAvatarError] = useState(false);
   const { usersApi } = useApi();
   const navigate = useNavigate();
-  const { user: authUser, isLoading } = useAuth();
+  const { user, dbUser, isLoading } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const { theme, setTheme } = useTheme();
   const [profileData, setProfileData] = useState({
@@ -47,7 +47,7 @@ const [profileLoading, setProfileLoading] = useState(true);
     if (!customUser || profileData.username === customUser.name) return;
     try {
       // Optionally: Set a loading state here
-      const { error, data } = await usersApi.updateUser(authUser.id, { name: profileData.username });
+      const { error, data } = await usersApi.updateUser(dbUser.id, { name: profileData.username });
       if (error) {
         alert('Failed to update username: ' + error.message);
         return;
@@ -71,7 +71,7 @@ const [profileLoading, setProfileLoading] = useState(true);
 
   const handleProfilePictureChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !user) return;
+    if (!file || !dbUser) return;
 
     setAvatarUploading(true);
 
@@ -84,7 +84,7 @@ const [profileLoading, setProfileLoading] = useState(true);
       };
       const compressedFile = await imageCompression(file, options);
       const fileExt = compressedFile.name.split('.').pop() || file.name.split('.').pop();
-      const fileName = `${user.id}/avatar.${fileExt}`;
+      const fileName = `${dbUser.id}/avatar.${fileExt}`;
 
       // Upload the file
       const { data, error } = await supabase.storage
@@ -95,9 +95,9 @@ const [profileLoading, setProfileLoading] = useState(true);
           contentType: compressedFile.type,
         });
 
-      if (error) throw error;
+      console.log('File uploaded successfully:', data, error);
 
-      console.log('File uploaded successfully:', error);
+      if (error) throw error;
 
       // Create a signed URL for the uploaded file
       const { data: signedUrlData, error: urlError } = await supabase.storage
@@ -114,7 +114,7 @@ const [profileLoading, setProfileLoading] = useState(true);
 
       // Update user profile in DB with new avatar_url
       try {
-        const { error: updateError } = await usersApi.updateUser(user.id, { avatar_url: fileName });
+        const { error: updateError } = await usersApi.updateUser(dbUser.id, { avatar_url: fileName });
         if (updateError) {
           throw updateError;
         }
@@ -180,27 +180,27 @@ const loadExistingAvatar = async () => {
 
 // Fetch custom user after auth
 useEffect(() => {
-  if (authUser) {
+  if (dbUser) {
     setProfileLoading(true);
-    usersApi.getUser(authUser.id).then((res: any) => {
+    usersApi.getUser(dbUser.id).then((res: any) => {
       setCustomUser(res.data);
       setProfileLoading(false);
     });
   }
-}, [authUser]);
+}, [dbUser]);
 
 useEffect(() => {
-  if (authUser && customUser) {
+  if (dbUser && customUser) {
     setProfileData(prev => ({
       ...prev,
-      email: authUser.email || '',
+      email: dbUser.email || '',
       username: customUser.name || ''
     }));
     // Load existing avatar
     loadExistingAvatar();
     setAvatarError(false);
   }
-}, [authUser, customUser]);
+}, [dbUser, customUser]);
 
   const getLanguageColor = (language: string) => {
     const colors: { [key: string]: string } = {

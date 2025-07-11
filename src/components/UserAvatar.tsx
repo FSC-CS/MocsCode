@@ -36,7 +36,7 @@ export function UserAvatar({
       hash = str.charCodeAt(i) + ((hash << 5) - hash);
     }
     const hue = Math.abs(hash % 360);
-    return `hsl(${hue}, 70%, 60%)`;
+    return 'hsl(221 83.2% 53.3%)';
   };
   const backgroundColor = fallbackColor || stringToColor(fallbackInitials);
 
@@ -95,7 +95,7 @@ export function UserAvatar({
         {isLoading ? (
           <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-label="Loading avatar" />
         ) : (
-          fallbackInitials
+          <User size={18} />
         )}
       </AvatarFallback>
     </Avatar>

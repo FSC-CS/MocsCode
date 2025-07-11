@@ -52,18 +52,16 @@ int main() {
 }`
     }
   ],
-  'c#': [
+  'markdown': [
     {
-      filename: 'Program.cs',
-      content: `using System;
-
-class Program
-{
-    static void Main(string[] args)
-    {
-        Console.WriteLine("Hello, World!");
+      filename: 'README.md',
+      content: '# README\n\nAdd your documentation here.'
     }
-}`
+  ],
+  'txt': [
+    {
+      filename: 'README.txt',
+      content: 'Add your documentation here.'
     }
   ]
 };

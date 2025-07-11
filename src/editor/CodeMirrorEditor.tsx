@@ -14,6 +14,7 @@ interface CodeMirrorEditorProps {
   onChange: (value: string) => void;
   tabSize?: number;
   autocomplete?: boolean;
+  syntaxTheme?: string;
   ytext?: any;
   provider?: any;
 }
@@ -24,6 +25,7 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   onChange, 
   tabSize = 4, 
   autocomplete = true, 
+  syntaxTheme = 'default',
   ytext,
   provider,
 }) => {
@@ -64,6 +66,7 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
           onChange: safeOnChange,
           tabSize,
           autocomplete,
+          syntaxTheme,
           ytext,
           provider,
         });
@@ -91,7 +94,7 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     }
   }, [value]);
 
-  // Live update tabSize and autocomplete settings
+  // Live update editor settings
   useEffect(() => {
     const updateSettings = async () => {
       if (!updateEditorSettings) {
@@ -105,17 +108,16 @@ const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         const currentState = viewRef.current.state;
         const currentTabSize = currentState.tabSize;
         
-        if (currentTabSize !== tabSize || autocomplete !== undefined) {
-          updateEditorSettings(viewRef.current, { 
-            tabSize, 
-            autocomplete: autocomplete ?? true 
-          });
-        }
+        updateEditorSettings(viewRef.current, { 
+          tabSize, 
+          autocomplete: autocomplete ?? true,
+          syntaxTheme
+        });
       }
     };
 
     updateSettings();
-  }, [tabSize, autocomplete]);
+  }, [tabSize, autocomplete, syntaxTheme]);
 
   return (
     <div className="relative h-full w-full">

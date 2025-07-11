@@ -23,7 +23,7 @@ function mapRange(range, change) {
 const highlight = Decoration.mark({
   attributes: { 
     class: "cm-highlight",
-    style: `background-color: rgba(255, 165, 0, 0.2)`
+    style: `background-color: rgba(255, 220, 150, 0.05)`
   }
 });
 

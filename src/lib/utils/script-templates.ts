@@ -55,7 +55,7 @@ export function getLanguageScripts(language: string | undefined): ScriptTemplate
     case 'c++':
     case 'cpp':
       return {
-        compile: 'g++ -std=c++17 main.cpp -o program',
+        compile: 'g++ -std=c++17 src/main.cpp -o program',
         run: './program'
       };
     

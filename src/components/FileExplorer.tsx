@@ -763,14 +763,7 @@ const FileExplorer = ({ currentFile, onFileSelect, onFileDeleted, onFileRenamed,
           <DialogHeader>
             <div className="flex justify-between items-center">
               <DialogTitle className="text-white">Create New File</DialogTitle>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-8 w-8 p-0 text-gray-400 hover:text-white"
-                onClick={() => setShowNewFileDialog(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              
             </div>
             <DialogDescription className="text-gray-400">
               Select a file type to create
@@ -818,7 +811,7 @@ const FileExplorer = ({ currentFile, onFileSelect, onFileDeleted, onFileRenamed,
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-8 w-8 p-0 text-gray-400 hover:text-white"
+                className="h-8 w-8 p-0 text-gray-400"
                 onClick={() => {
                   setShowFileNameDialog(false);
                   setSelectedFileType(null);

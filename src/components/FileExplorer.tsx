@@ -846,24 +846,33 @@ const FileExplorer = ({ currentFile, onFileSelect, onFileRenamed, projectId }: F
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  const template = getTemplateForLanguage(selectedFileType?.ext || '').find(t => 
-                    t.filename.endsWith(`.${selectedFileType?.ext}`)
-                  );
+                  e.preventDefault();
+                  let finalName = newFileName.trim();
+                  const ext = selectedFileType?.ext || '';
+                  
+                  // Ensure the file has the correct extension
+                  if (ext && !finalName.endsWith(`.${ext}`)) {
+                    finalName = `${finalName}.${ext}`;
+                  }
+                  
+                  // If it's a template file, use the template content
+                  const template = ext ? getTemplateForLanguage(ext).find(t => 
+                    t.filename.endsWith(`.${ext}`)
+                  ) : null;
                   
                   if (template) {
                     createNewItem('template', newFileParentId, {
                       ...template,
-                      filename: newFileName.endsWith(`.${selectedFileType?.ext}`) 
-                        ? newFileName 
-                        : `${newFileName}.${selectedFileType?.ext}`
-                    }, newFileName);
+                      filename: finalName
+                    }, finalName);
                   } else {
-                    createNewItem('file', newFileParentId, undefined, newFileName);
+                    createNewItem('file', newFileParentId, undefined, finalName);
                   }
                   setShowFileNameDialog(false);
                   setSelectedFileType(null);
                   setNewFileName('');
                 } else if (e.key === 'Escape') {
+                  e.preventDefault();
                   setShowFileNameDialog(false);
                   setSelectedFileType(null);
                   setNewFileName('');
@@ -888,19 +897,26 @@ const FileExplorer = ({ currentFile, onFileSelect, onFileRenamed, projectId }: F
             </Button>
             <Button 
               onClick={async () => {
-                const template = getTemplateForLanguage(selectedFileType?.ext || '').find(t => 
-                  t.filename.endsWith(`.${selectedFileType?.ext}`)
-                );
+                let finalName = newFileName.trim();
+                const ext = selectedFileType?.ext || '';
+                
+                // Ensure the file has the correct extension
+                if (ext && !finalName.endsWith(`.${ext}`)) {
+                  finalName = `${finalName}.${ext}`;
+                }
+                
+                // If it's a template file, use the template content
+                const template = ext ? getTemplateForLanguage(ext).find(t => 
+                  t.filename.endsWith(`.${ext}`)
+                ) : null;
                 
                 if (template) {
                   await createNewItem('template', newFileParentId, {
                     ...template,
-                    filename: newFileName.endsWith(`.${selectedFileType?.ext}`) 
-                      ? newFileName 
-                      : `${newFileName}.${selectedFileType?.ext}`
-                  }, newFileName);
+                    filename: finalName
+                  }, finalName);
                 } else {
-                  await createNewItem('file', newFileParentId, undefined, newFileName);
+                  await createNewItem('file', newFileParentId, undefined, finalName);
                 }
                 setShowFileNameDialog(false);
                 setSelectedFileType(null);

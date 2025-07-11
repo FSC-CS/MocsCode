@@ -29,15 +29,14 @@ export async function createLanguageSpecificFiles(
     case 'cpp':
       await createCppTemplate(projectId, projectFilesApi);
       break;
+    case 'c':
+      await createCTemplate(projectId, projectFilesApi);
+      break;
     case 'go':
       await createGoTemplate(projectId, projectFilesApi);
       break;
     case 'rust':
       await createRustTemplate(projectId, projectFilesApi);
-      break;
-    case 'c#':
-    case 'csharp':
-      await createCSharpTemplate(projectId, projectFilesApi);
       break;
     default:
       // Default to a simple README if language is not supported
@@ -632,6 +631,74 @@ A C# project created with MocsCode.
 Build: \`dotnet build\`
 
 Run: \`dotnet run\`
+`,
+  });
+}
+
+/**
+ * Creates a C project template
+ */
+async function createCTemplate(
+  projectId: string, 
+  projectFilesApi: ProjectFilesApi
+): Promise<void> {
+  // Create main.c
+  await projectFilesApi.createFile({
+    project_id: projectId,
+    name: 'main.c',
+    path: '/main.c',
+    file_type: 'file',
+    mime_type: 'text/x-c',
+    parent_id: null,
+    content: `#include <stdio.h>
+
+int main() {
+    printf("Hello, World!\n");
+    return 0;
+}
+`,
+  });
+  
+  // Create Makefile
+  await projectFilesApi.createFile({
+    project_id: projectId,
+    name: 'Makefile',
+    path: '/Makefile',
+    file_type: 'file',
+    mime_type: 'text/plain',
+    parent_id: null,
+    content: `CC=gcc
+CFLAGS=-Wall -Wextra -std=c99
+
+all: main
+
+main: main.c
+	$(CC) $(CFLAGS) -o main main.c
+
+clean:
+	rm -f main
+`,
+  });
+  
+  // Create README.md
+  await projectFilesApi.createFile({
+    project_id: projectId,
+    name: 'README.md',
+    path: '/README.md',
+    file_type: 'file',
+    mime_type: 'text/markdown',
+    parent_id: null,
+    content: `# C Project
+
+A simple C project created with MocsCode.
+
+## Getting Started
+
+Build: \`make\`
+
+Run: \`./main\`
+
+Clean: \`make clean\`
 `,
   });
 }

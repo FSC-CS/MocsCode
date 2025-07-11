@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings } from 'lucide-react';
+import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings, Palette } from 'lucide-react';
 import { presenceService } from '@/lib/presence';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from "@/components/ui/button";
@@ -91,6 +91,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   // Settings state
   const [tabSize, setTabSize] = useState(4);
   const [autocomplete, setAutocomplete] = useState(true);
+  const [syntaxTheme, setSyntaxTheme] = useState('default');
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Sidebar tab state: 'chat' or 'collaborators'
   const [activeSidebarTab, setActiveSidebarTab] = useState<'chat' | 'collaborators'>('chat');
@@ -870,6 +871,16 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     );
   }, []);
 
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.updateSettings({
+        tabSize,
+        autocomplete,
+        syntaxTheme,
+      });
+    }
+  }, [tabSize, autocomplete, syntaxTheme]);
+
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white">
       {/* Header */}
@@ -1017,6 +1028,26 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                       className="data-[state=checked]:bg-blue-600"
                       onClick={(e) => e.stopPropagation()}
                     />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="syntax-theme">
+                      <div className="flex items-center gap-2">
+                        <Palette className="h-4 w-4" />
+                        <span>Syntax Theme</span>
+                      </div>
+                    </Label>
+                    <select
+                      id="syntax-theme"
+                      value={syntaxTheme}
+                      onChange={(e) => setSyntaxTheme(e.target.value)}
+                      className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <option value="default">Default</option>
+                      <option value="dracula">Dracula</option>
+                      <option value="solarized-light">Solarized Light</option>
+                      <option value="monokai">Monokai</option>
+                    </select>
                   </div>
                 </div>
               </PopoverContent>
@@ -1208,6 +1239,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                     language={activeFile.language}
                     tabSize={tabSize}
                     autocomplete={autocomplete}
+                    syntaxTheme={syntaxTheme}
                     ytext={activeFile.ytext}
                     provider={activeFile.provider}
                     onChange={updateFileContent}

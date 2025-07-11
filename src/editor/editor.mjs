@@ -35,7 +35,12 @@ import {
   syntaxHighlighting,
   defaultHighlightStyle,
   bracketMatching,
+  HighlightStyle
 } from '@codemirror/language';
+
+// Import tag definitions from language packages
+import { tags as jsTags } from '@lezer/highlight';
+import { javascriptLanguage } from '@codemirror/lang-javascript';
 
 import {
   defaultKeymap,
@@ -66,6 +71,7 @@ import { yCollab } from 'y-codemirror.next';
 import { createAutoLanguageExtension } from './auto-language.mjs';
 import { cursorTooltip } from './cursor-tooltip.mjs';
 import { languageConfigs } from './language-support.js';
+import { syntaxThemes, getSyntaxTheme } from './syntax-themes';
 import {
   toggleLineWrapping,
   toggleHighlightActiveLine,
@@ -83,7 +89,6 @@ const prettierParsers = {
   graphql: { parser: "graphql", plugin: [parserGraphql] },
   java: { parser: "java", plugin: [prettierPluginJava] },
 };
-
 
 // --- JSDoc completion configuration ---
 function completeJSDoc(context) {
@@ -117,6 +122,7 @@ const tabSizeCompartment = new Compartment();
 const lintCompartment = new Compartment();
 const readOnlyCompartment = new Compartment();
 const autocompleteCompartment = new Compartment();
+const syntaxThemeCompartment = new Compartment();
 
 // Export compartments for external use
 export { autocompleteCompartment, tabSizeCompartment };
@@ -156,9 +162,25 @@ const lightTheme = EditorView.theme({
   }
 });
 
+// Custom highlight style that makes syntax more visible
+const customHighlightStyle = HighlightStyle.define([
+  { tag: jsTags.keyword, color: "#c678dd" },
+  { tag: jsTags.comment, color: "#5c6370", fontStyle: "italic" },
+  { tag: jsTags.string, color: "#98c379" },
+  { tag: jsTags.number, color: "#d19a66" },
+  { tag: jsTags.variableName, color: "#e06c75" },
+  { tag: jsTags.operator, color: "#56b6c2" },
+  { tag: jsTags.bracket, color: "#abb2bf" },
+  { tag: jsTags.meta, color: "#61afef" },
+  { tag: jsTags.function(jsTags.variableName), color: "#61afef" },
+  { tag: jsTags.className, color: "#e5c07b" },
+  { tag: jsTags.propertyName, color: "#e06c75" },
+  { tag: jsTags.definition(jsTags.typeName), color: "#e5c07b" }
+]);
+
 const darkTheme = EditorView.theme({
   "&": {
-    backgroundColor: "#1a1f2e",
+    backgroundColor: "#0f131f",
     color: "#e2e8f0",
     height: "100%"
   },
@@ -167,6 +189,51 @@ const darkTheme = EditorView.theme({
     fontSize: "14px",
     minHeight: "100%",
     caretColor: "#60a5fa"
+  },
+  
+  /* ===== Selection Styles ===== */
+  // Base selection
+  ".cm-selectionBackground, .cm-selection": {
+    backgroundColor: 'rgba(96, 165, 250, 0.2)'
+  },
+  
+  // Selection when editor is focused
+  "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+    backgroundColor: 'rgba(96, 165, 250, 0.3)'
+  },
+  
+  // Single character/word selection
+  ".cm-selectionMatch": {
+    backgroundColor: 'rgba(96, 165, 250, 0.4)'
+  },
+  
+  // Cursor
+  ".cm-cursor": {
+    borderLeft: '2px solid #60a5fa',
+    marginLeft: '-1px',
+    width: '2px',
+    '&.cm-dropCursor': {
+      borderLeft: 'none',
+      borderRight: '2px solid #60a5fa',
+      margin: 0
+    }
+  },
+  
+  // Active line
+  ".cm-activeLine": {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)'
+  },
+  
+  // Ensure text is selectable
+  ".cm-content": {
+    userSelect: 'text',
+    WebkitUserSelect: 'text',
+    MozUserSelect: 'text',
+    msUserSelect: 'text',
+    lineHeight: '1.5',
+    '&::selection': {
+      backgroundColor: 'rgba(96, 165, 250, 0.3)'
+    }
   },
   ".cm-scroller": {
     overflow: "auto",
@@ -187,12 +254,12 @@ const darkTheme = EditorView.theme({
     }
   },
   ".cm-gutters": {
-    backgroundColor: "#1a1f2e",
+    backgroundColor: "#0f131f",
     color: "#64748b",
-    borderRight: "1px solid #1e293b"
+    borderRight: "1px solid #1a202c"
   },
   ".cm-activeLine": {
-    backgroundColor: "#1e293b"
+    backgroundColor: "#1a202c"
   },
   "&.cm-focused .cm-cursor": {
     borderLeft: "2px solid #60a5fa"
@@ -312,6 +379,7 @@ function getLinterForLanguage(language) {
  * @param {boolean} [opts.autocomplete=true] - Enable or disable autocompletion
  * @param {string} [opts.theme='dark'] - Editor theme ('light' or 'dark')
  * @param {boolean} [opts.readOnly=false] - Read-only mode toggle
+ * @param {string} [opts.syntaxTheme] - Syntax highlighting theme
  * @returns {Object} - Contains the editor view instance
  */
 export function createEditorView({
@@ -323,6 +391,7 @@ export function createEditorView({
   autocomplete = true,
   theme = 'dark',
   readOnly = false,
+  syntaxTheme,
   ytext,
   provider,
 }) {
@@ -340,7 +409,6 @@ export function createEditorView({
     rectangularSelection(),
     crosshairCursor(),
     indentOnInput(),
-    syntaxHighlighting(defaultHighlightStyle),
     bracketMatching(),
     closeBrackets(),
     
@@ -357,6 +425,8 @@ export function createEditorView({
         : []
     ),
     
+    // Syntax highlighting theme
+    syntaxThemeCompartment.of(syntaxHighlighting(getSyntaxTheme(syntaxTheme))),
     
     // Line highlighting
     highlightActiveLine(),
@@ -475,7 +545,7 @@ export function createEditorView({
 
 // --- Dynamic update functions ---
 
-export function updateEditorSettings(view, { tabSize, autocomplete, theme, language, readOnly }) {
+export function updateEditorSettings(view, { tabSize, autocomplete, theme, language, readOnly, syntaxTheme }) {
   const effects = [];
 
   if (typeof tabSize === 'number') {
@@ -492,6 +562,13 @@ export function updateEditorSettings(view, { tabSize, autocomplete, theme, langu
 
   if (theme === 'dark' || theme === 'light') {
     effects.push(themeCompartment.reconfigure(theme === 'dark' ? darkTheme : lightTheme));
+  }
+
+  if (syntaxTheme) {
+    const theme = getSyntaxTheme(syntaxTheme);
+    if (theme) {
+      effects.push(syntaxThemeCompartment.reconfigure(syntaxHighlighting(theme)));
+    }
   }
 
   if (typeof readOnly === 'boolean') {
@@ -523,6 +600,15 @@ export function updateTheme(view, theme) {
   view.dispatch({
     effects: themeCompartment.reconfigure(theme === 'dark' ? darkTheme : lightTheme)
   });
+}
+
+export function updateSyntaxTheme(view, themeId) {
+  const theme = getSyntaxTheme(themeId);
+  if (theme) {
+    view.dispatch({
+      effects: syntaxThemeCompartment.reconfigure(syntaxHighlighting(theme))
+    });
+  }
 }
 
 export function updateAutocomplete(view, enabled, language) {

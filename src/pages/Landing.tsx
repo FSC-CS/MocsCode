@@ -1,12 +1,32 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Code, Users, Shield, Zap, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+// Custom hook to detect dark mode
+function usePrefersDarkMode() {
+  const [prefersDarkMode, setPrefersDarkMode] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    setPrefersDarkMode(mediaQuery.matches);
+    
+    const handler = (e: MediaQueryListEvent) => setPrefersDarkMode(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  return prefersDarkMode;
+}
 import { useAuth } from '@/contexts/AuthContext';
 
 const Landing = () => {
   const navigate = useNavigate();
+  const isDarkMode = usePrefersDarkMode();
+  const textColor = isDarkMode ? 'text-white' : 'text-gray-900';
+  const subTextColor = isDarkMode ? 'text-gray-300' : 'text-gray-600';
   const { user, signOut } = useAuth();
 
   useEffect(() => {
@@ -70,10 +90,10 @@ const Landing = () => {
       {/* Hero Section */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center py-20">
-          <h1 className="text-5xl font-bold text-gray-900 mb-6">
+          <h1 className={`text-5xl font-bold ${textColor} mb-6`}>
             Code Together, Create Together
           </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
+          <p className={`text-xl ${subTextColor} mb-8 max-w-3xl mx-auto`}>
             The ultimate collaborative coding platform for students and developers. 
             Work on projects together in real-time with powerful tools and seamless collaboration.
           </p>
@@ -98,7 +118,7 @@ const Landing = () => {
 
         {/* Features Section */}
         <div className="py-20">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
+          <h2 className={`text-3xl font-bold text-center ${textColor} mb-12`}>
             Why Choose MocsCode?
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

@@ -71,6 +71,7 @@ import { yCollab } from 'y-codemirror.next';
 import { createAutoLanguageExtension } from './auto-language.mjs';
 import { cursorTooltip } from './cursor-tooltip.mjs';
 import { languageConfigs } from './language-support.js';
+import { syntaxThemes, getSyntaxTheme } from './syntax-themes';
 import {
   toggleLineWrapping,
   toggleHighlightActiveLine,
@@ -88,7 +89,6 @@ const prettierParsers = {
   graphql: { parser: "graphql", plugin: [parserGraphql] },
   java: { parser: "java", plugin: [prettierPluginJava] },
 };
-
 
 // --- JSDoc completion configuration ---
 function completeJSDoc(context) {
@@ -122,6 +122,7 @@ const tabSizeCompartment = new Compartment();
 const lintCompartment = new Compartment();
 const readOnlyCompartment = new Compartment();
 const autocompleteCompartment = new Compartment();
+const syntaxThemeCompartment = new Compartment();
 
 // Export compartments for external use
 export { autocompleteCompartment, tabSizeCompartment };
@@ -378,6 +379,7 @@ function getLinterForLanguage(language) {
  * @param {boolean} [opts.autocomplete=true] - Enable or disable autocompletion
  * @param {string} [opts.theme='dark'] - Editor theme ('light' or 'dark')
  * @param {boolean} [opts.readOnly=false] - Read-only mode toggle
+ * @param {string} [opts.syntaxTheme] - Syntax highlighting theme
  * @returns {Object} - Contains the editor view instance
  */
 export function createEditorView({
@@ -389,6 +391,7 @@ export function createEditorView({
   autocomplete = true,
   theme = 'dark',
   readOnly = false,
+  syntaxTheme,
   ytext,
   provider,
 }) {
@@ -406,7 +409,6 @@ export function createEditorView({
     rectangularSelection(),
     crosshairCursor(),
     indentOnInput(),
-    syntaxHighlighting(customHighlightStyle),
     bracketMatching(),
     closeBrackets(),
     
@@ -423,6 +425,8 @@ export function createEditorView({
         : []
     ),
     
+    // Syntax highlighting theme
+    syntaxThemeCompartment.of(syntaxHighlighting(getSyntaxTheme(syntaxTheme))),
     
     // Line highlighting
     highlightActiveLine(),
@@ -541,7 +545,7 @@ export function createEditorView({
 
 // --- Dynamic update functions ---
 
-export function updateEditorSettings(view, { tabSize, autocomplete, theme, language, readOnly }) {
+export function updateEditorSettings(view, { tabSize, autocomplete, theme, language, readOnly, syntaxTheme }) {
   const effects = [];
 
   if (typeof tabSize === 'number') {
@@ -558,6 +562,13 @@ export function updateEditorSettings(view, { tabSize, autocomplete, theme, langu
 
   if (theme === 'dark' || theme === 'light') {
     effects.push(themeCompartment.reconfigure(theme === 'dark' ? darkTheme : lightTheme));
+  }
+
+  if (syntaxTheme) {
+    const theme = getSyntaxTheme(syntaxTheme);
+    if (theme) {
+      effects.push(syntaxThemeCompartment.reconfigure(syntaxHighlighting(theme)));
+    }
   }
 
   if (typeof readOnly === 'boolean') {
@@ -589,6 +600,15 @@ export function updateTheme(view, theme) {
   view.dispatch({
     effects: themeCompartment.reconfigure(theme === 'dark' ? darkTheme : lightTheme)
   });
+}
+
+export function updateSyntaxTheme(view, themeId) {
+  const theme = getSyntaxTheme(themeId);
+  if (theme) {
+    view.dispatch({
+      effects: syntaxThemeCompartment.reconfigure(syntaxHighlighting(theme))
+    });
+  }
 }
 
 export function updateAutocomplete(view, enabled, language) {

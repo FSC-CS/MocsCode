@@ -27,6 +27,7 @@ import {
   foldGutter, 
   foldKeymap
 } from "@codemirror/language"
+import { syntaxThemes, getSyntaxTheme } from './syntax-themes'
 import {
   defaultKeymap, 
   history, 
@@ -45,8 +46,12 @@ export const compartments = {
   theme: new Compartment(),
   readOnly: new Compartment(),
   autocomplete: new Compartment(),
-  tabSize: new Compartment()
+  tabSize: new Compartment(),
+  syntaxTheme: new Compartment()
 };
+
+// Add syntax theme to the theme compartment
+export const syntaxThemeCompartment = new Compartment();
 
 // Default editor configuration
 export const defaultConfig = {
@@ -54,6 +59,7 @@ export const defaultConfig = {
   autocomplete: true,
   readOnly: false,
   theme: 'dark',
+  syntaxTheme: 'default',
   lineNumbers: true,
   foldGutter: true,
   highlightActiveLine: true
@@ -230,7 +236,7 @@ export const baseExtensions = [
   
   // Syntax features
   indentOnInput(),
-  syntaxHighlighting(defaultHighlightStyle),
+  syntaxThemeCompartment.of(syntaxHighlighting(defaultHighlightStyle)),
   bracketMatching(),
   closeBrackets(),
   
@@ -256,14 +262,18 @@ export const baseExtensions = [
 export function createExtensions(config = {}) {
   const finalConfig = { ...defaultConfig, ...config };
   
+  // Get the selected syntax theme
+  const selectedSyntaxTheme = getSyntaxTheme(finalConfig.syntaxTheme);
+  
   const extensions = [
     ...baseExtensions,
-    
-    // Compartments for dynamic configuration
-    compartments.tabSize.of(EditorState.tabSize.of(finalConfig.tabSize)),
     compartments.theme.of(finalConfig.theme === 'dark' ? darkTheme : lightTheme),
+    syntaxThemeCompartment.of(syntaxHighlighting(selectedSyntaxTheme)),
+    compartments.tabSize.of(EditorState.tabSize.of(finalConfig.tabSize)),
     compartments.readOnly.of(EditorState.readOnly.of(finalConfig.readOnly)),
-    compartments.autocomplete.of(finalConfig.autocomplete ? autocompletion() : [])
+    compartments.autocomplete.of(
+      finalConfig.autocomplete ? [autocompletion()] : []
+    )
   ];
 
   // Add language extension if provided

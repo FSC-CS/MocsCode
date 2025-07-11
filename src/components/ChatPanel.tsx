@@ -97,6 +97,7 @@ const ChatPanel = ({
   const [currentRoom, setCurrentRoom] = useState('General Discussion');
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [isConnected, setIsConnected] = useState(false);
+  const [roomUsers, setRoomUsers] = useState<Array<{userId: string, userName: string}>>([]);
   const [loadingStates, setLoadingStates] = useState<{
     sending: boolean;
     messageIds: { [key: string]: { editing?: boolean; deleting?: boolean } };
@@ -462,10 +463,6 @@ const ChatPanel = ({
         newSocket.connect();
       }
     };
-
-    // Set up event listeners
-    newSocket.on('connect', onConnect);
-    newSocket.on('disconnect', onDisconnect);
     
     // Join room on initial connection
     if (newSocket.connected) {
@@ -490,10 +487,7 @@ const ChatPanel = ({
         
         return [...prev, newMessage];
       });
-    };
-
-    // Set up socket event listeners
-    newSocket.on('new_message', handleMessage);
+    };    
     
     // Set up typing indicators
     const handleUserTyping = (data: { userId: string; isTyping: boolean }) => {
@@ -507,13 +501,23 @@ const ChatPanel = ({
         }
       });
     };
-    newSocket.on('user_typing', handleUserTyping);
+
+    const handleRoomUpdate = (data: {users: Array<{userId: string, userName: string}>}) => {
+      setRoomUsers(data.users || []);
+    };
 
     // Set up user list updates
     const handleUserList = (users: Array<{ id: string; name: string }>) => {
       // Update online users if needed
     };
+
+    // Set up event listeners
+    newSocket.on('connect', onConnect);
+    newSocket.on('disconnect', onDisconnect);
+    newSocket.on('room_update', handleRoomUpdate);
+    newSocket.on('new_message', handleMessage);
     newSocket.on('user_list', handleUserList);
+    newSocket.on('user_typing', handleUserTyping);
 
     // Set the socket in state
     setSocket(newSocket);
@@ -526,6 +530,7 @@ const ChatPanel = ({
       newSocket.off('new_message', handleMessage);
       newSocket.off('user_typing', handleUserTyping);
       newSocket.off('user_list', handleUserList);
+      newSocket.off('room_update', handleRoomUpdate);
       
       // Disconnect the socket
       if (newSocket.connected) {
@@ -678,18 +683,13 @@ const ChatPanel = ({
       {/* Header */}
       <div className="p-4 border-b border-gray-700 flex items-center justify-between">
         <h2 className="text-lg font-semibold flex items-center">
-          <Users className="h-5 w-5 mr-2" />
+          <Users className="h-6 w-6 mr-3" />
           Chat Room
-          <div className="flex items-center ml-4 space-x-2">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span className="text-xs text-gray-400">
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
         </h2>
-        <div className="flex items-center">
-          <span className="text-sm text-gray-400">
-            {projectMembers.length} {projectMembers.length === 1 ? 'member' : 'members'}
+        <div className="flex items-center space-x-2">
+          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+          <span className="text-xs text-gray-400">
+            {isConnected ? 'Connected' : 'Disconnected'}
           </span>
         </div>
       </div>

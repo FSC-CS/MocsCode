@@ -27,7 +27,7 @@ interface CollaboratorPanelProps {
   onMemberClick?: (member: EnhancedCollaborator) => void;
   onInviteClick?: () => void;
   refreshTrigger?: number; // Optional prop to trigger refresh from parent
-  onlineUsers?: Set<string>; // Track online users from parent
+  roomUsers?: Array<{userId: string, userName: string}>; // Track online users from chat panel
 }
 
 const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({ 
@@ -35,7 +35,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
   onMemberClick, 
   onInviteClick,
   refreshTrigger,
-  onlineUsers
+  roomUsers
 }) => {
   const { projectMembersApi } = useApi();
   const { user, dbUser } = useAuth();
@@ -47,17 +47,20 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
   const [error, setError] = React.useState<string | null>(null);
   const [canManageMembers, setCanManageMembers] = React.useState<boolean>(false);
 
-  // Update collaborator online status when onlineUsers prop changes
+  // Update collaborator online status when roomUsers prop changes
   React.useEffect(() => {
-    if (!onlineUsers) return;
+    if (!roomUsers?.length) return;
+    
+    // Create a set of user IDs from roomUsers for easier lookup
+    const onlineUserIds = new Set(roomUsers.map(user => user.userId));
     
     setCollaborators(prev => 
       prev.map(collab => ({
         ...collab,
-        isOnline: collab.user_id ? onlineUsers.has(collab.user_id) : false
+        isOnline: collab.user_id ? onlineUserIds.has(collab.user_id) : false
       }))
     );
-  }, [onlineUsers]);
+  }, [roomUsers]);
 
   // Load collaborators when component mounts or projectId changes
   useEffect(() => {
@@ -251,9 +254,9 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
               Collaborators
             </h3>
             {!isLoading && (
-              <div className="flex items-center ml-2" title={`${onlineUsers.size} online`}>
+              <div className="flex items-center ml-2" title={`${roomUsers?.length} online`}>
                 <Wifi className="h-3 w-3 text-green-400 mr-1" />
-                <span className="text-xs text-green-400">{onlineUsers.size}</span>
+                <span className="text-xs text-green-400">{roomUsers?.length}</span>
               </div>
             )}
           </div>
@@ -343,7 +346,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
                     )}
                   </div>
                   {/* Online indicator */}
-                  {onlineUsers.has(collaborator.user_id) && (
+                  {roomUsers?.some(user => user.userId === collaborator.user_id) && (
                     <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-gray-800 rounded-full" />
                   )}
                 </div>

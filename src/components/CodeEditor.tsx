@@ -1342,9 +1342,6 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
           >
             {!isChatPanelCollapsed && (
               <>
-                <div className="px-3 py-2 text-sm font-medium text-gray-300 bg-gray-800 border-b border-gray-700">
-                  Chat
-                </div>
                 <div className="flex-1 min-h-0 overflow-y-auto">
                   <ChatPanel 
                     collaborators={collaborators}

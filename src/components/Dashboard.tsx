@@ -53,7 +53,6 @@ const Dashboard = (/* { onOpenProject }: DashboardProps */) => {
 
   // Redirect to landing page if not authenticated
   useEffect(() => {
-    console.log("STATUS", isAuthLoading, user);
     if (!isAuthLoading && !user) {
       navigate('/landing');
     }

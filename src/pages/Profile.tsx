@@ -134,12 +134,14 @@ const [profileLoading, setProfileLoading] = useState(true);
   // Load avatar using avatar_url from users table
 const loadExistingAvatar = async () => {
   if (!customUser) {
+    setAvatarLoading(false); // Reset loading state if no user
     return;
   }
 
   try {
     const avatarUrl = customUser.avatar_url;
     if (!avatarUrl) {
+      setAvatarLoading(false); // Reset loading state when no avatar URL
       return;
     }
 
@@ -194,7 +196,6 @@ useEffect(() => {
     }));
     // Load existing avatar
     loadExistingAvatar();
-    setAvatarLoading(true); // Reset loading state when user changes
     setAvatarError(false);
   }
 }, [authUser, customUser]);

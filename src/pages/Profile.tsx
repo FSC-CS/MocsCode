@@ -97,6 +97,8 @@ const [profileLoading, setProfileLoading] = useState(true);
 
       if (error) throw error;
 
+      console.log('File uploaded successfully:', error);
+
       // Create a signed URL for the uploaded file
       const { data: signedUrlData, error: urlError } = await supabase.storage
         .from('avatar-images')

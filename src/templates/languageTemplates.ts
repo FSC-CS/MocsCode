@@ -80,7 +80,9 @@ const extensionToLanguage: Record<string, string> = {
   'js': 'javascript',
   'c': 'c',
   'cpp': 'c++',
-  'cs': 'c#'
+  'cs': 'c#',
+  'txt': 'txt',
+  'md': 'markdown',
 };
 
 export const getTemplateForLanguage = (language: string): TemplateFile[] => {

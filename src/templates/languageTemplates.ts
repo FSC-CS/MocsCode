@@ -73,8 +73,19 @@ export interface TemplateFile {
   content: string;
 }
 
+// Map file extensions to language keys
+const extensionToLanguage: Record<string, string> = {
+  'java': 'java',
+  'py': 'python',
+  'js': 'javascript',
+  'c': 'c',
+  'cpp': 'c++',
+  'cs': 'c#'
+};
+
 export const getTemplateForLanguage = (language: string): TemplateFile[] => {
   if (!language) return [];
   const lang = language.toLowerCase();
-  return languageTemplates[lang] || [];
+  const mappedLang = extensionToLanguage[lang] || lang;
+  return languageTemplates[mappedLang] || [];
 };

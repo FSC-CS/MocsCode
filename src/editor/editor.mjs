@@ -190,14 +190,49 @@ const darkTheme = EditorView.theme({
     caretColor: "#60a5fa"
   },
   
-  // Barely visible selection background (1% opacity)
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-    backgroundColor: "rgba(255, 255, 255, 0.01)"  // Set to 1% opacity
+  /* ===== Selection Styles ===== */
+  // Base selection
+  ".cm-selectionBackground, .cm-selection": {
+    backgroundColor: 'rgba(96, 165, 250, 0.2)'
   },
   
-  // Very subtle active line background
+  // Selection when editor is focused
+  "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+    backgroundColor: 'rgba(96, 165, 250, 0.3)'
+  },
+  
+  // Single character/word selection
+  ".cm-selectionMatch": {
+    backgroundColor: 'rgba(96, 165, 250, 0.4)'
+  },
+  
+  // Cursor
+  ".cm-cursor": {
+    borderLeft: '2px solid #60a5fa',
+    marginLeft: '-1px',
+    width: '2px',
+    '&.cm-dropCursor': {
+      borderLeft: 'none',
+      borderRight: '2px solid #60a5fa',
+      margin: 0
+    }
+  },
+  
+  // Active line
   ".cm-activeLine": {
-    backgroundColor: "rgba(255, 255, 255, 0.015)"  // Reduced from 0.03 to 0.015
+    backgroundColor: 'rgba(255, 255, 255, 0.03)'
+  },
+  
+  // Ensure text is selectable
+  ".cm-content": {
+    userSelect: 'text',
+    WebkitUserSelect: 'text',
+    MozUserSelect: 'text',
+    msUserSelect: 'text',
+    lineHeight: '1.5',
+    '&::selection': {
+      backgroundColor: 'rgba(96, 165, 250, 0.3)'
+    }
   },
   ".cm-scroller": {
     overflow: "auto",

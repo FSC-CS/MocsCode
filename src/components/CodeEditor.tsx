@@ -724,6 +724,13 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     destroyDoc(openFiles[index].id);
   };
 
+  const handleFileDeleted = (deletedFileId: string) => {
+    const fileIndex = openFiles.findIndex(file => file.id === deletedFileId);
+    if (fileIndex !== -1) {
+      closeFile(fileIndex);
+    }
+  };
+
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -1078,6 +1085,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                     currentFile={openFiles[activeFileIndex]?.name || ''} 
                     onFileSelect={openFile}
                     onFileRenamed={handleFileRenamed}
+                    onFileDeleted={handleFileDeleted}
                     projectId={project.id}
                   />
                 </div>

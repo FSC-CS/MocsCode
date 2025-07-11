@@ -23,6 +23,7 @@ interface FileExplorerProps {
   currentFile: string;
   onFileSelect: (filename: string, fileId: string) => void;
   onFileRenamed?: (fileId: string, oldName: string, newName: string) => void;
+  onFileDeleted?: (fileId: string) => void;
   projectId: string;
 }
 
@@ -128,7 +129,7 @@ function sortFileStructureRecursively(items: FileItem[], options: SortOptions = 
   }));
 }
 
-const FileExplorer = ({ currentFile, onFileSelect, onFileRenamed, projectId }: FileExplorerProps) => {
+const FileExplorer = ({ currentFile, onFileSelect, onFileDeleted, onFileRenamed, projectId }: FileExplorerProps) => {
   const { user, dbUser } = useAuth();
   const currentUserId = user?.id || dbUser?.id;
   // ...state declarations
@@ -404,6 +405,7 @@ const FileExplorer = ({ currentFile, onFileSelect, onFileRenamed, projectId }: F
   const deleteItem = async (itemId: string) => {
     try {
       const { error } = await projectFilesApi.deleteFile(itemId);
+      onFileDeleted(itemId);
       if (error) throw error;
       // Remove item and apply sorting
       const updatedFiles = flattenFileTree(fileStructure).filter(f => f.id !== itemId);

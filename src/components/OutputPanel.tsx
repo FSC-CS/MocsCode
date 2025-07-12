@@ -61,8 +61,8 @@ const OutputPanel = ({
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {activeTab === 'output' ? (
           <div className="flex-1 overflow-auto p-4">
-            <Card className="bg-gray-900 border-gray-600 min-h-full">
-              <div className="p-4">
+            <Card className="bg-gray-900 border-gray-600 min-h-full ml-4 mr-0 my-2">
+              <div className="p-4 pl-6 pr-4">
                 {isRunning ? (
                   <div className="flex items-center space-x-2 text-yellow-400">
                     <div className="animate-spin">
@@ -71,11 +71,11 @@ const OutputPanel = ({
                     <span className="text-sm">Running code...</span>
                   </div>
                 ) : output ? (
-                  <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono break-words">
+                  <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono break-words pl-2">
                     {output}
                   </pre>
                 ) : (
-                  <div className="text-center text-gray-500 py-8">
+                  <div className="text-center text-gray-500 py-8 pl-2">
                     <Play className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">Click "Run Code" to see output here</p>
                   </div>
@@ -85,8 +85,8 @@ const OutputPanel = ({
           </div>
         ) : (
           <div className="flex-1 overflow-auto p-4">
-            <Card className="bg-gray-900 border-gray-600 min-h-full">
-              <div className="p-4 space-y-6">
+            <Card className="bg-gray-900 border-gray-600 min-h-full ml-4 mr-0 my-2">
+              <div className="p-4 pl-6 pr-4 space-y-6">
                 <div>
                   <label htmlFor="compile-sh" className="block text-xs font-semibold text-gray-400 mb-1">
                     compile.sh (Optional)

@@ -1205,9 +1205,12 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
           className="flex-1 flex flex-col overflow-hidden relative bg-gray-900"
           style={{
             minWidth: 0,
-            width: `calc(100% - ${isSidebarCollapsed ? '16px' : `${fileExplorerWidth}px`} - ${isChatPanelCollapsed ? '16px' : `${chatPanelWidth}px`})`,
+            width: `calc(100% - ${isSidebarCollapsed ? '32px' : `${fileExplorerWidth}px`} - ${isChatPanelCollapsed ? '32px' : `${chatPanelWidth}px`})`,
             transition: 'width 0.2s ease-out, margin 0.2s ease-out',
-            marginLeft: isSidebarCollapsed ? '0' : '0',
+            marginLeft: isSidebarCollapsed ? '16px' : '0',
+            marginRight: isChatPanelCollapsed ? '16px' : '0',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
           {/* File Tabs */}
@@ -1249,7 +1252,18 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
             </div>
 
             {/* Output Panel with custom resize handle */}
-            <div className="relative flex flex-col bg-gray-800 border-t border-gray-700" style={{ height: `${100 - editorHeight}%` }}>
+            <div 
+              className="relative flex flex-col bg-gray-800 border-t border-gray-700" 
+              style={{ 
+                height: `${100 - editorHeight}%`,
+                position: 'relative',
+                left: isSidebarCollapsed ? '16px' : '0',
+                right: isChatPanelCollapsed ? '16px' : '0',
+                width: 'auto',
+                marginRight: 0,
+                boxSizing: 'border-box',
+              }}
+            >
               {/* Resize handle */}
               <div 
                 className="h-2 w-full bg-gray-700 hover:bg-blue-500 cursor-row-resize active:bg-blue-600 relative z-10"

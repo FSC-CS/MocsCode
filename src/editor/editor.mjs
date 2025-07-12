@@ -256,7 +256,14 @@ const darkTheme = EditorView.theme({
   ".cm-gutters": {
     backgroundColor: "#0f131f",
     color: "#64748b",
-    borderRight: "1px solid #1a202c"
+    borderRight: "1px solid #1a202c",
+    paddingLeft: "8px"
+  },
+  ".cm-gutterElement": {
+    paddingLeft: "8px !important"
+  },
+  ".cm-lineNumbers .cm-gutterElement": {
+    padding: "0 8px 0 16px !important"
   },
   ".cm-activeLine": {
     backgroundColor: "#1a202c"

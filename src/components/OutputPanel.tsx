@@ -119,11 +119,7 @@ const OutputPanel = ({
         )}
       </div>
 
-      <div className="p-4 border-t border-gray-700">
-        <div className="flex items-center justify-between text-xs text-gray-400">
-          <span>Java Runtime: OpenJDK 11</span>
-          <span>Memory: 128MB</span>
-        </div>
+      <div className="p-3 border-t border-gray-700">
       </div>
     </div>
   );

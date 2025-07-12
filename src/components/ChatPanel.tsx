@@ -73,6 +73,7 @@ interface ChatPanelProps {
   onRemoveMember?: (memberId: string) => void;
   canManageMembers?: boolean;
   projectId?: string; // Added to make projectId available
+  onlineUsersUpdateCallback?: (data: {users: Array<{userId: string, userName: string}>}) => void; // Added callback for online users updates
 }
 
 const ChatPanel = ({
@@ -87,6 +88,7 @@ const ChatPanel = ({
   onRemoveMember,
   canManageMembers = false,
   projectId, // Added projectId prop
+  onlineUsersUpdateCallback, // Added callback for online users
 }: ChatPanelProps) => {
   const [messages, setMessages] = useState<UIMessage[]>([]); // Fixed: Changed from ChatMessag[] to UIMessage[]
   const [message, setMessage] = useState('');
@@ -502,8 +504,14 @@ const ChatPanel = ({
       });
     };
 
+    // Handle room user updates
     const handleRoomUpdate = (data: {users: Array<{userId: string, userName: string}>}) => {
       setRoomUsers(data.users || []);
+      
+      // Forward the room update to the parent component if callback exists
+      if (onlineUsersUpdateCallback) {
+        onlineUsersUpdateCallback(data);
+      }
     };
 
     // Set up user list updates

@@ -27,7 +27,7 @@ interface CollaboratorPanelProps {
   onMemberClick?: (member: EnhancedCollaborator) => void;
   onInviteClick?: () => void;
   refreshTrigger?: number; // Optional prop to trigger refresh from parent
-  roomUsers?: Array<{userId: string, userName: string}>; // Track online users from chat panel
+  onlineUsers?: Array<{userId: string, userName: string}>; // Track online users from chat panel
 }
 
 const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({ 
@@ -35,7 +35,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
   onMemberClick, 
   onInviteClick,
   refreshTrigger,
-  roomUsers
+  onlineUsers
 }) => {
   const { projectMembersApi } = useApi();
   const { user, dbUser } = useAuth();
@@ -49,10 +49,10 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
 
   // Update collaborator online status when roomUsers prop changes
   React.useEffect(() => {
-    if (!roomUsers?.length) return;
+    if (!onlineUsers?.length) return;
     
     // Create a set of user IDs from roomUsers for easier lookup
-    const onlineUserIds = new Set(roomUsers.map(user => user.userId));
+    const onlineUserIds = new Set(onlineUsers.map(user => user.userId));
     
     setCollaborators(prev => 
       prev.map(collab => ({
@@ -60,7 +60,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
         isOnline: collab.user_id ? onlineUserIds.has(collab.user_id) : false
       }))
     );
-  }, [roomUsers]);
+  }, [onlineUsers]);
 
   // Load collaborators when component mounts or projectId changes
   useEffect(() => {
@@ -254,9 +254,9 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
               Collaborators
             </h3>
             {!isLoading && (
-              <div className="flex items-center ml-2" title={`${roomUsers?.length} online`}>
+              <div className="flex items-center ml-2" title={`${onlineUsers?.length} online`}>
                 <Wifi className="h-3 w-3 text-green-400 mr-1" />
-                <span className="text-xs text-green-400">{roomUsers?.length}</span>
+                <span className="text-xs text-green-400">{onlineUsers?.length}</span>
               </div>
             )}
           </div>
@@ -346,7 +346,7 @@ const CollaboratorPanel: React.FC<CollaboratorPanelProps> = ({
                     )}
                   </div>
                   {/* Online indicator */}
-                  {roomUsers?.some(user => user.userId === collaborator.user_id) && (
+                  {onlineUsers?.some(user => user.id === collaborator.user_id) && (
                     <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-gray-800 rounded-full" />
                   )}
                 </div>

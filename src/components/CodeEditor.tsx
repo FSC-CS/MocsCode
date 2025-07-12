@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings, Palette } from 'lucide-react';
+import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings, Palette, Code } from 'lucide-react';
 import { presenceService } from '@/lib/presence';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from "@/components/ui/button";
@@ -152,7 +152,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   };
 
   // Track online users
-  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [onlineUsers, setOnlineUsers] = useState<Array<{userId: string, userName: string}>>([]);
   const prevCollaboratorsRef = useRef<Collaborator[]>([]);
   const prevCollaboratorsStrRef = useRef('');
   
@@ -172,7 +172,6 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
         });
       }
       
-      setOnlineUsers(collaboratorIds);
       prevCollaboratorsRef.current = [...collaborators];
       prevCollaboratorsStrRef.current = currentCollaborators;
     }
@@ -557,6 +556,12 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     setSelectedMember(member);
     setShowMemberDialog(true);
   };
+
+  // Callback function for socket room updates to track online users
+  const onlineUsersUpdateCallback = useCallback((data: {users: Array<{userId: string, userName: string}>}) => {
+    console.log('Online users updated:', data.users);
+    setOnlineUsers(data.users || []);
+  }, []);
 
   // Handle connection status changes (for auto-refresh management)
   const handleConnectionChange = () => {
@@ -964,7 +969,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
           {/* MocsCode Branding - Center section */}
           <div className="flex-1 flex items-center justify-center px-2">
-            <div className="text-center">
+            <div className="flex items-center">
+              <Code className="h-8 w-8 text-blue-500 mr-2 mt-1" />
               <span className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent whitespace-nowrap">
                 MocsCode
               </span>
@@ -1399,6 +1405,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                     onInviteClick={() => setShowShareDialog(true)}
                     canManageMembers={canManageProject()}
                     projectId={project.id}
+                    onlineUsersUpdateCallback={onlineUsersUpdateCallback}
                   />
                 </div>
               </>

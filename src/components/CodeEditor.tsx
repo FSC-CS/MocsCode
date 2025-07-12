@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings, Palette } from 'lucide-react';
+import { Pencil, Check, X as XIcon, ArrowLeft, Play, Share, FileText, Settings, Palette, Code } from 'lucide-react';
 import { presenceService } from '@/lib/presence';
 import CodeMirrorEditor from '../editor/CodeMirrorEditor';
 import { Button } from "@/components/ui/button";
@@ -969,7 +969,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
           {/* MocsCode Branding - Center section */}
           <div className="flex-1 flex items-center justify-center px-2">
-            <div className="text-center">
+            <div className="flex items-center">
+              <Code className="h-8 w-8 text-blue-500 mr-1" />
               <span className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent whitespace-nowrap">
                 MocsCode
               </span>

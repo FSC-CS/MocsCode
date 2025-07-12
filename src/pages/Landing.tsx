@@ -4,30 +4,143 @@ import { Card } from '@/components/ui/card';
 import { Code, Users, Shield, Zap, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-// Custom hook to detect dark mode
-function usePrefersDarkMode() {
-  const [prefersDarkMode, setPrefersDarkMode] = useState(false);
+// Function to check if a color is light
+const isLightColor = (color: string) => {
+  // Handle different color formats
+  let r, g, b;
+  
+  if (color.startsWith('#')) {
+    // Hex format
+    const hex = color.replace('#', '');
+    r = parseInt(hex.substring(0, 2), 16);
+    g = parseInt(hex.substring(2, 4), 16);
+    b = parseInt(hex.substring(4, 6), 16);
+  } else if (color.startsWith('rgb')) {
+    // RGB/RGBA format
+    const rgb = color.match(/\d+/g);
+    if (rgb && rgb.length >= 3) {
+      r = parseInt(rgb[0]);
+      g = parseInt(rgb[1]);
+      b = parseInt(rgb[2]);
+    } else {
+      return true; // Default to light if can't parse
+    }
+  } else {
+    return true; // Default to light for unknown formats
+  }
+  
+  // Calculate luminance (perceived brightness)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  
+  // Return true if color is light
+  return luminance > 0.6; // Slightly higher threshold for better contrast
+};
+
+// Custom hook to detect actual background color
+function useBackgroundColor() {
+  const [isLightBg, setIsLightBg] = useState(true);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    setPrefersDarkMode(mediaQuery.matches);
+    const checkBackground = () => {
+      try {
+        // Check multiple elements to find the actual background
+        const elements = [
+          document.body,
+          document.documentElement,
+          document.querySelector('main'),
+          document.querySelector('.min-h-screen')
+        ];
+        
+        let actualBgColor = null;
+        
+        for (const element of elements) {
+          if (element) {
+            const styles = window.getComputedStyle(element);
+            const bgColor = styles.backgroundColor;
+            
+            // Skip transparent/rgba(0,0,0,0) backgrounds
+            if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+              actualBgColor = bgColor;
+              break;
+            }
+          }
+        }
+        
+        // If no background found, check for gradients or fall back to white
+        if (!actualBgColor) {
+          const bodyStyles = window.getComputedStyle(document.body);
+          const htmlStyles = window.getComputedStyle(document.documentElement);
+          
+          // Check for gradient backgrounds
+          const bodyBgImage = bodyStyles.backgroundImage;
+          const htmlBgImage = htmlStyles.backgroundImage;
+          
+          if (bodyBgImage !== 'none' && bodyBgImage.includes('gradient')) {
+            // For gradients, assume dark if it contains dark colors
+            setIsLightBg(!bodyBgImage.includes('slate') && !bodyBgImage.includes('black'));
+            return;
+          }
+          
+          if (htmlBgImage !== 'none' && htmlBgImage.includes('gradient')) {
+            setIsLightBg(!htmlBgImage.includes('slate') && !htmlBgImage.includes('black'));
+            return;
+          }
+          
+          // Default to light
+          actualBgColor = 'rgb(255, 255, 255)';
+        }
+        
+        setIsLightBg(isLightColor(actualBgColor));
+      } catch (e) {
+        console.error('Error detecting background color:', e);
+        setIsLightBg(true); // Default to light on error
+      }
+    };
+
+    // Check immediately
+    checkBackground();
     
-    const handler = (e: MediaQueryListEvent) => setPrefersDarkMode(e.matches);
-    mediaQuery.addEventListener('change', handler);
+    // Set up observers for theme changes
+    const observer = new MutationObserver(() => {
+      setTimeout(checkBackground, 100); // Small delay to let styles apply
+    });
     
-    return () => mediaQuery.removeEventListener('change', handler);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
+    
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
+    
+    // Also check on window events
+    window.addEventListener('resize', checkBackground);
+    window.addEventListener('scroll', checkBackground);
+    
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', checkBackground);
+      window.removeEventListener('scroll', checkBackground);
+    };
   }, []);
 
-  return prefersDarkMode;
+  return isLightBg;
 }
 import { useAuth } from '@/contexts/AuthContext';
 
 const Landing = () => {
   const navigate = useNavigate();
-  const isDarkMode = usePrefersDarkMode();
-  const textColor = isDarkMode ? 'text-white' : 'text-gray-900';
-  const subTextColor = isDarkMode ? 'text-gray-300' : 'text-gray-600';
+  const isLightBg = useBackgroundColor();
   const { user, signOut } = useAuth();
+
+  // Dynamic text colors based on actual background detection
+  const textColor = isLightBg ? 'text-gray-900' : 'text-white';
+  const subTextColor = isLightBg ? 'text-gray-600' : 'text-gray-200';
+  const cardBgColor = isLightBg ? 'bg-white' : 'bg-gray-800';
+  const cardTextColor = isLightBg ? 'text-gray-900' : 'text-white';
+  const cardSubTextColor = isLightBg ? 'text-gray-600' : 'text-gray-300';
 
   useEffect(() => {
     if (user) {
@@ -47,7 +160,7 @@ const Landing = () => {
   return (
     <div className="min-h-screen dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
       {/* Header */}
-      <header className="bg-white dark:bg-slate-900/95 dark:backdrop-blur-sm shadow-lg dark:shadow-indigo-900/20 border-b dark:border-slate-700">
+      <header className={`${isLightBg ? 'bg-white border-gray-200' : 'bg-slate-900/95 border-slate-700'} backdrop-blur-sm shadow-lg border-b`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
@@ -70,13 +183,13 @@ const Landing = () => {
                   <Button 
                     variant="outline" 
                     onClick={() => navigate('/signin')}
-                    className="text-gray-600 dark:text-slate-300 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50"
+                    className={`${isLightBg ? 'text-gray-600 border-gray-300 hover:bg-gray-50' : 'text-slate-300 border-slate-600 hover:bg-slate-700'}`}
                   >
                     Sign In
                   </Button>
                   <Button 
                     onClick={() => navigate('/register')}
-                    className="bg-blue-600 hover:bg-blue-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white"
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     Register
                   </Button>
@@ -122,26 +235,26 @@ const Landing = () => {
             Why Choose MocsCode?
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
+            <Card className={`p-8 text-center ${cardBgColor} rounded-xl shadow-sm hover:shadow-md transition-shadow`}>
               <Code className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Multi-Language Support</h3>
-              <p className="text-gray-600">
+              <h3 className={`text-xl font-semibold ${cardTextColor} mb-3`}>Multi-Language Support</h3>
+              <p className={cardSubTextColor}>
                 Code in Java, Python, JavaScript, C, C++, and C# with full syntax highlighting and error detection.
               </p>
             </Card>
             
-            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
+            <Card className={`p-8 text-center ${cardBgColor} rounded-xl shadow-sm hover:shadow-md transition-shadow`}>
               <Users className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Real-time Collaboration</h3>
-              <p className="text-gray-600">
+              <h3 className={`text-xl font-semibold ${cardTextColor} mb-3`}>Real-time Collaboration</h3>
+              <p className={cardSubTextColor}>
                 Work together with your team in real-time. See changes instantly and communicate seamlessly.
               </p>
             </Card>
             
-            <Card className="p-8 text-center bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
+            <Card className={`p-8 text-center ${cardBgColor} rounded-xl shadow-sm hover:shadow-md transition-shadow`}>
               <FolderOpen className="h-12 w-12 text-purple-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Project Management</h3>
-              <p className="text-gray-600">
+              <h3 className={`text-xl font-semibold ${cardTextColor} mb-3`}>Project Management</h3>
+              <p className={cardSubTextColor}>
                 Import and export projects seamlessly. Track usage and view detailed statistics for all your coding projects.
               </p>
             </Card>
@@ -159,7 +272,7 @@ const Landing = () => {
             <Button 
               size="lg"
               onClick={() => navigate('/register')}
-              className="bg-white dark:bg-indigo-900/50 dark:backdrop-blur-sm text-blue-600 dark:text-indigo-400 hover:bg-gray-100 dark:hover:bg-indigo-950/50"
+              className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-4 text-lg"
             >
               Create Free Account
             </Button>

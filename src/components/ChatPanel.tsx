@@ -415,7 +415,7 @@ const ChatPanel = ({
     if (!currentUser || !projectId) return;
 
     // Create a new socket instance when project changes or user changes
-    const newSocket = io('https://mocscode-backend-socketio-production.up.railway.app', {
+    const newSocket = io('https://socketio.mocscode.com', {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,

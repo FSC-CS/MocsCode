@@ -317,7 +317,6 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
   // Initialize scripts based on project language
   useEffect(() => {
-    console.log("LANGUAGE: ", project?.language);
     if (project?.language) {
       const scripts = getLanguageScripts(project.language);
       setCompileScript(scripts.compile);
@@ -559,7 +558,6 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
 
   // Callback function for socket room updates to track online users
   const onlineUsersUpdateCallback = useCallback((data: {users: Array<{userId: string, userName: string}>}) => {
-    console.log('Online users updated:', data.users);
     setOnlineUsers(data.users || []);
   }, []);
 

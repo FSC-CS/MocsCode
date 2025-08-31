@@ -29,7 +29,7 @@ export interface Judge0SubmissionResponse {
 }
 
 const JUDGE0_ENDPOINT =
-  'https://judge.mocscode.com';
+  'https://judge.mocscode.com/submissions?base64_encoded=true&wait=true';
 
 export async function runJudge0Code({
   projectId,
@@ -41,7 +41,6 @@ export async function runJudge0Code({
   memory_limit,
 }: Judge0SubmissionRequest): Promise<Judge0SubmissionResponse> {
   // API key and host should be set in environment variables for security
-  const apiHost = 'judge.mocscode.com';
   const additional_files = await projectFilesApi.exportProjectAsBase64Zip(projectId, compileScript, runScript);
 
   const response = await fetch(JUDGE0_ENDPOINT, {
@@ -58,6 +57,8 @@ export async function runJudge0Code({
       memory_limit,
     }),
   });
+
+  console.log("Judge0 Response", response, response.url);
   
   if (!response.ok) {
     throw new Error(`Judge0 API error: ${response.status} ${response.statusText}`);

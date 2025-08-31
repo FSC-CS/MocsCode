@@ -22,5 +22,5 @@ wss.on('connection', (conn, req) => {
 const PORT = process.env.PORT || 1234;
 server.listen(PORT, () => {
   console.log(`Collaboration server running on port ${PORT}`);
-  console.log(`WebSocket endpoint: ws://mocscode-backend-yjs-production.up.railway.app:${PORT}`);
+  console.log(`WebSocket endpoint: wss://yjs.mocscode.com:${PORT}`);
 });

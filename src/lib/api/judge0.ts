@@ -29,7 +29,7 @@ export interface Judge0SubmissionResponse {
 }
 
 const JUDGE0_ENDPOINT =
-  'https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=true&wait=true';
+  'https://judge.mocscode.com';
 
 export async function runJudge0Code({
   projectId,
@@ -41,18 +41,13 @@ export async function runJudge0Code({
   memory_limit,
 }: Judge0SubmissionRequest): Promise<Judge0SubmissionResponse> {
   // API key and host should be set in environment variables for security
-  const apiKey = import.meta.env.VITE_JUDGE0_API_KEY;
-  const apiHost = 'judge0-ce.p.rapidapi.com';
+  const apiHost = 'judge.mocscode.com';
   const additional_files = await projectFilesApi.exportProjectAsBase64Zip(projectId, compileScript, runScript);
 
-  if (!apiKey) {
-    throw new Error('Judge0 API key is not set in environment variables.');
-  }
   const response = await fetch(JUDGE0_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-RapidAPI-Key': apiKey,
       'X-RapidAPI-Host': apiHost,
     },
     body: JSON.stringify({

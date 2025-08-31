@@ -48,7 +48,6 @@ export async function runJudge0Code({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-RapidAPI-Host': apiHost,
     },
     body: JSON.stringify({
       additional_files,

@@ -334,8 +334,10 @@ export class ProjectFilesApi extends ApiClient {
       zip.file(zipPath, file.content || '');
     }
 
-    zip.file('/compile.sh', '#!/bin/bash\n\n' + compileScript);
-    zip.file('/run.sh', '#!/bin/bash\n\n' + runScript);
+    console.log("RUN SCRIPT", runScript);
+
+    zip.file('compile', '#!/bin/bash\n\n' + compileScript);
+    zip.file('run', '#!/bin/bash\n\n' + runScript);
   
     const zipBuffer = await zip.generateAsync({ type: 'base64' });
 

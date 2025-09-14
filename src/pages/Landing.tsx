@@ -129,6 +129,7 @@ function useBackgroundColor() {
   return isLightBg;
 }
 import { useAuth } from '@/contexts/AuthContext';
+import Footer from '@/components/Footer';
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -288,10 +289,11 @@ const Landing = () => {
             <span className="text-lg font-semibold">MocsCode</span>
           </div>
           <p className="text-slate-400">
-            © {new Date().getFullYear()} MocsCode. Empowering collaborative development.
+            {new Date().getFullYear()} MocsCode. Empowering collaborative development.
           </p>
         </div>
       </footer>
+      <Footer />
     </div>
   );
 };

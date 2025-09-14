@@ -1,8 +1,9 @@
 
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Trash2 } from 'lucide-react';
+import { Play, Square, Trash2, Terminal } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 interface OutputPanelProps {
   output: string;
@@ -12,6 +13,8 @@ interface OutputPanelProps {
   setCompileScript: React.Dispatch<React.SetStateAction<string>>;
   runScript: string;
   setRunScript: React.Dispatch<React.SetStateAction<string>>;
+  onInput?: (input: string) => void;
+  inputBuffer: string[];
 }
 
 const OutputPanel = ({ 
@@ -22,8 +25,33 @@ const OutputPanel = ({
   setCompileScript,
   runScript,
   setRunScript,
+  onInput,
+  inputBuffer = [],
 }: OutputPanelProps) => {
-  const [activeTab, setActiveTab] = React.useState<'output' | 'config'>('output');
+  const [activeTab, setActiveTab] = React.useState<'output' | 'config' | 'terminal'>('terminal');
+  const [inputValue, setInputValue] = React.useState('');
+  const outputEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleInputSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputValue.trim() && onInput) {
+      onInput(inputValue + '\n');
+      setInputValue('');
+    }
+  };
+
+  useEffect(() => {
+    if (outputEndRef.current) {
+      outputEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [output, inputBuffer]);
+
+  useEffect(() => {
+    if (activeTab === 'terminal' && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [activeTab]);
 
   return (
     <div className="h-full flex flex-col bg-gray-800 overflow-hidden">
@@ -31,6 +59,12 @@ const OutputPanel = ({
       <div className="px-4 py-2 border-b border-gray-700 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex space-x-4 pl-2">
+            <button
+              className={`text-sm font-medium px-2 py-1 rounded transition-colors flex items-center gap-1 ${activeTab === 'terminal' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}
+              onClick={() => setActiveTab('terminal')}
+            >
+              <Terminal className="w-4 h-4" /> Terminal
+            </button>
             <button
               className={`text-sm font-medium px-2 py-1 rounded transition-colors ${activeTab === 'output' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}
               onClick={() => setActiveTab('output')}
@@ -58,8 +92,39 @@ const OutputPanel = ({
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {activeTab === 'output' ? (
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-black">
+        {activeTab === 'terminal' ? (
+          <div className="h-full flex flex-col">
+            <div className="flex-1 overflow-y-auto p-4 text-green-400 font-mono text-sm">
+              {output && (
+                <div className="whitespace-pre-wrap">
+                  {output}
+                </div>
+              )}
+              {inputBuffer.map((line, i) => (
+                <div key={i} className="whitespace-pre-wrap">
+                  <span className="text-yellow-400">$ </span>
+                  {line}
+                </div>
+              ))}
+              <div ref={outputEndRef} />
+            </div>
+            <form onSubmit={handleInputSubmit} className="p-2 border-t border-gray-700">
+              <div className="flex items-center">
+                <span className="text-yellow-400 mr-2">$</span>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono px-2 py-1"
+                  placeholder={isRunning ? 'Enter input...' : 'Run your code to enable input'}
+                  disabled={!isRunning}
+                />
+              </div>
+            </form>
+          </div>
+        ) : activeTab === 'output' ? (
           <div className="flex-1 overflow-auto p-4">
             <Card className="bg-gray-900 border-gray-600 min-h-full ml-4 mr-0 my-2">
               <div className="p-4 pl-6 pr-4">

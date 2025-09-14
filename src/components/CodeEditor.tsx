@@ -108,6 +108,8 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [output, setOutput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
+  const [inputBuffer, setInputBuffer] = useState<string[]>([]); // Store terminal input history
+  const [pendingInput, setPendingInput] = useState<((value: string) => void) | null>(null); // Store pending input resolver
   const [showCollaborators, setShowCollaborators] = useState(false); // State for resizable panels and sidebar
   const [fileExplorerWidth, setFileExplorerWidth] = useState(250);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -597,31 +599,70 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
     editorRef.current = editor;
   };
 
-  const runCode = async () => {
-    setIsRunning(true);
-    setOutput('');
-
-    try {
-      const data = await runJudge0Code({
-        projectId: project?.id,
-        compileScript: compileScript,
-        runScript: runScript,
-      });
-      let output = '';
-      if (data.stdout) output += data.stdout;
-      if (data.stderr) output += '\n[stderr]\n' + data.stderr;
-      if (data.compile_output) output += '\n[compiler]\n' + data.compile_output;
-      if (data.message) output += '\n[message]\n' + data.message;
-      setOutput(output || '[No output]');
-    } catch (err: any) {
-      setOutput('Error running code: ' + (err?.message || err));
+  // Handle terminal input from the user
+  const handleTerminalInput = (input: string) => {
+    if (!input.trim()) return;
+    
+    // Add to input buffer for display
+    setInputBuffer(prev => [...prev, input]);
+    
+    // If we're waiting for input, resolve the promise
+    if (pendingInput !== null) {
+      const resolve = pendingInput;
+      setPendingInput(null);
+      resolve(input);
     }
-    setIsRunning(false);
   };
 
-  const getLanguageFromFile = (filename: string) => {
-    const extension = filename.split('.').pop();
-    const languageMap: { [key: string]: string } = {
+  // Function to get input from the user (used by the code execution environment)
+  const getInputFromUser = async (): Promise<string> => {
+    return new Promise((resolve) => {
+      // Store the resolve function in state
+      setPendingInput(() => resolve);
+    });
+  };
+
+  const runCode = async () => {
+    if (!project?.id) return;
+    
+    setIsRunning(true);
+    setOutput('');
+    setInputBuffer([]);
+
+    try {
+      // Pass the input handler to the code execution environment
+      const data = await runJudge0Code({
+        projectId: project.id,
+        compileScript: compileScript,
+        runScript: runScript,
+        stdin: '', // Start with empty stdin, will be filled by inputCallback
+        inputCallback: getInputFromUser
+      });
+
+      if (data.stderr) {
+        setOutput(prev => prev + data.stderr);
+      } else if (data.stdout) {
+        setOutput(prev => prev + data.stdout);
+      } else {
+        setOutput(prev => prev + 'Code executed successfully (no output)');
+      }
+    } catch (error) {
+      console.error('Error running code:', error);
+      setOutput(prev => prev + `\nError: ${error.message}`);
+    } finally {
+      setIsRunning(false);
+      // Clear any pending input when execution finishes
+      if (pendingInput !== null) {
+        const resolve = pendingInput;
+        setPendingInput(null);
+        resolve('');
+      }
+    }
+  };
+
+  const getLanguageFromFile = (filename: string): string => {
+    const extension = filename.split('.').pop()?.toLowerCase() || '';
+    const languageMap: Record<string, string> = {
       'java': 'java',
       'py': 'python',
       'js': 'javascript',
@@ -639,7 +680,7 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
       'graphql': 'graphql',
       'gql': 'graphql',
     };
-    return languageMap[extension || ''] || 'plaintext';
+    return languageMap[extension] || 'plaintext';
   };
 
   const openFile = async (filename: string, fileId?: string) => {
@@ -1308,7 +1349,9 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
                   compileScript={compileScript}
                   setCompileScript={setCompileScript}
                   runScript={runScript}
-                  setRunScript={setRunScript} 
+                  setRunScript={setRunScript}
+                  onInput={handleTerminalInput}
+                  inputBuffer={inputBuffer}
                 />
               </div>
             </div>

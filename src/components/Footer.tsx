@@ -2,24 +2,17 @@ import { Link } from 'react-router-dom';
 
 const Footer = () => {
   return (
-    <footer className="bg-background border-t border-border mt-auto">
-      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row justify-between items-center">
-          <div className="flex items-center space-x-6
-          ">
-            <Link to="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    <footer className="bg-slate-900 text-white mt-auto">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="flex flex-col items-center space-y-4">
+          <p className="text-sm text-slate-400 text-center">
+            &copy; {new Date().getFullYear()} MocsCode. Empowering collaborative development.
+          </p>
+          <div className="pt-2">
+            <Link to="/about" className="text-sm text-slate-300 hover:text-white transition-colors">
               About Us
             </Link>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Terms
-            </a>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Privacy
-            </a>
           </div>
-          <p className="mt-4 text-sm text-muted-foreground md:mt-0">
-            &copy; {new Date().getFullYear()} MocsCode. All rights reserved.
-          </p>
         </div>
       </div>
     </footer>

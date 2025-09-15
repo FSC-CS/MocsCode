@@ -16,7 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({ theme, toggleTheme }) => {
   const navigate = useNavigate();
 
   const handleSignIn = () => {
-    navigate('/login');
+    navigate('/signin');
   };
 
   const handleSignOut = async () => {
@@ -100,7 +100,7 @@ export const Navbar: React.FC<NavbarProps> = ({ theme, toggleTheme }) => {
                 variant="outline"
                 className="text-gray-700 dark:text-gray-200"
               >
-                <Link to="/login">
+                <Link to="/signin">
                   <LogIn className="h-4 w-4 mr-2" />
                   Sign In
                 </Link>

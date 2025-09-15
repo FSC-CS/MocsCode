@@ -144,7 +144,7 @@ const About = () => {
       role: "Developer",
       description: "Hey there! I'm Riley Sweeting, an aspiring Software Engineer with a passion for AI-powered automation and workflow orchestration.",
       detailedDescription: "MocsCode has been an incredible learning experience! It allowed me to refine my full-stack development skills and dive into DevOps. Working with Gen-AI coding assistants taught me effective prompt engineering, which significantly boosted our productivity and enabled us to learn so much!\n\nI'm incredibly proud of MocsCode so far, and I'm excited to see how it continues to grow. I hope you enjoy using MocsCode as much as I've enjoyed building it!",
-      github: "#",
+      github: "https://github.com/RileySweeting",
       image: rileyImage,
       color: "bg-blue-500"
     },
@@ -153,7 +153,7 @@ const About = () => {
       role: "Developer",
       description: "Hello! I'm Michael Durden, a creative that's found interest in Software Engineering. I am passionate about being creative, and love to make things, and I've found some of that passion in building this application.",
       detailedDescription: "Working on MocsCode has been an amazing journey in collaborative development. I've learned so much about building scalable applications and working with modern tools and how to balance collaborative work. This has been such a wonderful project to work on that allowed me to be both technical and creative, and I can't imagine working on it with any other team.",
-      github: "#",
+      github: "https://github.com/masterjedidcfl",
       image: michaelImage,
       color: "bg-purple-500"
     },
@@ -186,7 +186,7 @@ const About = () => {
           <div className="flex justify-center gap-4">
             {!user && (
               <Link 
-                to="/register" 
+                to="/signin" 
                 className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:shadow-md focus:ring-2 focus:ring-blue-500 transition-all duration-200 hover:bg-blue-600"
               >
                 Get Started
@@ -230,44 +230,47 @@ const About = () => {
             {teamMembers.map((member, index) => (
               <div 
                 key={index} 
-                className="bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-400 dark:hover:border-blue-400"
+                className="bg-white dark:bg-slate-800/40 dark:backdrop-blur-sm border border-gray-200 dark:border-gray-700 rounded-lg p-6 flex flex-col h-full hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-400 dark:hover:border-blue-400"
                 onClick={() => setSelectedMember(member)}
               >
-                <div className="w-20 h-20 mx-auto mb-4 overflow-hidden rounded-full border-2 border-gray-200 dark:border-gray-600">
-                  {member.image ? (
-                    <img 
-                      src={member.image} 
-                      alt={member.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        // Fallback to initials if image fails to load
-                        const parent = e.currentTarget.parentElement;
-                        if (parent) {
-                          parent.innerHTML = 
-                            `<div class="w-full h-full ${member.color} flex items-center justify-center text-white text-lg font-bold">
-                              ${member.name.split(' ').map(n => n[0]).join('')}
-                            </div>`;
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className={`w-full h-full ${member.color} flex items-center justify-center text-white text-lg font-bold`}>
-                      {member.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                  )}
+                <div className="flex flex-col items-center text-center flex-grow">
+                  <div className="w-20 h-20 mx-auto mb-4 overflow-hidden rounded-full border-2 border-gray-200 dark:border-gray-600">
+                    {member.image ? (
+                      <img 
+                        src={member.image} 
+                        alt={member.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to initials if image fails to load
+                          const parent = e.currentTarget.parentElement;
+                          if (parent) {
+                            parent.innerHTML = 
+                              `<div class="w-full h-full ${member.color} flex items-center justify-center text-white text-lg font-bold">
+                                ${member.name.split(' ').map(n => n[0]).join('')}
+                              </div>`;
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className={`w-full h-full ${member.color} flex items-center justify-center text-white text-lg font-bold`}>
+                        {member.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                    )}
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{member.name}</h3>
+                  <p className="text-blue-500 mb-2 font-medium">{member.role}</p>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">{member.description}</p>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{member.name}</h3>
-                <p className="text-blue-500 mb-2 font-medium">{member.role}</p>
-                <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">{member.description}</p>
                 {member.github && (
-                  <div className="flex justify-center">
+                  <div className="mt-auto pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-center">
                     <a 
                       href={member.github} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-500 transition-colors duration-200"
+                      className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-500 transition-colors duration-200"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <Github className="h-5 w-5" />
+                      <Github className="h-4 w-4" />
                     </a>
                   </div>
                 )}
@@ -278,17 +281,22 @@ const About = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-16 bg-gray-100/50 dark:bg-gray-800/20">
-        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">Ready to get started?</h2>
-          <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
-            Join thousands of developers already using MocsCode to build amazing projects together.
-          </p>
-          <button className="bg-blue-500 text-white px-8 py-4 rounded-lg text-lg font-medium hover:shadow-md focus:ring-2 focus:ring-blue-500 transition-all duration-200">
-            Create Free Account
-          </button>
-        </div>
-      </section>
+      {!user && (
+        <section className="py-16 bg-gray-100/50 dark:bg-gray-800/20">
+          <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
+            <h2 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">Ready to get started?</h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
+              Join thousands of developers already using MocsCode to build amazing projects together.
+            </p>
+            <Link 
+              to="/register"
+              className="inline-block bg-blue-500 text-white px-8 py-4 rounded-lg text-lg font-medium hover:shadow-md focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+            >
+              Create Free Account
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* Team Member Modal */}
       {selectedMember && (

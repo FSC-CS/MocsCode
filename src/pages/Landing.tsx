@@ -129,7 +129,7 @@ function useBackgroundColor() {
   return isLightBg;
 }
 import { useAuth } from '@/contexts/AuthContext';
-import Footer from '@/components/Footer';
+import { Link } from 'react-router-dom';
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -283,17 +283,19 @@ const Landing = () => {
 
       {/* Footer */}
       <footer className="bg-slate-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="flex items-center justify-center space-x-2 mb-4">
-            <Code className="h-6 w-6" />
-            <span className="text-lg font-semibold">MocsCode</span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col items-center space-y-4">
+            <p className="text-sm text-slate-400 text-center">
+              &copy; {new Date().getFullYear()} MocsCode. Empowering collaborative development.
+            </p>
+            <div className="pt-2">
+              <Link to="/about" className="text-sm text-slate-300 hover:text-white transition-colors">
+                About Us
+              </Link>
+            </div>
           </div>
-          <p className="text-slate-400">
-            {new Date().getFullYear()} MocsCode. Empowering collaborative development.
-          </p>
         </div>
       </footer>
-      <Footer />
     </div>
   );
 };

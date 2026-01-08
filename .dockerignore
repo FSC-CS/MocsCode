@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Build output
+dist/
+build/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Environment files (will be passed as build args)
+.env
+.env.*
+!.env.example
+
+# Docker compose files (keep docker/ for nginx configs)
+Dockerfile*
+docker-compose*.yml
+
+# Misc
+README.md
+LICENSE
+*.md
+.DS_Store
+Thumbs.db
+
+# Test files
+coverage/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__/
+
+# Supabase (not needed in frontend container)
+supabase/
+
+# Server files (separate containers)
+server/

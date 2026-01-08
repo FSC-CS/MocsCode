@@ -141,7 +141,7 @@ MocsCode is a full-featured collaborative code editor that enables multiple user
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Client (Browser)                         │
+│                         Client (Browser)                        │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │   React UI  │  │  CodeMirror │  │     Socket.IO Client    │  │
 │  └──────┬──────┘  └──────┬──────┘  └────────────┬────────────┘  │
@@ -160,11 +160,11 @@ MocsCode is a full-featured collaborative code editor that enables multiple user
           │
           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Judge0 (Docker)                          │
-│                         (Port 2358)                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │   Server    │  │   Workers   │  │  PostgreSQL │  │   Redis   │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └───────────┘
+│                         Judge0 (Docker)                         │
+│                         (Port 2358)                             │
+│ ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌──────────┐ │
+│ │   Server    │  │   Workers   │  │  PostgreSQL │  │   Redis  │ │
+│ └─────────────┘  └─────────────┘  └─────────────┘  └──────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -253,12 +253,24 @@ mocscode/
 
 ### Prerequisites
 
-- **Node.js** >= 18.0.0
-- **npm** or **bun**
-- **Docker** & **Docker Compose** (for Judge0)
-- **PM2** (for production process management)
+- **Docker** & **Docker Compose** (recommended for all services)
+- **Node.js** >= 18.0.0 (for local frontend development)
+- **npm** or **bun** (for local frontend development)
 
-### Frontend Setup
+### Quick Start with Docker (Recommended)
+
+**Architecture Overview:**
+```
+Internet (HTTPS) → Host Nginx (SSL termination + reverse proxy)
+                      ↓
+    ┌─────────────────┼─────────────────┬──────────────┐
+    ↓                 ↓                 ↓              ↓
+  :8080             :5000             :3001          :2358
+Frontend          Yjs Server      Chat Service    Judge0
+(Docker)          (Docker)        (Docker)        (Docker)
+```
+
+**Setup Steps:**
 
 1. **Clone the repository**
    ```bash
@@ -266,37 +278,99 @@ mocscode/
    cd mocscode
    ```
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   # or
-   bun install
-   ```
-
-3. **Configure environment variables**
+2. **Configure environment variables**
    ```bash
    cp .env.example .env
    # Edit .env with your Supabase credentials
    ```
 
-4. **Start development server**
+3. **Build and start all services**
+   ```bash
+   docker compose up -d --build
+   ```
+
+4. **Start Judge0 separately**
+   ```bash
+   cd /srv/judge0
+   docker-compose up -d
+   ```
+
+5. **Configure host nginx** (if not already set up)
+   
+   The host nginx acts as an SSL-terminating reverse proxy. It should proxy:
+   - `mocscode.com` → `http://127.0.0.1:8080` (frontend container)
+   - `yjs.mocscode.com` → `http://127.0.0.1:5000` (Yjs container)
+   - `socketio.mocscode.com` → `http://127.0.0.1:3001` (chat container)
+   - `judge.mocscode.com` → `http://127.0.0.1:2358` (Judge0)
+
+   Example config in `/etc/nginx/sites-available/mocscode`:
+   ```nginx
+   server {
+       listen 443 ssl http2;
+       server_name mocscode.com;
+       
+       # SSL configuration
+       ssl_certificate /etc/letsencrypt/live/mocscode.com/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/mocscode.com/privkey.pem;
+       
+       location / {
+           proxy_pass http://127.0.0.1:8080;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+
+6. **Reload nginx and verify**
+   ```bash
+   sudo systemctl reload nginx
+   docker ps
+   ```
+
+   All containers should show as `healthy`
+
+### Local Frontend Development
+
+For frontend development with hot-reloading:
+
+1. **Start backend services with Docker**
+   ```bash
+   docker compose -f docker-compose.dev.yml up -d
+   ```
+
+2. **Install frontend dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Start Vite dev server**
    ```bash
    npm run dev
    ```
 
-   The app will be available at `http://localhost:8080`
+   Frontend: `http://localhost:8080` (with hot-reload)
+   Backend services: Yjs (5000), Chat (3001)
 
-### Full Development Stack
+### Deployment Workflow
 
-To run all services locally:
-
+**For production updates:**
 ```bash
-npm run dev-full
+# Single command to rebuild and deploy all services
+docker compose up -d --build
+
+# Verify all containers are healthy
+docker ps
 ```
 
-This starts:
-- Vite dev server (port 8080)
-- Y-WebSocket server (port 4500)
+**What happens:**
+1. Docker builds the React app inside the container
+2. Container nginx serves the built files
+3. Host nginx proxies HTTPS traffic to the container
+4. Zero downtime with `--build` flag (old container runs until new one is ready)
+
+**No manual `npm run build` required** - the Docker build process handles everything.
 
 ---
 
@@ -309,15 +383,16 @@ This starts:
 Handles real-time document synchronization using Yjs CRDTs.
 
 ```bash
-# Start with PM2
+# Via Docker (recommended)
+docker compose up -d yjs-server
+
+# Or manually with PM2
 cd /srv/yjs
 pm2 start ecosystem.config.cjs
-
-# Or run directly
-node server.js
 ```
 
 **Configuration:**
+- Container: `mocscode-yjs`
 - Port: 5000 (configurable via `PORT` env var)
 - WebSocket endpoint: `wss://yjs.mocscode.com`
 
@@ -328,6 +403,10 @@ node server.js
 Real-time chat functionality with room-based messaging.
 
 ```bash
+# Via Docker (recommended)
+docker compose up -d chat-service
+
+# Or manually
 cd /srv/socketio/MocsCode-backend-socket.io
 npm install
 npm start
@@ -340,6 +419,7 @@ npm start
 - Message delivery confirmation
 
 **Configuration:**
+- Container: `mocscode-chat`
 - Port: 3001 (default)
 - CORS origins configured in `config.js`
 
@@ -420,43 +500,143 @@ REDIS_PASSWORD=your-redis-password
 
 ## Deployment
 
-### Frontend
+### Production Architecture
 
-The frontend is built with Vite and can be deployed to any static hosting:
+MocsCode uses a **dual-nginx architecture** for production:
 
-```bash
-npm run build
+1. **Host Nginx** (runs on host machine)
+   - Handles SSL certificate management (Let's Encrypt)
+   - Acts as reverse proxy for all services
+   - Routes traffic to Docker containers on internal ports
+
+2. **Container Nginx** (runs inside frontend Docker container)
+   - Serves the built React application
+   - Handles SPA routing (fallback to index.html)
+   - Optimized for static file serving
+
+**Why this architecture?**
+- ✅ Single command deployment: `docker compose up -d --build`
+- ✅ All application code containerized and portable
+- ✅ SSL certificates managed on host (easier Let's Encrypt renewal)
+- ✅ Clean separation: host handles routing, containers handle application logic
+
+### Docker Deployment (Recommended)
+
+#### Quick Start
+
+1. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your Supabase credentials
+   ```
+
+2. **Build and start all services**
+   ```bash
+   docker compose up -d --build
+   ```
+
+3. **Start Judge0 separately**
+   ```bash
+   cd /srv/judge0
+   docker-compose up -d
+   ```
+
+4. **Ensure host nginx is configured** (see Getting Started section)
+
+#### Docker Files Structure
+
+```
+/var/www/mocscode/
+├── Dockerfile              # Frontend (multi-stage Nginx build)
+├── docker-compose.yml      # Production orchestration
+├── docker-compose.dev.yml  # Development with volumes
+├── .dockerignore
+└── docker/
+    └── nginx/
+        ├── nginx.conf      # Nginx main config
+        └── default.conf    # Site configuration
+
+/srv/yjs/
+├── Dockerfile              # Yjs WebSocket server
+└── .dockerignore
+
+/srv/socketio/MocsCode-backend-socket.io/
+├── Dockerfile              # Chat service
+└── .dockerignore
 ```
 
-Output is in the `dist/` directory.
+#### Container Services
 
-### Backend Services
+| Service | Container Name | Internal Port | Host Port | Description |
+|---------|---------------|---------------|-----------|-------------|
+| Frontend | `mocscode-frontend` | 80 | 8080 | Nginx serving React build |
+| Yjs Server | `mocscode-yjs` | 5000 | 5000 | Real-time collaboration |
+| Chat Service | `mocscode-chat` | 3001 | 3001 | Socket.IO messaging |
 
-**Recommended setup:**
-- **PM2** for Node.js process management (Yjs, Socket.IO)
-- **Docker Compose** for Judge0
-- **Nginx** as reverse proxy with SSL
+**Note:** Host nginx proxies HTTPS traffic to these internal ports.
 
-**Example Nginx configuration:**
+#### Docker Commands
+
+```bash
+# Build and start all services
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Stop all services
+docker-compose down
+
+# Rebuild a specific service
+docker-compose up -d --build frontend
+
+# Development mode (with volume mounts)
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+#### Production with Reverse Proxy
+
+For production, use an external Nginx or Traefik as a reverse proxy with SSL:
 
 ```nginx
 # Frontend
 server {
     listen 443 ssl;
     server_name mocscode.com;
-    root /var/www/mocscode/dist;
-    # ...
+    
+    location / {
+        proxy_pass http://127.0.0.1:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
 }
 
 # Yjs WebSocket
 server {
     listen 443 ssl;
     server_name yjs.mocscode.com;
+    
     location / {
         proxy_pass http://127.0.0.1:5000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 86400;
+    }
+}
+
+# Chat WebSocket
+server {
+    listen 443 ssl;
+    server_name chat.mocscode.com;
+    
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
     }
 }
 
@@ -464,22 +644,58 @@ server {
 server {
     listen 443 ssl;
     server_name judge.mocscode.com;
+    
     location / {
         proxy_pass http://127.0.0.1:2358;
+        proxy_set_header Host $host;
     }
 }
 ```
 
 ---
 
+### Manual Deployment (Alternative)
+
+#### Frontend
+
+```bash
+npm run build
+# Output is in dist/ - serve with any static hosting
+```
+
+#### Backend Services with PM2
+
+```bash
+# Yjs Server
+cd /srv/yjs
+pm2 start ecosystem.config.cjs
+
+# Chat Service
+cd /srv/socketio/MocsCode-backend-socket.io
+pm2 start index.js --name mocscode-chat
+```
+
+---
+
 ## Scripts
+
+### Docker Commands
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start Vite dev server |
+| `docker compose up -d --build` | Build and start all production services |
+| `docker compose -f docker-compose.dev.yml up -d` | Start backend services for development |
+| `docker compose logs -f` | View logs from all services |
+| `docker compose down` | Stop all services |
+| `docker compose ps` | Check service status and health |
+
+### NPM Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Vite dev server (port 8080) |
 | `npm run build` | Build for production |
 | `npm run preview` | Preview production build |
-| `npm run dev-full` | Start all services (dev mode) |
 
 ---
 

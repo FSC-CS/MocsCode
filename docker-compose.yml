@@ -1,0 +1,76 @@
+# MocsCode Docker Compose Configuration
+# This orchestrates the frontend, Yjs, and Chat services
+# Note: Judge0 should be run separately from /srv/judge0/docker-compose.yml
+
+services:
+  # Frontend - Nginx serving the React build
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    container_name: mocscode-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    networks:
+      - mocscode-network
+    depends_on:
+      - yjs-server
+      - chat-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Yjs WebSocket Server - Real-time collaboration
+  yjs-server:
+    build:
+      context: /srv/yjs
+      dockerfile: Dockerfile
+    container_name: mocscode-yjs
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=5000
+    networks:
+      - mocscode-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "5000"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Chat Service - Socket.IO for real-time messaging
+  chat-service:
+    build:
+      context: /srv/socketio/MocsCode-backend-socket.io
+      dockerfile: Dockerfile
+    container_name: mocscode-chat
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    networks:
+      - mocscode-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  mocscode-network:
+    driver: bridge
+    name: mocscode-network

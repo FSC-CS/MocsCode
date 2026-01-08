@@ -1,0 +1,46 @@
+# MocsCode Docker Compose - Development Configuration
+# Uses volume mounts for hot-reloading during development
+
+services:
+  # Yjs WebSocket Server - Real-time collaboration
+  yjs-server:
+    build:
+      context: /srv/yjs
+      dockerfile: Dockerfile
+    container_name: mocscode-yjs-dev
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - HOST=0.0.0.0
+      - PORT=5000
+    volumes:
+      - /srv/yjs/server.js:/app/server.js:ro
+    networks:
+      - mocscode-network-dev
+
+  # Chat Service - Socket.IO for real-time messaging
+  chat-service:
+    build:
+      context: /srv/socketio/MocsCode-backend-socket.io
+      dockerfile: Dockerfile
+    container_name: mocscode-chat-dev
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    volumes:
+      - /srv/socketio/MocsCode-backend-socket.io/index.js:/app/index.js:ro
+      - /srv/socketio/MocsCode-backend-socket.io/chat-socket.js:/app/chat-socket.js:ro
+      - /srv/socketio/MocsCode-backend-socket.io/users.js:/app/users.js:ro
+      - /srv/socketio/MocsCode-backend-socket.io/config.js:/app/config.js:ro
+    networks:
+      - mocscode-network-dev
+
+networks:
+  mocscode-network-dev:
+    driver: bridge
+    name: mocscode-network-dev

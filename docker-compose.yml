@@ -52,7 +52,7 @@ services:
   # Chat Service - Socket.IO for real-time messaging
   chat-service:
     build:
-      context: /srv/socketio/MocsCode-backend-socket.io
+      context: /srv/socketio
       dockerfile: Dockerfile
     container_name: mocscode-chat
     restart: unless-stopped

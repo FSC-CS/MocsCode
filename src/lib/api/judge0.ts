@@ -55,7 +55,7 @@ export async function runJudge0Code({
     body: JSON.stringify({
       additional_files,
       language_id: 89,
-      stdin,
+      stdin: stdin ? btoa(stdin) : '',
       expected_output,
       cpu_time_limit,
       memory_limit,

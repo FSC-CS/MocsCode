@@ -402,8 +402,8 @@ function createWorkerLinter(language) {
             }
             
             // Convert to absolute positions in the document
-            const from = lineStart + fromInLine;
-            const to = lineStart + toInLine;
+            let from = lineStart + fromInLine;
+            let to = lineStart + toInLine;
             
             // Ensure the range is valid and within the line bounds
             if (from < lineStart) {

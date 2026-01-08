@@ -410,7 +410,7 @@ const ChatPanel = ({
     setEditText('');
   };
 
-  // Initialize socket connection and handle project/room changes
+  // Initialize socket connection (persists across room changes)
   useEffect(() => {
     if (!currentUser || !projectId) return;
 
@@ -434,41 +434,38 @@ const ChatPanel = ({
       }
     });
 
-    // Join room function
-    const joinRoom = () => {
+    // Join room function - called on connect and room changes
+    const joinRoom = (room: string) => {
       if (!currentUser || !projectId) return;
       
       const roomData = {
         userId: currentUser.id,
         userName: currentUser.name || 'Anonymous',
         projectId: projectId,
-        room: currentRoom
+        room: room
       };
       
       newSocket.emit('join_room', roomData);
       setJoinedRooms(prev => 
-        prev.includes(currentRoom) ? prev : [...prev, currentRoom]
+        prev.includes(room) ? prev : [...prev, room]
       );
     };
 
     // Handle connection
     const onConnect = () => {
       setIsConnected(true);
-      joinRoom();
+      // Join the current room on connect
+      joinRoom(currentRoom);
     };
 
     // Handle disconnection
     const onDisconnect = (reason: string) => {
       setIsConnected(false);
-      // Attempt to reconnect if this was an unexpected disconnect
-      if (reason === 'io server disconnect' || reason === 'io client disconnect') {
-        newSocket.connect();
-      }
     };
     
-    // Join room on initial connection
+    // Join room on initial connection if already connected
     if (newSocket.connected) {
-      joinRoom();
+      joinRoom(currentRoom);
     }
 
     // Set up message handler
@@ -545,7 +542,24 @@ const ChatPanel = ({
         newSocket.disconnect();
       }
     };
-  }, [currentUser, projectId, currentRoom]);
+  }, [currentUser?.id, projectId]); // Only reconnect when user ID or project changes
+
+  // Handle room changes separately (doesn't recreate socket)
+  useEffect(() => {
+    if (!socket || !isConnected || !currentUser || !projectId || !currentRoom) return;
+
+    const roomData = {
+      userId: currentUser.id,
+      userName: currentUser.name || 'Anonymous',
+      projectId: projectId,
+      room: currentRoom
+    };
+
+    socket.emit('join_room', roomData);
+    setJoinedRooms(prev => 
+      prev.includes(currentRoom) ? prev : [...prev, currentRoom]
+    );
+  }, [socket, isConnected, currentRoom]); // Re-run when socket connects or room changes
 
   // Handle member added event and refresh chat state
   useEffect(() => {

@@ -637,10 +637,24 @@ const CodeEditor = ({ project, onBack, collaborators = [] }: CodeEditorProps) =>
         inputCallback: getInputFromUser
       });
 
-      if (data.stderr) {
+      // Check for error status codes (anything other than 3=Accepted is an issue)
+      // Status IDs: 3=Accepted, 4=Wrong Answer, 5=Time Limit, 6=Compilation Error, 
+      // 7-12=Runtime Errors, 13=Internal Error, 14=Exec Format Error
+      const statusId = data.status?.id;
+      const isSuccess = statusId === 3;
+      const isCompileError = statusId === 6;
+      const isInternalError = statusId === 13;
+      
+      if (isInternalError && data.message) {
+        setOutput(prev => prev + `Internal Error: ${data.message}`);
+      } else if (isCompileError && data.compile_output) {
+        setOutput(prev => prev + `Compilation Error:\n${data.compile_output}`);
+      } else if (data.stderr) {
         setOutput(prev => prev + data.stderr);
       } else if (data.stdout) {
         setOutput(prev => prev + data.stdout);
+      } else if (!isSuccess && data.status?.description) {
+        setOutput(prev => prev + `Error: ${data.status.description}${data.message ? '\n' + data.message : ''}`);
       } else {
         setOutput(prev => prev + 'Code executed successfully (no output)');
       }

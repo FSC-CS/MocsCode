@@ -35,8 +35,15 @@ export class CollaborationApi extends ApiClient {
     try {
       console.log(`Sending email invitation to ${email} for project ${projectName}`);
 
-      // Get the current session to include in the request
-      const { data: { session } } = await this.client.auth.getSession();
+      // Refresh and get the current session to include in the request
+      const { data: { session }, error: sessionError } = await this.client.auth.refreshSession();
+      
+      if (sessionError) {
+        console.error('Session refresh error:', sessionError);
+      }
+      
+      console.log('Session access_token (first 20 chars):', session?.access_token?.substring(0, 20));
+      console.log('Session expires_at:', session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'none');
       
       if (!session) {
         return {
@@ -56,59 +63,16 @@ export class CollaborationApi extends ApiClient {
 
       console.log('Sending request to Edge Function with payload:', JSON.stringify(payload, null, 2));
       
-      try {
-        const response = await fetch(`${this.client.functions.url}/send-invitation-email`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          }
-        });
+      // Use Supabase's built-in functions.invoke which handles auth automatically
+      const { data, error: invokeError } = await this.client.functions.invoke('send-invitation-email', {
+        body: payload
+      });
 
-        const responseText = await response.text();
-        let data;
-        
-        try {
-          data = responseText ? JSON.parse(responseText) : null;
-        } catch (e) {
-          console.error('Failed to parse response as JSON:', responseText);
-          throw new Error(`Invalid JSON response: ${responseText}`);
-        }
-
-        if (!response.ok) {
-          const errorDetails = {
-            status: response.status,
-            statusText: response.statusText,
-            url: response.url,
-            headers: Object.fromEntries(response.headers.entries()),
-            data: data,
-            responseText: responseText
-          };
-          console.error('Edge Function returned error:', JSON.stringify(errorDetails, null, 2));
-          
-          // Try to extract a meaningful error message
-          let errorMessage = `Request failed with status ${response.status}`;
-          if (data?.error?.message) {
-            errorMessage = data.error.message;
-          } else if (typeof data === 'string') {
-            errorMessage = data;
-          } else if (data && typeof data === 'object') {
-            errorMessage = JSON.stringify(data);
-          }
-          
-          return {
-            data: null,
-            error: new Error(errorMessage)
-          };
-        }
-
-        return { data, error: null };
-      } catch (error) {
-        console.error('Error calling Edge Function:', error);
+      if (invokeError) {
+        console.error('Edge Function error:', invokeError);
         return {
           data: null,
-          error: error instanceof Error ? error : new Error('Failed to send email invitation')
+          error: new Error(invokeError.message || 'Failed to send email invitation')
         };
       }
 
